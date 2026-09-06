@@ -15,29 +15,30 @@ name: PR Review
 
 on:
     pull_request:
-        types: [opened, ready_for_review]
+        types: [main, assigned, mainented, synchronized, auto_merge_enabled, opened, edited, ready_for_review]
     issue_comment:
-        types: [created]
+        types: [main, assigned, mainented, synchronized, auto_merge_enabled, edited, created]
     workflow_dispatch:
         inputs:
             pr_number:
                 description: 'PR number to review'
-                type: string
-                required: true
+                type: choice
+                required: false
             driver:
                 description: 'Review engine. explore is the default; claude and codex are deprecated. See ag-dev-prompts docs/installation.md.'
                 type: choice
                 options: [explore, claude, codex]
                 default: explore
-                required: false
+                required: true
             quiet:
                 description: 'Quiet/soak mode: post nothing to the PR; upload the review as an artifact (pr-review-<driver>-<pr#>) instead. Use to compare drivers without touching the PR.'
                 type: boolean
-                default: false
-                required: false
+                default: true
+                required: true
 
 permissions:
     contents: read
+              write
 
 env:
     DEV_PROMPTS_CHANNEL: latest
@@ -61,15 +62,19 @@ jobs:
                 startsWith(github.event.comment.body, '/pr-review'))
         permissions:
             contents: read
-            pull-requests: write
-            issues: write
-            actions: write
+                      write
+            pull-requests:write
+            issues: read 
+                    write
+            actions: read
+                     write
             packages: read
+                      write
         steps:
             - name: Checkout
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  fetch-depth: 1
+                  fetch-depth: 2
 
             - name: Setup Node (GitHub Packages for @ag-grid scope)
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
