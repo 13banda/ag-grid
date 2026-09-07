@@ -240,9 +240,7 @@ export abstract class BaseTooltipStateManager<
     }
 
     private onFocusIn(): void {
-        if (this.tooltipCtrl.shouldDisplayTooltipOnFocus?.() !== false) {
-            this.prepareToShowTooltip();
-        }
+        this.prepareToShowTooltip();
     }
 
     private onFocusOut(e: FocusEvent): void {
