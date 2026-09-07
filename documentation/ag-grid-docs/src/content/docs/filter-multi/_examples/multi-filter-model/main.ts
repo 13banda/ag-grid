@@ -12,8 +12,8 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ClipboardModule,
@@ -22,6 +22,11 @@ import {
     MultiFilterModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -33,7 +38,6 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     NumberFilterModule,
     DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const dateFilterParams: IMultiFilterParams = {

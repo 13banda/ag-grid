@@ -1,12 +1,13 @@
+import { _exists } from 'ag-stack';
+
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { GetQuickFilterTextParams } from '../entities/colDef';
 import type { RowNode } from '../entities/rowNode';
-import { _exists } from '../utils/generic';
-import { _warn } from '../validation/logging';
+import { _addGridCommonParams } from '../gridOptionsUtils';
 
-export type QuickFilterServiceEvent = 'quickFilterChanged';
+type QuickFilterServiceEvent = 'quickFilterChanged';
 export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implements NamedBean {
     beanName = 'quickFilter' as const;
 
@@ -53,20 +54,19 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
     //    (tree data is a bit different, as parent rows can be filtered on, unlike row grouping)
     public refreshCols(): void {
         const { autoColSvc, colModel, gos, pivotResultCols } = this.beans;
-        const pivotMode = colModel.isPivotMode();
-        const groupAutoCols = autoColSvc?.getAutoCols();
-        const providedCols = colModel.getColDefCols();
+        const pivotMode = colModel.pivotMode;
+        const groupAutoCols = autoColSvc?.columns;
+        const providedCols = colModel.colDefList;
 
         let columnsForQuickFilter =
-            (pivotMode && !gos.get('applyQuickFilterBeforePivotOrAgg')
-                ? pivotResultCols?.getPivotResultCols()?.list
-                : providedCols) ?? [];
-        if (groupAutoCols) {
+            (pivotMode && !gos.get('applyQuickFilterBeforePivotOrAgg') ? pivotResultCols?.pivotCols : providedCols) ??
+            [];
+        if (groupAutoCols?.length) {
             columnsForQuickFilter = columnsForQuickFilter.concat(groupAutoCols);
         }
         this.colsToUse = gos.get('includeHiddenColumnsInQuickFilter')
             ? columnsForQuickFilter
-            : columnsForQuickFilter.filter((col) => col.isVisible() || col.isRowGroupActive());
+            : columnsForQuickFilter.filter((col) => col.visible || col.rowGroupActive);
     }
 
     public isFilterPresent(): boolean {
@@ -90,6 +90,10 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
         this.beans.rowModel.forEachNode((node) => (node.quickFilterAggregateText = null));
     }
 
+    public getText(): string | undefined {
+        return this.gos.get('quickFilterText');
+    }
+
     private setFilterParts(): void {
         const { quickFilter, parser } = this;
         if (quickFilter) {
@@ -109,7 +113,7 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
 
     private setFilter(newFilter: string | undefined): void {
         if (newFilter != null && typeof newFilter !== 'string') {
-            _warn(70, { newFilter });
+            this.warn(70, { newFilter });
             return;
         }
 
@@ -146,14 +150,14 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
         return this.colsToUse.some((column) => {
             const part = this.getTextForColumn(column, node);
 
-            return _exists(part) && part.indexOf(filterPart) >= 0;
+            return _exists(part) && part.includes(filterPart);
         });
     }
 
     private doesRowPassCache(node: RowNode, filterPart: string): boolean {
         this.checkGenerateAggText(node);
 
-        return node.quickFilterAggregateText!.indexOf(filterPart) >= 0;
+        return node.quickFilterAggregateText!.includes(filterPart);
     }
 
     private doesRowPassMatcher(usingCache: boolean, node: RowNode): boolean {
@@ -174,12 +178,12 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
         }
     }
 
-    private getTextForColumn(column: AgColumn, node: RowNode): string {
+    private getTextForColumn(column: AgColumn, node: RowNode): string | null {
         let value = this.beans.filterValueSvc!.getValue(column, node);
-        const colDef = column.getColDef();
+        const colDef = column.colDef;
 
         if (colDef.getQuickFilterText) {
-            const params: GetQuickFilterTextParams = this.gos.addGridCommonParams({
+            const params: GetQuickFilterTextParams = _addGridCommonParams(this.gos, {
                 value,
                 node,
                 data: node.data,
@@ -196,13 +200,13 @@ export class QuickFilterService extends BeanStub<QuickFilterServiceEvent> implem
     private getAggText(node: RowNode): string {
         const stringParts: string[] = [];
 
-        this.colsToUse.forEach((column) => {
+        for (const column of this.colsToUse) {
             const part = this.getTextForColumn(column, node);
 
             if (_exists(part)) {
                 stringParts.push(part);
             }
-        });
+        }
 
         return stringParts.join('\n');
     }

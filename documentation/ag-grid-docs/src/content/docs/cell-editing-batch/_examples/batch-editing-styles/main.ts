@@ -1,0 +1,112 @@
+import type {
+    CellEditingStartedEvent,
+    CellEditingStoppedEvent,
+    CellValueChangedEvent,
+    GridApi,
+    GridOptions,
+    RowEditingStartedEvent,
+    RowEditingStoppedEvent,
+} from 'ag-grid-community';
+import {
+    CheckboxEditorModule,
+    ClientSideRowModelModule,
+    ModuleRegistry,
+    NumberEditorModule,
+    RowApiModule,
+    TextEditorModule,
+    createGrid,
+    enableDevValidations,
+} from 'ag-grid-community';
+import { BatchEditModule, CellSelectionModule, ClipboardModule } from 'ag-grid-enterprise';
+
+import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([
+    NumberEditorModule,
+    CellSelectionModule,
+    TextEditorModule,
+    ClientSideRowModelModule,
+    RowApiModule,
+    CheckboxEditorModule,
+    BatchEditModule,
+    ClipboardModule,
+]);
+
+let gridApi: GridApi;
+
+const gridOptions: GridOptions = {
+    columnDefs: [
+        { field: 'firstName' },
+        { field: 'lastName' },
+        { field: 'gender' },
+        { field: 'age' },
+        { field: 'mood' },
+        { field: 'country', editable: false },
+        { field: 'address', minWidth: 200 },
+    ],
+    defaultColDef: {
+        flex: 1,
+        editable: true,
+    },
+    rowData: getData(),
+    onRowEditingStarted: (_event: RowEditingStartedEvent) => {
+        console.log('rowEditingStarted');
+    },
+    onRowEditingStopped: (_event: RowEditingStoppedEvent) => {
+        console.log('rowEditingStopped');
+    },
+    onCellEditingStarted: (_event: CellEditingStartedEvent) => {
+        console.log('cellEditingStarted');
+    },
+    onCellEditingStopped: (_event: CellEditingStoppedEvent) => {
+        console.log('cellEditingStopped');
+    },
+    onCellValueChanged: (_event: CellValueChangedEvent) => {
+        console.log('Cell value changed');
+    },
+    editType: 'fullRow',
+    onFirstDataRendered: (params) => {
+        gridApi = params.api;
+        gridApi.startBatchEdit();
+
+        gridApi.getDisplayedRowAtIndex(0)?.setDataValue('firstName', 'Justine');
+        gridApi.getDisplayedRowAtIndex(1)?.setDataValue('age', 101);
+
+        const el = document.querySelector<HTMLElement>('#batchStatusValue');
+        if (el) el.textContent = 'Active';
+    },
+};
+
+function getEditingCells() {
+    const cells = gridApi!.getEditingCells();
+    console.log('Editing cells:', cells);
+}
+
+function startBatchEdit() {
+    gridApi!.startBatchEdit();
+    const el = document.querySelector<HTMLElement>('#batchStatusValue');
+    if (el) el.textContent = 'Active';
+}
+
+function commitBatchEdit() {
+    gridApi!.commitBatchEdit();
+    const el = document.querySelector<HTMLElement>('#batchStatusValue');
+    if (el) el.textContent = 'Inactive';
+}
+
+function cancelBatchEdit() {
+    gridApi!.cancelBatchEdit();
+    const el = document.querySelector<HTMLElement>('#batchStatusValue');
+    if (el) el.textContent = 'Inactive';
+}
+
+// setup the grid after the page has finished loading
+document.addEventListener('DOMContentLoaded', function () {
+    const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
+    gridApi = createGrid(gridDiv, gridOptions);
+});

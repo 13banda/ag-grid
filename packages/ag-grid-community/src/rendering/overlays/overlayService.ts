@@ -1,95 +1,346 @@
-import { _getLoadingOverlayCompDetails, _getNoRowsOverlayCompDetails } from '../../components/framework/userCompUtils';
+import { AgPromise, FAST_TEST_TIMINGS } from 'ag-stack';
+
 import type { NamedBean } from '../../context/bean';
 import { BeanStub } from '../../context/beanStub';
 import type { GridOptions } from '../../entities/gridOptions';
-import { _isClientSideRowModel } from '../../gridOptionsUtils';
-import type { UserCompDetails } from '../../interfaces/iUserCompDetails';
-import { _warn } from '../../validation/logging';
+import type { GridOptionsService } from '../../gridOptionsService';
+import { _addGridCommonParams, _isClientSideLoadingRows, _isClientSideRowModel } from '../../gridOptionsUtils';
+import type { CellPosition } from '../../interfaces/iCellPosition';
+import type { ComponentType, UserCompDetails } from '../../interfaces/iUserCompDetails';
+import { _attemptToRestoreCellFocus } from '../../utils/gridFocus';
 import type { ComponentSelector } from '../../widgets/component';
+import type { IOverlayComp, OverlayType } from './overlayComponent';
 import { OverlayWrapperComponent, OverlayWrapperSelector } from './overlayWrapperComponent';
 
-const enum OverlayServiceState {
-    Hidden = 0,
-    Loading = 1,
-    NoRows = 2,
-}
+/** A floor on how long the export overlay stays up, so a fast export doesn't flash it. Shortened rather
+ *  than removed under the test flag: a test still has to be able to observe the overlay before it goes,
+ *  and one `waitFor` poll on a saturated worker pool is already 50ms. */
+const MIN_EXPORT_OVERLAY_SHOW_TIME = FAST_TEST_TIMINGS ? 150 : 300;
+
+const overlayCompTypeOptionalMethods = ['refresh'];
+const overlayCompType = (name: string): ComponentType => ({ name, optionalMethods: overlayCompTypeOptionalMethods });
+
+type OverlayCompType =
+    | 'agLoadingOverlay'
+    | 'agNoRowsOverlay'
+    | 'agNoMatchingRowsOverlay'
+    | 'agExportingOverlay'
+    | 'agFileInputOverlay'
+    | 'agErrorOverlay'
+    | 'activeOverlay';
+
+type OverlayDef = Readonly<{
+    id: OverlayCompType;
+    overlayType?: OverlayType;
+    comp: ComponentType;
+    wrapperCls: string;
+    exclusive?: boolean;
+    compKey?: keyof GridOptions;
+    paramsKey?: keyof GridOptions;
+    isSuppressed?: (gos: GridOptionsService) => boolean;
+    overriddenComp?: UserCompDetails<any>;
+    /** Provided overlay that must not be replaced by a user-supplied `overlayComponent`. */
+    noUserOverride?: boolean;
+}>;
+
+const LoadingOverlayDef: OverlayDef = {
+    id: 'agLoadingOverlay',
+    overlayType: 'loading',
+    comp: overlayCompType('loadingOverlayComponent'),
+    wrapperCls: 'ag-overlay-loading-wrapper',
+    exclusive: true,
+    compKey: 'loadingOverlayComponent',
+    paramsKey: 'loadingOverlayComponentParams',
+    isSuppressed: (gos: GridOptionsService) => {
+        const isLoading = gos.get('loading');
+        return isLoading === false || (gos.get('suppressLoadingOverlay') === true && !isLoading);
+    },
+} as const;
+
+const NoRowsOverlayDef: OverlayDef = {
+    id: 'agNoRowsOverlay',
+    overlayType: 'noRows',
+    comp: overlayCompType('noRowsOverlayComponent'),
+    wrapperCls: 'ag-overlay-no-rows-wrapper',
+    compKey: 'noRowsOverlayComponent',
+    paramsKey: 'noRowsOverlayComponentParams',
+    isSuppressed: (gos: GridOptionsService) => gos.get('suppressNoRowsOverlay'),
+};
+
+const NoMatchingRowsOverlayDef: OverlayDef = {
+    id: 'agNoMatchingRowsOverlay',
+    overlayType: 'noMatchingRows',
+    comp: overlayCompType('noMatchingRowsOverlayComponent'),
+    wrapperCls: 'ag-overlay-no-matching-rows-wrapper',
+};
+
+const ExportingOverlayDef: OverlayDef = {
+    id: 'agExportingOverlay',
+    overlayType: 'exporting',
+    comp: overlayCompType('exportingOverlayComponent'),
+    wrapperCls: 'ag-overlay-exporting-wrapper',
+    exclusive: true,
+};
+
+const FileInputOverlayDef: OverlayDef = {
+    id: 'agFileInputOverlay',
+    overlayType: 'fileInput',
+    comp: overlayCompType('fileInputOverlayComponent'),
+    wrapperCls: 'ag-overlay-file-input-wrapper',
+    exclusive: true,
+};
+
+const CustomOverlayDef: Readonly<OverlayDef> = {
+    id: 'activeOverlay',
+    comp: overlayCompType('activeOverlay'),
+    wrapperCls: 'ag-overlay-modal-wrapper',
+    exclusive: true,
+};
+
+// Dev-only overlay surfacing captured validation diagnostics. The component (agErrorOverlay) is
+// supplied by the ValidationModule, so this def resolves only when that module is registered. It is
+// driven by ErrorOverlayService via setDevErrorOverlay, never by the user-facing activeOverlay option.
+const ErrorOverlayDef: OverlayDef = {
+    id: 'agErrorOverlay',
+    comp: overlayCompType('agErrorOverlay'),
+    wrapperCls: 'ag-overlay-error-wrapper',
+    exclusive: false,
+    noUserOverride: true,
+};
+
+const getActiveOverlayDef = (activeOverlay: any): OverlayDef | null => {
+    if (!activeOverlay) {
+        return null;
+    }
+    return (
+        (
+            {
+                agLoadingOverlay: LoadingOverlayDef,
+                agNoRowsOverlay: NoRowsOverlayDef,
+                agNoMatchingRowsOverlay: NoMatchingRowsOverlayDef,
+                agExportingOverlay: ExportingOverlayDef,
+                agFileInputOverlay: FileInputOverlayDef,
+            } as Record<string, OverlayDef>
+        )[activeOverlay] ?? CustomOverlayDef
+    );
+};
+const getOverlayDefForType = (overlayType: OverlayType | null): OverlayDef | null => {
+    if (!overlayType) {
+        return null;
+    }
+    return (
+        {
+            loading: LoadingOverlayDef,
+            noRows: NoRowsOverlayDef,
+            noMatchingRows: NoMatchingRowsOverlayDef,
+            exporting: ExportingOverlayDef,
+            fileInput: FileInputOverlayDef,
+        } as Record<OverlayType, OverlayDef>
+    )[overlayType];
+};
 
 export class OverlayService extends BeanStub implements NamedBean {
     beanName = 'overlays' as const;
 
-    private isClientSide: boolean;
-    private state: OverlayServiceState = OverlayServiceState.Hidden;
+    public eWrapper: OverlayWrapperComponent | undefined = undefined;
+
+    public exclusive: boolean = false;
+    private oldExclusive: boolean = false;
+    private currentDef: OverlayDef | null = null;
     private showInitialOverlay: boolean = true;
-    private exclusive?: boolean;
-    private wrapperPadding: number = 0;
+    private userForcedNoRows: boolean = false;
+    private exportsInProgress: number = 0;
+    private focusedCell: CellPosition | null;
+    private devErrorOverlayActive: boolean = false;
 
-    public eWrapper: OverlayWrapperComponent | undefined;
-
+    private newColumnsLoadedCleanup: (() => void) | null = null;
     public postConstruct(): void {
-        this.isClientSide = _isClientSideRowModel(this.gos);
-        const updateOverlayVisibility = () => this.updateOverlayVisibility();
+        const gos = this.gos;
+        this.showInitialOverlay = _isClientSideRowModel(gos);
 
-        this.addManagedEventListeners({
+        const updateOverlayVisibility = () => {
+            if (this.userForcedNoRows) {
+                // Stop handling grid events so we do not clear the manually triggered no rows overlay
+                return;
+            }
+            this.updateOverlay(false);
+        };
+
+        const [newColumnsLoadedCleanup, rowCountReadyCleanup, _, __] = this.addManagedEventListeners({
             newColumnsLoaded: updateOverlayVisibility,
-            rowDataUpdated: updateOverlayVisibility,
-            gridSizeChanged: this.refreshWrapperPadding.bind(this),
             rowCountReady: () => {
                 // Support hiding the initial overlay when data is set via transactions.
-                this.showInitialOverlay = false;
-                this.updateOverlayVisibility();
+                this.disableInitialOverlay();
+                updateOverlayVisibility();
+                rowCountReadyCleanup();
             },
+            rowDataUpdated: updateOverlayVisibility,
+            modelUpdated: updateOverlayVisibility,
         });
+        this.newColumnsLoadedCleanup = newColumnsLoadedCleanup;
 
-        this.addManagedPropertyListener('loading', updateOverlayVisibility);
+        this.addManagedPropertyListeners(
+            [
+                'loading',
+                'activeOverlay',
+                'activeOverlayParams',
+                'overlayComponentParams',
+                'loadingOverlayComponentParams',
+                'noRowsOverlayComponentParams',
+                'autoGenerateColumnDefs',
+                'processFileInput',
+            ],
+            (params) => this.onPropChange(new Set(params.changeSet?.properties))
+        );
     }
 
-    public setOverlayWrapperComp(overlayWrapperComp: OverlayWrapperComponent | undefined): void {
-        this.eWrapper = overlayWrapperComp;
-        this.updateOverlayVisibility();
+    public override destroy(): void {
+        this.doHideOverlay();
+        super.destroy();
+        this.eWrapper = undefined;
+    }
+
+    public setWrapperComp(overlayWrapperComp: OverlayWrapperComponent, destroyed: boolean): void {
+        if (!this.isAlive()) {
+            return;
+        }
+        if (!destroyed) {
+            this.eWrapper = overlayWrapperComp;
+        } else if (this.eWrapper === overlayWrapperComp) {
+            this.eWrapper = undefined;
+        }
+        this.updateOverlay(false);
     }
 
     /** Returns true if the overlay is visible. */
     public isVisible(): boolean {
-        return this.state !== OverlayServiceState.Hidden && !!this.eWrapper;
+        return !!this.currentDef;
     }
 
-    /** Returns true if the overlay is visible and is exclusive (popup over the grid) */
-    public isExclusive(): boolean {
-        return this.state === OverlayServiceState.Loading && !!this.eWrapper;
+    /**
+     * Shows or hides the dev-only validation error overlay. Driven by the ValidationModule's
+     * ErrorOverlayService; takes priority over the data-driven overlays while active. Re-evaluates
+     * immediately so the overlay appears as soon as the wrapper exists (or once it later mounts).
+     */
+    public setDevErrorOverlay(active: boolean): void {
+        if (this.devErrorOverlayActive === active) {
+            return;
+        }
+        this.devErrorOverlayActive = active;
+        this.updateOverlay(false);
     }
 
     public showLoadingOverlay(): void {
         this.showInitialOverlay = false;
-
         const gos = this.gos;
-        const loading = gos.get('loading');
-        if (!loading && (loading !== undefined || gos.get('suppressLoadingOverlay'))) {
+        if (!this.eWrapper || gos.get('activeOverlay') || this.devErrorOverlayActive || _isClientSideLoadingRows(gos)) {
             return;
         }
-
-        this.doShowLoadingOverlay();
+        if (this.isDisabled(LoadingOverlayDef)) {
+            return;
+        }
+        const loading = gos.get('loading');
+        if (!loading && loading !== undefined) {
+            return;
+        }
+        this.doShowOverlay(LoadingOverlayDef);
     }
 
     public showNoRowsOverlay(): void {
         this.showInitialOverlay = false;
-
         const gos = this.gos;
-        if (gos.get('loading') || gos.get('suppressNoRowsOverlay')) {
+        if (
+            !this.eWrapper ||
+            gos.get('activeOverlay') ||
+            gos.get('loading') ||
+            this.isDisabled(NoRowsOverlayDef) ||
+            this.devErrorOverlayActive
+        ) {
+            return;
+        }
+        this.userForcedNoRows = true;
+        this.doShowOverlay(NoRowsOverlayDef);
+    }
+    public async showExportOverlay(heavyOperation: () => void) {
+        const { gos, beans } = this;
+        if (
+            !this.eWrapper ||
+            gos.get('activeOverlay') ||
+            gos.get('loading') ||
+            this.isDisabled(ExportingOverlayDef) ||
+            this.devErrorOverlayActive ||
+            (this.userForcedNoRows && this.currentDef === NoRowsOverlayDef)
+        ) {
+            heavyOperation();
             return;
         }
 
-        this.doShowNoRowsOverlay();
+        // wait until the wrapper has mounted the overlay component
+        const desiredDef = this.getDesiredDefWithOverride(ExportingOverlayDef);
+        if (!desiredDef) {
+            heavyOperation();
+            return;
+        }
+
+        // Make sure if multiple export calls are run we don't clear until the last one.
+        this.exportsInProgress++;
+        // Aim to restore cell focus after it is lost due to the overlay
+        this.focusedCell = beans.focusSvc.getFocusedCell();
+
+        await this.doShowOverlay(desiredDef);
+
+        // ensure the overlay has a chance to be painted
+        await new Promise<void>((resolve) => setTimeout(() => resolve()));
+
+        const shownAt = Date.now();
+        // start the heavy operation (allow sync or promise)
+        try {
+            heavyOperation();
+        } finally {
+            const elapsed = Date.now() - shownAt;
+            const remaining = Math.max(0, MIN_EXPORT_OVERLAY_SHOW_TIME - elapsed);
+
+            const clearExportOverlay = () => {
+                this.exportsInProgress--;
+                if (this.exportsInProgress === 0) {
+                    this.updateOverlay(false);
+                    _attemptToRestoreCellFocus(beans, this.focusedCell);
+                    this.focusedCell = null;
+                }
+            };
+
+            if (remaining > 0) {
+                setTimeout(() => clearExportOverlay(), remaining);
+            } else {
+                clearExportOverlay();
+            }
+        }
     }
 
     public hideOverlay(): void {
+        const gos = this.gos;
         this.showInitialOverlay = false;
-
-        if (this.gos.get('loading')) {
-            _warn(99);
+        const userHadForced = this.userForcedNoRows;
+        this.userForcedNoRows = false;
+        if (gos.get('loading')) {
+            this.warn(99);
             return;
         }
-
+        if (gos.get('activeOverlay')) {
+            this.warn(296);
+            return;
+        }
+        if (this.currentDef === NoMatchingRowsOverlayDef) {
+            this.warn(297);
+            return;
+        }
         this.doHideOverlay();
+        if (userHadForced) {
+            // if user had forced no-rows overlay, we need to reevaluate what overlay should be shown now if any
+            if (this.getOverlayDef() !== NoRowsOverlayDef) {
+                this.updateOverlay(false);
+            }
+        }
     }
 
     public getOverlayWrapperSelector(): ComponentSelector {
@@ -100,124 +351,227 @@ export class OverlayService extends BeanStub implements NamedBean {
         return OverlayWrapperComponent;
     }
 
-    private updateOverlayVisibility(): void {
-        if (!this.eWrapper) {
-            this.state = OverlayServiceState.Hidden;
-            return;
-        }
-
-        const {
-            state,
-            isClientSide,
-            beans: { gos, colModel, rowModel },
-        } = this;
-        let loading = this.gos.get('loading');
-
-        if (loading !== undefined) {
-            // If loading is defined, we don't show the initial overlay.
-            this.showInitialOverlay = false;
-        }
-
-        if (this.showInitialOverlay && loading === undefined && !gos.get('suppressLoadingOverlay')) {
-            loading = !gos.get('columnDefs') || !colModel.ready || (!gos.get('rowData') && isClientSide);
-        }
-
-        if (loading) {
-            if (state !== OverlayServiceState.Loading) {
-                this.doShowLoadingOverlay();
+    private onPropChange(changedProps: ReadonlySet<string>): void {
+        const activeOverlayChanged = changedProps.has('activeOverlay');
+        if (activeOverlayChanged || changedProps.has('loading')) {
+            if (this.updateOverlay(activeOverlayChanged)) {
+                return; // overlay changed, no need to check further
             }
-        } else {
-            this.showInitialOverlay = false;
-            if (rowModel.isEmpty() && !gos.get('suppressNoRowsOverlay') && isClientSide) {
-                if (state !== OverlayServiceState.NoRows) {
-                    this.doShowNoRowsOverlay();
+        }
+
+        const currentDef = this.currentDef;
+        const currOverlayComp = this.eWrapper?.activeOverlay;
+        if (currOverlayComp && currentDef) {
+            const activeOverlayParamsChanged = changedProps.has('activeOverlayParams');
+            if (currentDef === CustomOverlayDef) {
+                // If its an activeOverlay update if the changes are in the activeOverlayParams
+                if (activeOverlayParamsChanged) {
+                    currOverlayComp.refresh?.(this.makeCompParams(true));
                 }
-            } else if (state !== OverlayServiceState.Hidden) {
-                this.doHideOverlay();
+            } else {
+                // Check for overlay component param or legacy provided param changes
+                const paramsKey = currentDef.paramsKey;
+                if (changedProps.has('overlayComponentParams') || (paramsKey && changedProps.has(paramsKey))) {
+                    currOverlayComp.refresh?.(this.makeCompParams(false, paramsKey, currentDef.overlayType));
+                }
             }
         }
     }
 
-    private doShowLoadingOverlay(): void {
-        if (!this.eWrapper) {
-            return;
-        }
-
-        this.state = OverlayServiceState.Loading;
-        this.showOverlay(
-            _getLoadingOverlayCompDetails(this.beans.userCompFactory, {}),
-            'ag-overlay-loading-wrapper',
-            'loadingOverlayComponentParams'
-        );
-        this.updateExclusive();
-    }
-
-    private doShowNoRowsOverlay(): void {
-        if (!this.eWrapper) {
-            return;
-        }
-
-        this.state = OverlayServiceState.NoRows;
-        this.showOverlay(
-            _getNoRowsOverlayCompDetails(this.beans.userCompFactory, {}),
-            'ag-overlay-no-rows-wrapper',
-            'noRowsOverlayComponentParams'
-        );
-        this.updateExclusive();
-    }
-
-    private doHideOverlay(): void {
-        if (!this.eWrapper) {
-            return;
-        }
-
-        this.state = OverlayServiceState.Hidden;
-        this.eWrapper.hideOverlay();
-        this.updateExclusive();
-    }
-
-    private showOverlay(
-        compDetails: UserCompDetails | undefined,
-        wrapperCssClass: string,
-        gridOption: keyof GridOptions
-    ): void {
-        const promise = compDetails?.newAgStackInstance() ?? null;
-        this.eWrapper?.showOverlay(promise, wrapperCssClass, this.isExclusive(), gridOption);
-        this.refreshWrapperPadding();
-    }
-
-    private updateExclusive(): void {
-        const wasExclusive = this.exclusive;
-        this.exclusive = this.isExclusive();
-        if (this.exclusive !== wasExclusive) {
-            this.eventSvc.dispatchEvent({
-                type: 'overlayExclusiveChanged',
-            });
-        }
-    }
-
-    private refreshWrapperPadding(): void {
+    private updateOverlay(activeOverlayChanged: boolean): boolean {
         const eWrapper = this.eWrapper;
         if (!eWrapper) {
-            return;
+            this.currentDef = null;
+            return false;
         }
 
-        let newPadding: number = 0;
+        // Active overlay should take priority over loading=true
+        const desiredDef = this.getDesiredDefWithOverride();
 
-        if (this.state === OverlayServiceState.NoRows) {
-            const headerCtrl = this.beans.ctrlsSvc.get('gridHeaderCtrl');
-            const headerHeight = headerCtrl?.headerHeight || 0;
+        const currentDef = this.currentDef;
+        const shouldReload = desiredDef === CustomOverlayDef && activeOverlayChanged;
 
-            newPadding = headerHeight;
-        } else if (this.wrapperPadding !== 0) {
-            newPadding = 0;
+        if (desiredDef !== currentDef) {
+            if (!desiredDef) {
+                this.disableInitialOverlay();
+                return this.doHideOverlay();
+            }
+            this.doShowOverlay(desiredDef);
+            return true;
         }
 
-        if (this.wrapperPadding === newPadding) {
-            return;
+        if (shouldReload && desiredDef) {
+            eWrapper.hideOverlay();
+            this.doShowOverlay(desiredDef);
+            return true;
         }
 
-        this.wrapperPadding = newPadding;
-        eWrapper.updateOverlayWrapperPaddingTop(newPadding);
+        if (!desiredDef) {
+            this.disableInitialOverlay();
+        }
+
+        return false;
+    }
+
+    private getDesiredDefWithOverride(defaultDef?: OverlayDef) {
+        const { gos } = this;
+        let desiredDef = getActiveOverlayDef(gos.get('activeOverlay'));
+        if (!desiredDef) {
+            desiredDef = defaultDef ?? this.getOverlayDef();
+            if (desiredDef && this.isDisabled(desiredDef)) {
+                desiredDef = null;
+            }
+        }
+        return desiredDef;
+    }
+
+    private getOverlayDef(): OverlayDef | null {
+        const { gos, beans } = this;
+        const { rowModel } = beans;
+
+        // Dev validation errors take priority over the data-driven overlays (loading / no-rows).
+        if (this.devErrorOverlayActive && this.eWrapper) {
+            return ErrorOverlayDef;
+        }
+
+        const loading = gos.get('loading');
+
+        const loadingDefined = loading !== undefined;
+
+        if (loadingDefined) {
+            this.disableInitialOverlay();
+            if (loading) {
+                return _isClientSideLoadingRows(gos) ? null : LoadingOverlayDef;
+            }
+        } else if (this.showInitialOverlay) {
+            const noColumnDefs = !gos.get('columnDefs') && !gos.get('autoGenerateColumnDefs');
+            const noRowData = !gos.get('rowData');
+            if (noColumnDefs || noRowData) {
+                if (noRowData && gos.get('processFileInput') && !this.isDisabled(FileInputOverlayDef)) {
+                    return FileInputOverlayDef;
+                }
+                if (!this.isDisabled(LoadingOverlayDef)) {
+                    return LoadingOverlayDef;
+                }
+            }
+            this.disableInitialOverlay();
+        } else {
+            this.disableInitialOverlay();
+        }
+
+        // activeOverlay already checked above
+        const overlayType = rowModel.getOverlayType();
+        return getOverlayDefForType(overlayType);
+    }
+
+    private disableInitialOverlay(): void {
+        this.showInitialOverlay = false;
+        // Stop listening for new columns loaded as initial overlay is now hidden
+        this.newColumnsLoadedCleanup?.();
+        this.newColumnsLoadedCleanup = null;
+    }
+
+    /**
+     * Show an overlay requested by name or by built-in types.
+     * This single function replaces the previous three helpers and handles
+     * param selection and wrapper class choice for loading / no-rows and custom overlays.
+     */
+    private doShowOverlay(componentDef: OverlayDef): AgPromise<IOverlayComp | undefined> {
+        const { gos, beans } = this;
+        const { userCompFactory } = beans;
+
+        this.currentDef = componentDef;
+        const isProvidedOverlay = componentDef !== CustomOverlayDef;
+        const exclusive = !!componentDef.exclusive;
+        this.exclusive = exclusive;
+
+        // Prefer overlay-specific params if provided (e.g. loadingOverlayComponentParams
+        // or noRowsOverlayComponentParams). Fall back to legacy component option presence
+        // (e.g. loadingOverlayComponent) or finally to activeOverlayParams.
+        let legacyParamsKey: keyof GridOptions | undefined;
+        if (
+            (componentDef.paramsKey && gos.get(componentDef.paramsKey)) ||
+            (componentDef.compKey && gos.get(componentDef.compKey))
+        ) {
+            legacyParamsKey = componentDef.paramsKey;
+        }
+
+        let compDetails = undefined;
+        if (isProvidedOverlay && !componentDef.noUserOverride) {
+            // For provided overlays check if the user is providing overrides for them
+            if (gos.get('overlayComponent') || gos.get('overlayComponentSelector')) {
+                compDetails = userCompFactory.getCompDetailsFromGridOptions(
+                    { name: 'overlayComponent', optionalMethods: ['refresh'] },
+                    undefined,
+                    this.makeCompParams(false, componentDef.paramsKey, componentDef.overlayType)
+                );
+            }
+        }
+
+        compDetails ??= userCompFactory.getCompDetailsFromGridOptions(
+            componentDef.comp,
+            isProvidedOverlay ? componentDef.id : undefined,
+            this.makeCompParams(!isProvidedOverlay, legacyParamsKey, componentDef.overlayType),
+            false
+        );
+
+        const promise = compDetails?.newAgStackInstance() ?? null;
+        const mountedPromise: AgPromise<IOverlayComp | undefined> = this.eWrapper
+            ? this.eWrapper.showOverlay(promise, componentDef.wrapperCls, exclusive)
+            : AgPromise.resolve();
+        this.eWrapper?.refreshWrapperPadding();
+        this.setExclusive(exclusive);
+
+        return mountedPromise;
+    }
+
+    private makeCompParams(
+        includeActiveOverlayParams: boolean,
+        legacyParamsKey?: keyof GridOptions,
+        overlayType?: OverlayType
+    ): any {
+        const { gos } = this;
+
+        const params = includeActiveOverlayParams
+            ? gos.get('activeOverlayParams')
+            : {
+                  ...gos.get('overlayComponentParams'),
+                  ...((legacyParamsKey && gos.get(legacyParamsKey)) || null),
+                  overlayType,
+              };
+
+        return _addGridCommonParams(gos, params ?? {});
+    }
+
+    private doHideOverlay(): boolean {
+        let changed = false;
+        if (this.currentDef) {
+            this.currentDef = null;
+            changed = true;
+        }
+        this.exclusive = false;
+        const eWrapper = this.eWrapper;
+        if (eWrapper) {
+            eWrapper.hideOverlay();
+            eWrapper.refreshWrapperPadding();
+            this.setExclusive(false);
+        }
+        return changed;
+    }
+
+    private setExclusive(exclusive: boolean): void {
+        if (this.oldExclusive !== exclusive) {
+            this.oldExclusive = exclusive;
+            this.eventSvc.dispatchEvent({ type: 'overlayExclusiveChanged' });
+        }
+    }
+
+    private isDisabled(def: OverlayDef): boolean {
+        const { gos } = this;
+
+        return (
+            (def.overlayType && gos.get('suppressOverlays')?.includes(def.overlayType)) ||
+            def.isSuppressed?.(gos) === true
+        );
     }
 }

@@ -1,3 +1,8 @@
+/* Manually set dark mode to get a dark scroll bar on the body */
+html[data-color-scheme='dark'] body {
+    color-scheme: dark;
+}
+
 .test-header {
     display: flex;
     justify-content: space-between;
@@ -14,22 +19,23 @@
 
 .test-header button {
     margin-right: 5px;
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
     margin-top: 0;
 }
 
 .test-header input {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .test-header #floating-rows {
     vertical-align: bottom;
 }
-.ag-floating-top .ag-row-pinned.ag-row {
+
+.ag-grid-pinned-top-rows-container .ag-row {
     background-color: #2244cc44;
 }
 
-.ag-floating-bottom .ag-row-pinned.ag-row {
+.ag-grid-pinned-bottom-rows-container .ag-row {
     background-color: #2244cc44;
 }

@@ -1,18 +1,6 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
-  "plugins": [
-    "./plugins/ag-grid-task-autogen",
-    {
-      "plugin": "@nx/vite/plugin",
-      "options": {
-        "buildTargetName": "build",
-        "testTargetName": "vite:test",
-        "serveTargetName": "serve",
-        "previewTargetName": "preview",
-        "serveStaticTargetName": "serve-static"
-      }
-    }
-  ],
+  "plugins": ["./plugins/ag-grid-task-autogen"],
   "affected": {
     "defaultBase": "latest"
   },
@@ -24,8 +12,7 @@
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
       "!{projectRoot}/**/test/**",
       "!{projectRoot}/**/__image_snapshots__/**",
-      "!{projectRoot}/tsconfig.spec.json",
-      "!{projectRoot}/jest.config.[jt]s"
+      "!{projectRoot}/tsconfig.spec.json"
     ],
     "buildOutputExcludes": ["!{projectRoot}/dist/**"],
     "production": [
@@ -49,7 +36,7 @@
     "styleOutputs": [
       {
         "dependentTasksOutputFiles": "**/*.*css",
-        "transitive": true
+        "transitive": false
       }
     ],
     "allOutputs": [
@@ -75,22 +62,38 @@
         "externalDependencies": ["npm:typescript", "npm:esbuild"]
       }
     ],
-    "sharedGlobals": ["{workspaceRoot}/esbuild.config*.cjs", "{workspaceRoot}/tsconfig.*.json"],
+    "sharedGlobals": ["{workspaceRoot}/esbuild*.cjs", "{workspaceRoot}/tsconfig.*.json"],
     "charts": ["chartsPackages", "chartsTypes"],
     "chartsPackages": [
-      { "externalDependencies": ["ag-charts-locale", "ag-charts-community", "ag-charts-enterprise"] },
-      { "runtime": "date -r ./node_modules/ag-charts-locale/dist \"+%Y-%m-%d %H:%M:%S\"" },
-      { "runtime": "date -r ./node_modules/ag-charts-community/dist \"+%Y-%m-%d %H:%M:%S\"" },
-      { "runtime": "date -r ./node_modules/ag-charts-enterprise/dist \"+%Y-%m-%d %H:%M:%S\"" }
+      {
+        "externalDependencies": ["ag-charts-locale", "ag-charts-community", "ag-charts-enterprise"]
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-locale/dist \"+%Y-%m-%d %H:%M:%S\""
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-community/dist \"+%Y-%m-%d %H:%M:%S\""
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-enterprise/dist \"+%Y-%m-%d %H:%M:%S\""
+      }
     ],
     "chartsTypes": [
       {
         "externalDependencies": ["ag-charts-types", "ag-charts-locale", "ag-charts-community", "ag-charts-enterprise"]
       },
-      { "runtime": "date -r ./node_modules/ag-charts-locale/dist \"+%Y-%m-%d %H:%M:%S\"" },
-      { "runtime": "date -r ./node_modules/ag-charts-types/dist \"+%Y-%m-%d %H:%M:%S\"" },
-      { "runtime": "date -r ./node_modules/ag-charts-community/dist \"+%Y-%m-%d %H:%M:%S\"" },
-      { "runtime": "date -r ./node_modules/ag-charts-enterprise/dist \"+%Y-%m-%d %H:%M:%S\"" }
+      {
+        "runtime": "date -r ./node_modules/ag-charts-locale/dist \"+%Y-%m-%d %H:%M:%S\""
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-types/dist \"+%Y-%m-%d %H:%M:%S\""
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-community/dist \"+%Y-%m-%d %H:%M:%S\""
+      },
+      {
+        "runtime": "date -r ./node_modules/ag-charts-enterprise/dist \"+%Y-%m-%d %H:%M:%S\""
+      }
     ]
   },
   "targetDefaults": {
@@ -103,6 +106,16 @@
       "dependsOn": ["^build:types"],
       "inputs": ["production", "^production"],
       "cache": true
+    },
+    "build:test": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build:types", "build:types"],
+      "inputs": ["default", "buildOutputExcludes", "^production"],
+      "outputs": [],
+      "cache": true,
+      "options": {
+        "command": "npx tsc -p {projectRoot}/tsconfig.spec.json --noEmit"
+      }
     },
     "build:package": {
       "dependsOn": ["^build:package"],
@@ -120,11 +133,21 @@
       "cache": true
     },
     "lint": {
-      "inputs": ["default", "{workspaceRoot}/.eslintrc.json", "{workspaceRoot}/.eslintignore"],
+      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs", "{workspaceRoot}/yarn.lock"],
       "cache": true
     },
+    "lint:depcruise": {
+      "executor": "nx:run-commands",
+      "inputs": ["{projectRoot}/src/**", "{projectRoot}/.dependency-cruiser.js"],
+      "outputs": [],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": ["npx depcruise src"]
+      }
+    },
     "test": {
-      "inputs": ["default", "buildOutputExcludes", "^production", "{workspaceRoot}/jest.preset.js"],
+      "inputs": ["default", "buildOutputExcludes", "^production"],
       "outputs": [],
       "cache": true
     },
@@ -134,26 +157,34 @@
       "cache": true
     },
     "pack": {
-      "inputs": ["allTransitiveOutputs"],
+      "inputs": ["allTransitiveOutputs", "{projectRoot}/.npmignore"],
+      "cache": true
+    },
+    "nx:noop": {
+      "cache": true,
+      "inputs": [],
+      "outputs": []
+    },
+    "nx:run-script": {
+      "cache": true,
+      "inputs": ["production"],
+      "outputs": []
+    },
+    "nx:run-commands": {
       "cache": true
     },
     "@nx/jest:jest": {
-      "inputs": ["default", "^production", "{workspaceRoot}/jest.preset.js"],
       "cache": true,
       "options": {
         "passWithNoTests": true
       },
       "configurations": {
         "ci": {
-          "ci": true,
-          "codeCoverage": true
+          "ci": true
         }
       }
-    },
-    "@nx/vite:test": {
-      "cache": true,
-      "inputs": ["default", "^production"]
     }
   },
-  "defaultProject": "all"
+  "defaultProject": "all",
+  "useLegacyCache": false
 }

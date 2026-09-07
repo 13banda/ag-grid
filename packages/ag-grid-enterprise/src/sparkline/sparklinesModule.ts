@@ -1,11 +1,11 @@
 import type { IntegratedModule } from 'ag-charts-types';
 
-import { _preInitErrMsg } from 'ag-grid-community';
 import type { _ModuleWithoutApi } from 'ag-grid-community';
+import { _preInitErrMsg } from 'ag-grid-community';
 
 import { EnterpriseCoreModule } from '../agGridEnterpriseModule';
 import { VERSION } from '../version';
-import { sparklineCSS } from './sparkline.css-GENERATED';
+import sparklineCSS from './sparkline.css';
 import { SparklineCellRenderer } from './sparklineCellRenderer';
 
 type SparklineChartsModuleType = { with: (params: IntegratedModule) => _ModuleWithoutApi } & _ModuleWithoutApi;

@@ -5,10 +5,15 @@ import {
     NumberFilterModule,
     PinnedRowModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextFilterModule,
@@ -19,7 +24,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     RowGroupingModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColGroupDef[] = [
@@ -99,7 +103,7 @@ function updateRowData(rowCount: number) {
     document.querySelector('#currentRowCount')!.textContent = `${rowCount}`;
 }
 
-function cbFloatingRows() {
+function toggleFloatingRows() {
     const show = (document.getElementById('floating-rows') as HTMLInputElement).checked;
     if (show) {
         gridApi!.setGridOption('pinnedTopRowData', [createRow(999), createRow(998)]);
@@ -110,18 +114,17 @@ function cbFloatingRows() {
     }
 }
 
-function setAutoHeight() {
+function setDomLayoutAutoHeight() {
     gridApi!.setGridOption('domLayout', 'autoHeight');
     // auto height will get the grid to fill the height of the contents,
     // so the grid div should have no height set, the height is dynamic.
     (document.querySelector<HTMLElement>('#myGrid')! as any).style.height = '';
 }
 
-function setFixedHeight() {
-    // we could also call setDomLayout() here as normal is the default
+function setDomLayoutNormal() {
     gridApi!.setGridOption('domLayout', 'normal');
-    // when auto height is off, the grid ahs a fixed height, and then the grid
-    // will provide scrollbars if the data does not fit into it.
+    // when auto height is off, the grid has a fixed height and provides
+    // scrollbars if the data does not fit into it.
     (document.querySelector<HTMLElement>('#myGrid')! as any)!.style.height = '400px';
 }
 

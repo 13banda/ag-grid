@@ -1,10 +1,10 @@
 ---
-import { getEntry } from 'astro:content';
+import { getEntry, type CollectionEntry } from 'astro:content';
 import Layout from '@layouts/Layout.astro';
 import { DocsNavFromLocalStorage } from '@ag-website-shared/components/docs-navigation/DocsNavFromLocalStorage';
 import { parseVersion } from '@ag-website-shared/utils/parseVersion';
 import { Version, type VersionProps } from '../components/Version';
-import type { Framework, Library } from '@ag-grid-types';
+import type { Library } from '@ag-grid-types';
 import styles from '../WhatsNew.module.scss';
 import whatsNewData from '@ag-website-shared/content/whats-new/data.json';
 
@@ -14,21 +14,20 @@ interface Props {
 }
 
 const { site, versionsData } = Astro.props;
-const pageName = Astro.params.pageName as Framework;
 
 const { name, blogPrefix } = whatsNewData[site];
 
-const { data: docsNavData } = await getEntry('docs-nav', 'docsNav');
+const { data: docsNavData } = (await getEntry('docsNav', 'nav')) as CollectionEntry<'docsNav'>;
 ---
 
 <Layout
-    title={"AG Grid What's new"}
+    title={`${name} What's new`}
     description={`See what's new in recent ${name} versions. View feature highlights, browse release notes or read our release blogs. Includes major and minor releases.`}
     showDocsNav={true}
     showSearchBar={true}
 >
     <div class:list={['contentViewport layout-grid']}>
-        <DocsNavFromLocalStorage client:load menuData={docsNavData} pageName={pageName} />
+        <DocsNavFromLocalStorage client:load menuData={docsNavData} pageName={'whats-new'} />
 
         <div class={styles.whatsNewContainer}>
             <h1>What's New in {name}</h1>

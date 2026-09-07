@@ -7,6 +7,7 @@ import { VERSION } from '../version';
 import { MenuItemModule } from '../widgets/menuItemModule';
 import { ColumnToolPanel } from './columnToolPanel';
 import { ColumnToolPanelFactory } from './columnToolPanelFactory';
+import { SharedColumnStateUpdateStrategyModule } from './updates/columnStateUpdateStrategyModule';
 
 /**
  * @feature Accessories -> Columns Tool Panel
@@ -17,6 +18,7 @@ export const ColumnsToolPanelModule: _ModuleWithoutApi = {
     beans: [ColumnToolPanelFactory],
     userComponents: { agColumnsToolPanel: ColumnToolPanel },
     icons: {
+        ensureColumnVisible: 'column-arrow',
         // column tool panel tab
         columnsToolPanel: 'columns',
         // "Group by {column-name}" item in column header menu
@@ -39,6 +41,7 @@ export const ColumnsToolPanelModule: _ModuleWithoutApi = {
     },
     dependsOn: [
         EnterpriseCoreModule,
+        SharedColumnStateUpdateStrategyModule,
         SideBarModule,
         _ColumnMoveModule,
         _SharedDragAndDropModule,

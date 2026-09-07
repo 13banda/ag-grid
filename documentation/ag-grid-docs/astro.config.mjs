@@ -1,23 +1,37 @@
 import markdoc from '@astrojs/markdoc';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
-import { defineConfig } from 'astro/config';
+import { defineConfig, fontProviders } from 'astro/config';
 import dotenvExpand from 'dotenv-expand';
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as sass from 'sass';
 import { loadEnv } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
 import svgr from 'vite-plugin-svgr';
 
+import agCacheSitemap from '../../external/ag-website-shared/plugins/agCacheSitemap';
+import agLinkChecker from '../../external/ag-website-shared/plugins/agLinkChecker';
+import agMkcertPreview from '../../external/ag-website-shared/plugins/agMkcertPreview';
+import agSitemapFilterNoindex from '../../external/ag-website-shared/plugins/agSitemapFilterNoindex';
+import agSitemapLastmod from '../../external/ag-website-shared/plugins/agSitemapLastmod';
+import agSourcemapCors from '../../external/ag-website-shared/plugins/agSourcemapCors';
+import { SITEMAP_CACHE_DIR } from '../../external/ag-website-shared/src/constants';
+import buildTime from './plugins/agBuildTime';
+import agDemoTitleChecker from './plugins/agDemoTitleChecker';
+import agDevCsp from './plugins/agDevCsp';
+import agDevExampleAssetCors from './plugins/agDevExampleAssetCors';
+import agDevMarkdownNegotiation from './plugins/agDevMarkdownNegotiation';
 import agHotModuleReload from './plugins/agHotModuleReload';
 import agHtaccessGen from './plugins/agHtaccessGen';
-import agLinkChecker from './plugins/agLinkChecker';
-import agMergeSitemap from './plugins/agMergeSitemap';
 import agRedirectsChecker from './plugins/agRedirectsChecker';
 import { getSitemapConfig } from './src/utils/sitemap';
 import { urlWithBaseUrl } from './src/utils/urlWithBaseUrl';
 
 const { NODE_ENV } = process.env;
 const DEFAULT_BASE_URL = '/';
+const PRODUCTION_SITE_URLS = ['https://ag-grid.com', 'https://www.ag-grid.com'];
 const dotenv = {
     parsed: loadEnv(NODE_ENV, process.cwd(), ''),
 };
@@ -61,11 +75,6 @@ const {
     PUBLIC_HTTPS_SERVER = '1',
 
     /**
-     * Generate `/debug/*` pages
-     */
-    ENABLE_GENERATE_DEBUG_PAGES = '1',
-
-    /**
      * Show debug logs in the terminal
      *
      * Used to hide logs that are annoying for most other devs
@@ -105,6 +114,11 @@ const {
      */
     DISABLE_EXAMPLE_RUNNER,
 
+    /*
+     * Disable markdown doc generation
+     */
+    DISABLE_MARKDOWN_DOCS,
+
     /**
      * Charts sitemap index to merge
      */
@@ -114,6 +128,37 @@ const {
      * Charts robots.txt disallow json url to merge
      */
     CHARTS_ROBOTS_DISALLOW_JSON_URL,
+
+    /**
+     * Studio sitemap index to merge
+     */
+    STUDIO_SITEMAP_INDEX_URL,
+
+    /**
+     * SE-85: Ghost's flat child sitemaps to merge, comma-separated. NOT its index — see
+     * getSitemapConfig; an index inside an index is invalid and crawlers ignore it.
+     */
+    BLOG_SITEMAP_URLS,
+
+    /**
+     * Studio robots.txt disallow json url to merge
+     */
+    STUDIO_ROBOTS_DISALLOW_JSON_URL,
+
+    /**
+     * Format generated example code in dev as production does
+     *
+     * Dev builds skip prettier because it is roughly half the cost of generating an example, so
+     * example code reads unformatted in the code viewer. Set to `true` to format it anyway.
+     */
+    AG_EXAMPLE_FORMAT,
+
+    /**
+     * Generate examples through the per-example Nx tasks instead of the single aggregate task
+     *
+     * Escape hatch for the generation collapse; the two strategies produce identical output.
+     */
+    DISABLE_EXAMPLE_GEN_COLLAPSE,
 } = dotenvExpand.expand(dotenv).parsed;
 console.log(
     'Astro configuration',
@@ -123,38 +168,140 @@ console.log(
             PORT,
             PUBLIC_SITE_URL,
             PUBLIC_BASE_URL,
+            PUBLIC_HTTPS_SERVER,
             PUBLIC_USE_PUBLISHED_PACKAGES,
             USE_PACKAGES,
-            ENABLE_GENERATE_DEBUG_PAGES,
             SHOW_DEBUG_LOGS,
             HTACCESS,
+            CHECK_LINKS,
             CHECK_REDIRECTS,
             QUICK_BUILD_PAGES,
             DISABLE_EXAMPLE_RUNNER,
+            DISABLE_MARKDOWN_DOCS,
             CHARTS_SITEMAP_INDEX_URL,
             CHARTS_ROBOTS_DISALLOW_JSON_URL,
+            STUDIO_SITEMAP_INDEX_URL,
+            STUDIO_ROBOTS_DISALLOW_JSON_URL,
+            AG_EXAMPLE_FORMAT,
+            DISABLE_EXAMPLE_GEN_COLLAPSE,
         },
         null,
         2
     )
 );
 
+const plugins = [
+    agSourcemapCors(),
+    svgr(),
+    agHotModuleReload(),
+    agDevCsp(),
+    agDevExampleAssetCors(),
+    agDevMarkdownNegotiation(),
+];
+if (NODE_ENV !== 'test') {
+    plugins.push(mkcert()); // mkcert is not necessary for tests
+}
+
+const httpsEnabled = !['0', 'false'].includes(PUBLIC_HTTPS_SERVER);
+
 // https://astro.build/config
 export default defineConfig({
+    /**
+     * Site fonts, resolved from the installed `@fontsource-variable` packages rather than
+     * `fontProviders.google()`.
+     *
+     * The Google provider resolves a `fonts.gstatic.com` URL at build time and downloads it
+     * with no retry. Google periodically re-cuts those files without bumping the version in
+     * the URL, and stale CSS lingering on some edge nodes then hands out filenames gstatic
+     * has already deleted - a 404 that fails the whole docs build. Resolving from
+     * node_modules removes the build-time network call entirely and pins the files to the
+     * lockfile.
+     *
+     * Each family ships as one variable woff2, declared at the SAME discrete weights the
+     * Google provider declared (sans 400/500/700, mono 400/700) rather than at the file's
+     * full variable range. That is deliberate: CSS matches a requested weight to the nearest
+     * declared one, so the ~58 `font-weight: 600` call sites in the docs currently resolve to
+     * 700. Exposing the continuous range would let them resolve to a true 600 and lighten
+     * text across the site - a typography change, which does not belong in a build fix.
+     * Widening these to a range is a deliberate follow-up, not a free win.
+     *
+     * No `unicodeRange` here, unlike the faces the Google provider emitted. That descriptor
+     * exists to let a browser skip downloading a subset it has no characters for, which needs
+     * more than one subset to mean anything - there is a single latin file per family, it is
+     * preloaded from Layout.astro regardless, and its coverage is exactly the range fontsource
+     * declares for it. Anything outside that range falls back per glyph either way.
+     */
+    fonts: [
+        {
+            provider: fontProviders.local(),
+            name: 'IBM Plex Sans',
+            cssVariable: '--font-ibm-plex-sans',
+            options: {
+                variants: [400, 500, 700].map((weight) => ({
+                    weight,
+                    style: 'normal',
+                    src: ['@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2'],
+                })),
+            },
+        },
+        {
+            provider: fontProviders.local(),
+            name: 'JetBrains Mono',
+            cssVariable: '--font-jetbrains-mono',
+            options: {
+                variants: [400, 700].map((weight) => ({
+                    weight,
+                    style: 'normal',
+                    src: ['@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2'],
+                })),
+            },
+        },
+    ],
     site: PUBLIC_SITE_URL,
     base: PUBLIC_BASE_URL,
+    security: {
+        /**
+         * Allow cross-origin dev-server fetches from external example hosts.
+         *
+         * Astro 6's secFetchMiddleware runs before Vite's CORS middleware and
+         * returns 403 for unknown cross-origin subresource requests, so hosts
+         * have to be allowed here as well as in `vite.server.cors.origin` below.
+         */
+        allowedDomains: [
+            // Plunkr
+            { hostname: 'run.plnkr.co', protocol: 'https' },
+            // Codesandbox
+            { hostname: '**.csb.app', protocol: 'https' },
+        ],
+    },
     devToolbar: {
         enabled: false,
     },
     vite: {
-        plugins: [mkcert(), svgr(), agHotModuleReload()],
+        plugins,
         server: {
-            https: !['0', 'false'].includes(PUBLIC_HTTPS_SERVER),
+            https: httpsEnabled,
+            cors: {
+                /**
+                 * CORS allow list for opening examples on external sites
+                 */
+                origin: [
+                    // Plunkr
+                    'https://run.plnkr.co',
+                    // Codesandbox
+                    /\.csb.app/,
+                ],
+            },
+            headers: {
+                // Content-Security-Policy is served per request by agDevCsp so
+                // example paths can get a different policy from ordinary pages.
+                'X-Content-Type-Options': 'nosniff',
+            },
         },
         css: {
             preprocessorOptions: {
                 scss: {
-                    api: 'modern-compiler',
+                    api: 'modern',
                     functions: {
                         'urlWithBaseUrl($url)': function (args) {
                             const sassUrl = args[0].assertString();
@@ -164,7 +311,14 @@ export default defineConfig({
                             return new sass.SassString(urlWithBase);
                         },
                     },
-                    loadPaths: ['../../external/ag-website-shared/src'],
+                    loadPaths: [
+                        // Repo-owned header token overrides — checked first, so a local
+                        // `_site-header-tokens.scss` here wins over the shared package's
+                        // default (see src/styles/header-tokens/README.md).
+                        './src/styles/header-tokens',
+                        '../../external/ag-website-shared/src',
+                        '../../external/ag-website-shared/src/design-system',
+                    ],
                 },
             },
         },
@@ -174,17 +328,41 @@ export default defineConfig({
         },
     },
     integrations: [
+        buildTime(),
         react(),
         markdoc(),
-        sitemap(getSitemapConfig()),
-        agHtaccessGen({ include: HTACCESS === 'true' }),
+        // Archive builds are fully noindex — omit sitemap generation and remove the /sitemap page.
+        ...(!PUBLIC_BASE_URL?.includes('archive')
+            ? [
+                  sitemap(
+                      getSitemapConfig({
+                          chartsSitemap: CHARTS_SITEMAP_INDEX_URL,
+                          studioSitemap: STUDIO_SITEMAP_INDEX_URL,
+                          blogSitemaps: BLOG_SITEMAP_URLS?.split(',')
+                              .map((url) => url.trim())
+                              .filter(Boolean),
+                      })
+                  ),
+                  agSitemapFilterNoindex({ enabled: PRODUCTION_SITE_URLS.includes(PUBLIC_SITE_URL) }),
+                  agSitemapLastmod(),
+                  agCacheSitemap({ cacheFolder: SITEMAP_CACHE_DIR }),
+              ]
+            : [
+                  {
+                      name: 'ag-archive-cleanup',
+                      hooks: {
+                          'astro:build:done': async ({ dir }) => {
+                              await rm(join(fileURLToPath(dir), 'sitemap'), { recursive: true, force: true });
+                          },
+                      },
+                  },
+              ]),
+        agHtaccessGen({ htaccessEnv: HTACCESS }),
+        agDemoTitleChecker(),
         agRedirectsChecker({
             skip: CHECK_REDIRECTS !== 'true',
         }),
         agLinkChecker({ include: CHECK_LINKS === 'true' }),
-        agMergeSitemap({
-            // Merge charts sitemap
-            sitemapIndexUrl: CHARTS_SITEMAP_INDEX_URL,
-        }),
+        agMkcertPreview({ enabled: httpsEnabled }),
     ],
 });

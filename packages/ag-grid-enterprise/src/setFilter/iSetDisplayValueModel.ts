@@ -37,13 +37,16 @@ export interface ISetDisplayValueModel<V> {
 export const SET_FILTER_SELECT_ALL = '__AG_SELECT_ALL__';
 export const SET_FILTER_ADD_SELECTION_TO_FILTER = '__AG_ADD_SELECTION_TO_FILTER__';
 
+/** Read `keys` through this, so a group with none loops zero times instead of every reader testing for it. */
+export const NO_SET_FILTER_KEYS: readonly (string | null)[] = [];
+
 export interface SetFilterModelTreeItem {
     treeKey: string | null;
     depth: number;
     filterPasses: boolean;
     available: boolean;
     expanded?: boolean;
-    children?: SetFilterModelTreeItem[];
-    key?: string | null;
+    children?: Map<string | null, SetFilterModelTreeItem>;
+    keys?: (string | null)[];
     parentTreeKeys: (string | null)[];
 }

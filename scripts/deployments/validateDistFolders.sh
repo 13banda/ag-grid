@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -Eeuo pipefail
+
 excluded=("ag-grid-react" "ag-grid-vue3" "ag-grid-angular" "styles" "locale")
 frameworks=("ag-grid-react" "ag-grid-vue3" "ag-grid-angular")
 
@@ -48,7 +50,7 @@ validateCommonDist()
 
   local expected_count=5
   local count=`find "$directory/dist/package" -type f | wc -l | tr -d ' '`;
-  if [[ $count -ne $expected_count ]]
+  if [[ "$count" -lt "$expected_count" ]]
   then
     echo "ERROR: $directory/dist/package should have $expected_count artefacts but has $count"
     exit 1
@@ -58,6 +60,13 @@ validateCommonDist()
   if [[ $count -eq 0 ]]
   then
     echo "ERROR: $directory/dist/types should have at type files - none found"
+    exit 1
+  fi
+
+  local sourceMappingCount=`grep sourceMappingURL $directory/dist/package/*.*js | wc -l`
+  if [[ $sourceMappingCount -ne 0 ]]
+  then
+    echo "ERROR: $directory/dist/package has source map references"
     exit 1
   fi
 }
@@ -101,13 +110,30 @@ validatePackages()
       current_root_dir="$packagesDir/$directory/package"
       validateCommonDist "$current_root_dir"
 
-      expected_umd=4
       current_dist=$current_root_dir/dist
-      count=`find $current_dist -maxdepth 1 -name *.js | wc -l | tr -d ' '`
-      if [[ $count -ne $expected_umd ]]
+      if [[ $current_dist == "dist/artifacts/contents/packages/ag-stack/package/dist" ]]
       then
-        echo "ERROR: $current_dist should have $expected_umd umd files"
+        expected_umd=2
+      else
+        expected_umd=4
+      fi
+      count=`find $current_dist -maxdepth 1 -name "*.js" | wc -l | tr -d ' '`
+      if [[ $count -lt $expected_umd ]]
+      then
+        echo "ERROR: $current_dist should have more than $expected_umd umd files"
         exit 1
+      fi
+
+      if [[ $current_root_dir/dist != "dist/artifacts/contents/packages/ag-stack/package/dist" ]]
+      then
+        expected_styles=35
+        current_dist=$current_root_dir/styles
+        count=`find $current_dist | wc -l | tr -d ' '`
+        if [[ $count -ne $expected_styles ]]
+        then
+          echo "ERROR: $current_dist should have $expected_styles style files"
+          exit 1
+        fi
       fi
     elif [[ ${frameworks[@]} =~ $directory ]]
     then
@@ -116,7 +142,7 @@ validatePackages()
 
       validatePackageJsonExists $package_dir
 
-      count=`tree $package_dir | grep .d.ts | wc -l | tr -d ' '`;
+      count=`tree $package_dir | grep -v .d.ts | wc -l | tr -d ' '`;
       if [[ $count -le 5 ]]
       then
         echo "ERROR: $package_dir should have at least 5 artefacts"
@@ -139,15 +165,33 @@ validateLocale()
   fi
 }
 
-# check all expected modules & packages are there
-validateExpectedDirs "dist/artifacts/contents/community-modules" 3
-validateExpectedDirs "dist/artifacts/contents/packages" 6
+validateVue3()
+{
+  local requiredCount=`grep required dist/artifacts/contents/packages/ag-grid-vue3/package/dist/main.mjs | wc -l`
+  if [[ $requiredCount -ne 0 ]]
+  then
+    echo "ERROR: dist/artifacts/contents/packages/ag-grid-vue3/package/dist/main.mjs has referenced to 'required'"
+    exit 1
+  fi
 
-validateExpectedDirs "dist/artifacts/community-modules" 3
-validateExpectedDirs "dist/artifacts/packages" 6
+  local skipCheckCount=`grep skipCheck dist/artifacts/contents/packages/ag-grid-vue3/package/dist/main.mjs | wc -l`
+  if [[ $skipCheckCount -ne 0 ]]
+  then
+    echo "ERROR: dist/artifacts/contents/packages/ag-grid-vue3/package/dist/main.mjs has referenced to 'skipCheck'"
+    exit 1
+  fi
+}
+
+# check all expected modules & packages are there
+validateExpectedDirs "dist/artifacts/contents/community-modules" 2
+validateExpectedDirs "dist/artifacts/contents/packages" 7
+
+validateExpectedDirs "dist/artifacts/community-modules" 2
+validateExpectedDirs "dist/artifacts/packages" 8
 
 validateModules "dist/artifacts/contents/community-modules"
 validatePackages "dist/artifacts/contents/packages"
 
 validateLocale "dist/artifacts/contents/community-modules/locale/package"
 
+validateVue3

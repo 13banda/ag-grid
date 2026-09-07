@@ -4,15 +4,22 @@
   "sourceRoot": "packages/ag-grid-enterprise/src",
   "projectType": "library",
   "targets": {
+    "setup": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["{workspaceRoot}/scripts/ci/install-playwright.sh full chromium"],
+        "parallel": false
+      }
+    },
     "build": {
       "executor": "nx:noop",
       "inputs": [],
       "outputs": [],
-      "dependsOn": ["build:types", "build:css", "build:package", "build:copy-styles", "build:umd"]
+      "dependsOn": ["build:types", "build:package", "build:copy-styles", "build:umd"]
     },
     "build:umd": {
-      "executor": "nx:run-commands",
-      "dependsOn": ["^build", "build:copy-styles", "build:package"],
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build:package", "build:copy-styles", "build:package"],
       "inputs": [
         "tsDefaults",
         "styleOutputs",
@@ -24,17 +31,60 @@
       ],
       "outputs": ["{projectRoot}/dist/ag-grid-enterprise*.js"],
       "options": {
-        "cwd": "packages/ag-grid-enterprise",
-        "commands": ["./webpackBuild.sh"]
+        "outputPath": "{projectRoot}/dist",
+        "deleteOutputPath": false,
+        "main": "{projectRoot}/src/main-umd-styles.ts",
+        "tsConfig": "{projectRoot}/tsconfig.lib.json",
+        "skipTypeCheck": true,
+        "esbuildConfig": "packages/ag-grid-enterprise/esbuildBuild.cjs",
+        "platform": "browser",
+        "target": "es2020",
+        "format": ["cjs"],
+        "bundle": true,
+        "thirdParty": true,
+        "sourcemap": false,
+        "metafile": false
       },
       "configurations": {
-        "production": {}
+        "production": {
+          "additionalEntryPoints": ["{projectRoot}/src/main-umd-noStyles.ts"]
+        },
+        "staging": {
+          "additionalEntryPoints": ["{projectRoot}/src/main-umd-noStyles.ts"]
+        }
+      },
+      "cache": true
+    },
+    "build:umd:watch": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["ag-grid-community:build:package:watch"],
+      "inputs": ["tsDefaults", "styleOutputs"],
+      "outputs": ["{projectRoot}/dist/ag-grid-enterprise*.js"],
+      "options": {
+        "outputPath": "{projectRoot}/dist",
+        "deleteOutputPath": false,
+        "main": "{projectRoot}/src/main-umd-styles.ts",
+        "tsConfig": "{projectRoot}/tsconfig.watch.json",
+        "skipTypeCheck": true,
+        "esbuildConfig": "packages/ag-grid-enterprise/esbuildBuild.cjs",
+        "platform": "browser",
+        "target": "es2020",
+        "format": ["cjs"],
+        "bundle": true,
+        "thirdParty": true,
+        "sourcemap": false,
+        "metafile": false
+      },
+      "configurations": {
+        "watch": {}
       },
       "cache": true
     },
     "build:copy-styles": {
       "dependsOn": ["@ag-grid-community/styles:build"],
-      "cache": true,
+      "inputs": ["{workspaceRoot}/community-modules/styles/*.*css"],
+      "outputs": ["{projectRoot}/styles/**/*"],
+      "cache": false,
       "command": "rsync -r ../../community-modules/styles/*.*css --delete styles",
       "options": {
         "cwd": "packages/ag-grid-enterprise"
@@ -69,15 +119,6 @@
         "production": {}
       }
     },
-    "build:css": {
-      "executor": "nx:run-script",
-      "cache": true,
-      "options": {
-        "script": "build:css"
-      },
-      "inputs": ["{projectRoot}/src/**/*.css"],
-      "outputs": ["{projectRoot}/**/*.css-GENERATED.ts"]
-    },
     "build:package": {
       "executor": "@nx/esbuild:esbuild",
       "dependsOn": ["^build:types", "chartsPackages"],
@@ -99,7 +140,7 @@
         "main": "{projectRoot}/src/main.ts",
         "tsConfig": "{projectRoot}/tsconfig.lib.json",
         "esbuildConfig": "esbuild.config.cjs",
-        "external": ["ag-grid-community"],
+        "external": ["ag-grid-community", "ag-stack"],
         "platform": "browser",
         "target": "es2020",
         "format": ["cjs", "esm"],
@@ -117,6 +158,70 @@
         "production": {
           "sourcemap": false,
           "metafile": false
+        }
+      }
+    },
+    "build:package:watch": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": [],
+      "inputs": [
+        "{projectRoot}/package.json",
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/tsconfig.*.json",
+        "sharedGlobals",
+        "defaultExcludes",
+        {
+          "externalDependencies": ["npm:esbuild"]
+        }
+      ],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "{projectRoot}/dist/package",
+        "deleteOutputPath": false,
+        "main": "{projectRoot}/src/main.ts",
+        "tsConfig": "{projectRoot}/tsconfig.watch.json",
+        "skipTypeCheck": true,
+        "esbuildConfig": "esbuild.config.cjs",
+        "external": ["ag-grid-community", "ag-stack"],
+        "platform": "browser",
+        "target": "es2020",
+        "format": ["cjs", "esm"],
+        "sourcemap": true,
+        "metafile": false
+      },
+      "configurations": {
+        "watch": {}
+      },
+      "cache": true
+    },
+    "test:e2e": {
+      "dependsOn": ["test:umd:browser", "test:umd"]
+    },
+    "test:umd": {
+      "command": "npx vitest run --config vitest.umd.config.ts",
+      "dependsOn": ["build:umd"],
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "configurations": {
+        "production": {},
+        "staging": {}
+      }
+    },
+    "test:umd:browser": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build:umd", "setup"],
+      "options": {
+        "commands": ["echo 'Skipping test:umd:browser - requires staging or production configuration'"],
+        "parallel": false,
+        "cwd": "packages/ag-grid-enterprise"
+      },
+      "configurations": {
+        "production": {
+          "commands": ["npx playwright test"]
+        },
+        "staging": {
+          "commands": ["npx playwright test"]
         }
       }
     },
@@ -158,20 +263,29 @@
         "archive": {}
       }
     },
+    "lint:knip": {
+      "command": "knip",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
     "lint": {
+      "dependsOn": ["lint:knip"],
       "command": "eslint && stylelint './src/**/*css'",
       "options": {
         "cwd": "{projectRoot}"
       }
     },
+    "build:test": {},
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "command": "npx vitest run",
+      "dependsOn": ["build:test"],
+      "outputs": ["{workspaceRoot}/reports/ag-grid-enterprise.xml"],
       "options": {
-        "jestConfig": "packages/ag-grid-enterprise/jest.config.js"
+        "cwd": "{projectRoot}"
       }
     }
   },
-  "tags": ["package", "enterprise"],
+  "tags": ["package", "enterprise", "core"],
   "implicitDependencies": ["ag-grid-community"]
 }

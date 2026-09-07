@@ -1,21 +1,24 @@
-import type { AgColumn, ColumnChooserParams, NamedBean } from 'ag-grid-community';
-import { BeanStub, _findNextFocusableElement } from 'ag-grid-community';
+import { _findNextFocusableElement, _getActiveDomElement } from 'ag-stack';
+
+import type { AgColumn, ColumnChooserParams, HeaderPosition, NamedBean } from 'ag-grid-community';
+import { BeanStub, _addGridCommonParams } from 'ag-grid-community';
 
 import { AgPrimaryCols } from '../columnToolPanel/agPrimaryCols';
-import { AgDialog } from '../widgets/agDialog';
+import { Dialog } from '../widgets/dialog';
 import type { MenuUtils } from './menuUtils';
 
 interface ShowColumnChooserParams {
     column?: AgColumn | null;
     chooserParams?: ColumnChooserParams;
     eventSource?: HTMLElement;
+    headerPosition?: HeaderPosition | null;
 }
 
 export class ColumnChooserFactory extends BeanStub implements NamedBean {
     beanName = 'colChooserFactory' as const;
 
     private activeColumnChooser: AgPrimaryCols | undefined;
-    private activeColumnChooserDialog: AgDialog | undefined;
+    private activeColumnChooserDialog: Dialog | undefined;
 
     public createColumnSelectPanel(
         parent: BeanStub<any>,
@@ -25,9 +28,12 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
     ): AgPrimaryCols {
         const columnSelectPanel = parent.createManagedBean(new AgPrimaryCols());
 
-        const columnChooserParams = params ?? column?.getColDef().columnChooserParams ?? {};
+        const columnChooserParams = params ?? column?.colDef.columnChooserParams ?? {};
 
         const {
+            columnLabelRenderer,
+            columnLabelRendererParams,
+            columnLabelRendererSelector,
             contractColumnSelection,
             suppressColumnExpandAll,
             suppressColumnFilter,
@@ -38,7 +44,7 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
 
         columnSelectPanel.init(
             !!draggable,
-            this.gos.addGridCommonParams({
+            _addGridCommonParams(this.gos, {
                 suppressColumnMove: false,
                 suppressValues: false,
                 suppressPivots: false,
@@ -49,9 +55,13 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
                 suppressColumnFilter: !!suppressColumnFilter,
                 suppressColumnSelectAll: !!suppressColumnSelectAll,
                 suppressSyncLayoutWithGrid: !!columnLayout || !!suppressSyncLayoutWithGrid,
+                columnLabelRenderer,
+                columnLabelRendererParams,
+                columnLabelRendererSelector,
                 onStateUpdated: () => {},
             }),
-            'columnMenu'
+            'columnMenu',
+            'columnChooser'
         );
 
         if (columnLayout) {
@@ -61,18 +71,26 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
         return columnSelectPanel;
     }
 
-    public showColumnChooser({ column, chooserParams, eventSource }: ShowColumnChooserParams): void {
+    public showColumnChooser({
+        column,
+        chooserParams,
+        eventSource,
+        headerPosition: providedHeaderPosition,
+    }: ShowColumnChooserParams): void {
         this.hideActiveColumnChooser();
 
         const columnSelectPanel = this.createColumnSelectPanel(this, column, true, chooserParams);
         const translate = this.getLocaleTextFunc();
         const beans = this.beans;
-        const { visibleCols, focusSvc, menuUtils } = beans;
-        const columnIndex = visibleCols.allCols.indexOf(column as AgColumn);
-        const headerPosition = column ? focusSvc.focusedHeader : null;
+        const { focusSvc, menuUtils } = beans;
+        const activeElement = _getActiveDomElement(beans);
+        const openerEl = eventSource ?? (activeElement instanceof HTMLElement ? activeElement : undefined);
+        const restoreColumn = column ?? undefined;
+        const columnIndex = column?.allColsIndex ?? -1;
+        const headerPosition = column ? (focusSvc.focusedHeader ?? providedHeaderPosition ?? null) : null;
 
         this.activeColumnChooserDialog = this.createBean(
-            new AgDialog({
+            new Dialog({
                 title: translate('chooseColumns', 'Choose Columns'),
                 component: columnSelectPanel,
                 width: 300,
@@ -82,7 +100,7 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
                 centered: true,
                 closable: true,
                 afterGuiAttached: () => {
-                    _findNextFocusableElement(beans, columnSelectPanel.getGui())?.focus({
+                    _findNextFocusableElement({ beans, rootNode: columnSelectPanel.getGui() })?.focus({
                         preventScroll: true,
                     });
                     this.dispatchVisibleChangedEvent(true, column);
@@ -93,9 +111,9 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
                     this.activeColumnChooser = undefined;
                     this.activeColumnChooserDialog = undefined;
                     this.dispatchVisibleChangedEvent(false, column);
-                    if (column) {
+                    if (restoreColumn || openerEl) {
                         (menuUtils as MenuUtils).restoreFocusOnClose(
-                            { column, headerPosition, columnIndex, eventSource },
+                            { column: restoreColumn, headerPosition, columnIndex, eventSource: openerEl },
                             eComp,
                             event,
                             true
@@ -105,7 +123,7 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
                 postProcessPopupParams: {
                     type: 'columnChooser',
                     column,
-                    eventSource,
+                    eventSource: openerEl,
                 },
             })
         );
@@ -114,7 +132,12 @@ export class ColumnChooserFactory extends BeanStub implements NamedBean {
     }
 
     public hideActiveColumnChooser(): void {
-        this.destroyBean(this.activeColumnChooserDialog);
+        this.activeColumnChooserDialog = this.destroyBean(this.activeColumnChooserDialog);
+    }
+
+    public override destroy(): void {
+        this.hideActiveColumnChooser();
+        super.destroy();
     }
 
     private dispatchVisibleChangedEvent(visible: boolean, column?: AgColumn | null): void {

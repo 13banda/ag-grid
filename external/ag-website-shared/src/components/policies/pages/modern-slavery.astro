@@ -1,0 +1,68 @@
+---
+import Layout from '@layouts/Layout.astro';
+import { Content as ModernSlaveryPolicies } from '@ag-website-shared/content/policies/modern-slavery.mdoc';
+import { POLICY_CONTENT, policyHeading } from '../policyContent';
+import styles from '../policyPage.module.scss';
+
+interface Props {
+    name: string;
+}
+
+const { name } = Astro.props;
+// Heading and the financial-year/version/effective-date block are shared with the
+// /modern-slavery.md twin so the two cannot drift.
+const content = POLICY_CONTENT['modern-slavery'];
+---
+
+<Layout
+    title={`${name}: ${content.metaTitle}`}
+    description={content.description}
+    showSearchBar={true}
+    showDocsNav={false}
+>
+    <div class:list={styles.policyPage}>
+        <div class="layout-max-width-small">
+            <h1>{policyHeading('modern-slavery', name)}</h1>
+            <hr />
+
+            <header>
+                <div id="meta" class={styles.introduction}>
+                    {content.meta.map((line) => <p set:html={line} />)}
+                </div>
+
+                <nav>
+                    <ul class="list-style-none">
+                        <li>
+                            <a href="#intro-modern-slavery">1. Introduction</a>
+                        </li>
+                        <li>
+                            <a href="#organisation-structure"> 2. Organisation Structure and Supply Chain</a>
+                        </li>
+                        <li>
+                            <a href="#policies-modern-slavery">3. Policies in Relation to Modern Slavery</a>
+                        </li>
+                        <li>
+                            <a href="#due-diligence">4. Due Diligence Processes</a>
+                        </li>
+                        <li>
+                            <a href="#risk-assessment">5. Risk Assessment</a>
+                        </li>
+                        <li>
+                            <a href="#training-awareness">6. Training and Awareness</a>
+                        </li>
+                        <li>
+                            <a href="#kpis-future">7. Key Performance Indicators and Future Steps</a>
+                        </li>
+                        <li>
+                            <a href="#approval-modern-slavery">8. Approval</a>
+                        </li>
+                    </ul>
+                </nav>
+            </header>
+
+            <div class={styles.policyList}>
+                <ModernSlaveryPolicies />
+            </div>
+        </div>
+    </div>
+</Layout>

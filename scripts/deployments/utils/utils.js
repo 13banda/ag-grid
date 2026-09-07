@@ -5,7 +5,8 @@ const fs = require('fs');
 const readFile = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 const isAgDependency = (dependency) => dependency.startsWith('ag-') || dependency.startsWith('@ag-');
-const gridDependency = (dependency) => dependency.startsWith('ag-grid') || dependency.startsWith('@ag-grid');
+const gridDependency = (dependency) =>
+    dependency.startsWith('ag-grid') || dependency.startsWith('@ag-grid') || dependency === 'ag-stack';
 const chartDependency = (dependency) => dependency.startsWith('ag-charts');
 
 const getAgDependencies = (packageJson) =>
@@ -65,7 +66,11 @@ const extractSubAngularProjectDependencies = (packageDirectory) => {
     let agSubAngularVersion = null;
     let agSubAngularGridDeps = null;
     let agSubAngularChartDeps = null;
-    if (packageDirectory.includes('angular') && !packageDirectory.includes('module-size-angular')) {
+    if (
+        packageDirectory.includes('angular') &&
+        !packageDirectory.includes('module-size-angular') &&
+        !packageDirectory.includes('angular-tests')
+    ) {
         const angularJson = require(`${CWD}/${packageDirectory}/angular.json`);
         const currentSubProjectPackageJsonFile = require(
             `${CWD}/${packageDirectory}/${Object.values(angularJson.projects)[0].root}/package.json`
@@ -100,13 +105,17 @@ const extractSubAngularProjectDependencies = (packageDirectory) => {
 };
 
 const ROOT_PACKAGE_JSON = '../../../package.json';
-const packageDirectories = require(ROOT_PACKAGE_JSON).workspaces.packages;
+const packageDirectories = require(ROOT_PACKAGE_JSON).workspaces.packages.filter((d) => !d.startsWith('external/'));
 
 const getPackageInformation = () => {
     const packageInformation = {};
 
     packageDirectories.forEach((packageDirectory) => {
-        const projectPackageJson = readFile(`${packageDirectory}/package.json`);
+        const file = `${packageDirectory}/package.json`;
+        if (!fs.existsSync(file)) {
+            return;
+        }
+        const projectPackageJson = readFile(file);
 
         const dependencies = getAgDependencies(projectPackageJson);
         const peerDependencies = getAgPeerDependencies(projectPackageJson);

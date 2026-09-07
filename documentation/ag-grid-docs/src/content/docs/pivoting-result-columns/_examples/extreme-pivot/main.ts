@@ -1,6 +1,11 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ColumnsToolPanelModule, FiltersToolPanelModule, PivotModule, SideBarModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -8,7 +13,6 @@ ModuleRegistry.registerModules([
     ColumnsToolPanelModule,
     FiltersToolPanelModule,
     PivotModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -34,7 +38,7 @@ const gridOptions: GridOptions<IOlympicData> = {
     sideBar: 'columns',
     pivotMaxGeneratedColumns: 1000,
     onPivotMaxColumnsExceeded: () => {
-        console.error(
+        console.warn(
             'The limit of 1000 generated columns has been exceeded. Either remove pivot or aggregations from some columns or increase the limit.'
         );
     },

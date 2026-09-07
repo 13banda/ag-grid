@@ -1,27 +1,35 @@
+import { CssClassManager } from 'ag-stack';
 import React, { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type {
     CellCtrl,
+    HorizontalSection,
+    HorizontalSectionMap,
     ICellRenderer,
+    ICellRendererParams,
     IRowComp,
     RowContainerType,
     RowCtrl,
     RowStyle,
     UserCompDetails,
 } from 'ag-grid-community';
-import { CssClassManager, _EmptyBean } from 'ag-grid-community';
+import { _EmptyBean } from 'ag-grid-community';
 
-import { BeansContext } from '../beansContext';
+import { BeansContext, RenderModeContext } from '../beansContext';
 import CellComp from '../cells/cellComp';
 import { showJsComp } from '../jsComp';
-import { agFlushSync, getNextValueIfDifferent, isComponentStateless } from '../utils';
+import { agFlushSync, agUseSyncExternalStore, getNextValueIfDifferent, isComponentStateless } from '../utils';
 
 const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: RowContainerType }) => {
-    const { context, gos } = useContext(BeansContext);
+    const { context, gos, editSvc } = useContext(BeansContext);
+
+    const enableUses = useContext(RenderModeContext) === 'default';
+
     const compBean = useRef<_EmptyBean>();
 
     const domOrderRef = useRef<boolean>(rowCtrl.getDomOrder());
     const isFullWidth = rowCtrl.isFullWidth();
+    const fullWidthAnchorRole = rowCtrl.getFullWidthAnchorRole();
 
     // Flag used to avoid problematic initialState setter funcs being called on a dead / non displayed row.
     // Due to async rendering its possible for the row to be destroyed before React has had a chance to render it.
@@ -31,24 +39,40 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
     );
     const [rowId, setRowId] = useState<string | null>(() => rowCtrl.rowId);
     const [rowBusinessKey, setRowBusinessKey] = useState<string | null>(() => rowCtrl.businessKey);
-
     const [userStyles, setUserStyles] = useState<RowStyle | undefined>(() => rowCtrl.rowStyles);
-    const cellCtrlsRef = useRef<CellCtrl[] | null>(null);
-    const prevCellCtrlsRef = useRef<CellCtrl[] | null>(null);
-    const [cellCtrls, setCellCtrls] = useState<CellCtrl[] | null>(() => null);
+    // Seeded so bulk-add doesn't flash empty rows; getInitialCellCtrls returns
+    // null when creation is deferred or not applicable.
+    const [cellCtrlsFlushSync, setCellCtrlsFlushSync] = useState<CellCtrl[] | null>(() =>
+        rowCtrl.getInitialCellCtrls(containerType)
+    );
+    const cellCtrlsRef = useRef<CellCtrl[] | null>(cellCtrlsFlushSync);
     const [fullWidthCompDetails, setFullWidthCompDetails] = useState<UserCompDetails>();
+    const [embeddedFullWidthCompDetails, setEmbeddedFullWidthCompDetails] =
+        useState<HorizontalSectionMap<UserCompDetails>>();
+    const embeddedFullWidthCompDetailsRef = useRef<HorizontalSectionMap<UserCompDetails>>();
 
     // these styles have initial values, so element is placed into the DOM with them,
     // rather than an transition getting applied.
-    const [top, setTop] = useState<string | undefined>(() =>
-        isDisplayed ? rowCtrl.getInitialRowTop(containerType) : undefined
-    );
+    const [top, setTop] = useState<string | undefined>(() => (isDisplayed ? rowCtrl.getInitialRowTop() : undefined));
     const [transform, setTransform] = useState<string | undefined>(() =>
-        isDisplayed ? rowCtrl.getInitialTransform(containerType) : undefined
+        isDisplayed ? rowCtrl.getInitialTransform() : undefined
     );
 
     const eGui = useRef<HTMLDivElement | null>(null);
+    const eFullWidthAnchor = useRef<HTMLDivElement | null>(null);
+    const ePinnedLeftCells = useRef<HTMLDivElement | null>(null);
+    const eScrollingCells = useRef<HTMLDivElement | null>(null);
+    const ePinnedRightCells = useRef<HTMLDivElement | null>(null);
     const fullWidthCompRef = useRef<ICellRenderer>();
+    const fullWidthEmbeddedLeftCompRef = useRef<ICellRenderer>();
+    const fullWidthEmbeddedCenterCompRef = useRef<ICellRenderer>();
+    const fullWidthEmbeddedRightCompRef = useRef<ICellRenderer>();
+    const fullWidthParamsRef = useRef<ICellRendererParams>();
+    const fullWidthEmbeddedLeftParamsRef = useRef<ICellRendererParams>();
+    const fullWidthEmbeddedCenterParamsRef = useRef<ICellRendererParams>();
+    const fullWidthEmbeddedRightParamsRef = useRef<ICellRendererParams>();
+    const [, setEmbeddedSectionHasContent] = useState(() => rowCtrl.embeddedSectionHasContent);
+    const [, refreshWidths] = useState(0);
 
     const autoHeightSetup = useRef<boolean>(false);
     const [autoHeightSetupAttempt, setAutoHeightSetupAttempt] = useState<number>(0);
@@ -64,7 +88,7 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
             return;
         }
 
-        const eChild = eGui.current?.firstChild as HTMLElement;
+        const eChild = eFullWidthAnchor.current?.firstChild as HTMLElement;
         if (eChild) {
             rowCtrl.setupDetailRowAutoHeight(eChild);
             autoHeightSetup.current = true;
@@ -73,10 +97,26 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
         }
     }, [fullWidthCompDetails, autoHeightSetupAttempt]);
 
-    const cssClassManager = useRef<CssClassManager>();
-    if (!cssClassManager.current) {
-        cssClassManager.current = new CssClassManager(() => eGui.current);
+    const cssManager = useRef<CssClassManager>();
+    if (!cssManager.current) {
+        cssManager.current = new CssClassManager(() => eGui.current);
     }
+
+    // Setup both approaches to avoid conditionally rendering Hooks even though we don't use both at the same time.
+    const cellsChanged = useRef<any>(() => {});
+    const sub = useCallback((onStoreChange: any) => {
+        cellsChanged.current = onStoreChange;
+        return () => {
+            cellsChanged.current = () => {};
+        };
+    }, []);
+    const cellCtrlsUses = agUseSyncExternalStore(sub, () => {
+        return cellCtrlsRef.current;
+    }, []);
+
+    // Will only use useSyncExternalStore if it is supported by the React version and the rendering mode has not been set to 'legacy
+    const cellCtrlsMerged = enableUses ? cellCtrlsUses : cellCtrlsFlushSync;
+
     const setRef = useCallback((eRef: HTMLDivElement | null) => {
         eGui.current = eRef;
         compBean.current = eRef ? context.createBean(new _EmptyBean()) : context.destroyBean(compBean.current);
@@ -89,7 +129,7 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
         // because React is asynchronous, it's possible the RowCtrl is no longer a valid RowCtrl. This can
         // happen if user calls two API methods one after the other, with the second API invalidating the rows
         // the first call created. Thus the rows for the first call could still get created even though no longer needed.
-        if (!rowCtrl.isAlive()) {
+        if (!rowCtrl.isAlive() || context.isDestroyed()) {
             return;
         }
 
@@ -101,7 +141,7 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
 
             // i found using React for managing classes at the row level was to slow, as modifying classes caused a lot of
             // React code to execute, so avoiding React for managing CSS Classes made the grid go much faster.
-            addOrRemoveCssClass: (name, on) => cssClassManager.current!.addOrRemoveCssClass(name, on),
+            toggleCss: (name, on) => cssManager.current!.toggleCss(name, on),
 
             setDomOrder: (domOrder) => (domOrderRef.current = domOrder),
             setRowIndex,
@@ -111,38 +151,204 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
             // if we don't maintain the order, then cols will be ripped out and into the dom
             // when cols reordered, which would stop the CSS transitions from working
             setCellCtrls: (next, useFlushSync) => {
-                prevCellCtrlsRef.current = cellCtrlsRef.current;
-                cellCtrlsRef.current = next;
-
-                const nextCells = getNextValueIfDifferent(prevCellCtrlsRef.current, next, domOrderRef.current);
-                if (nextCells !== prevCellCtrlsRef.current) {
-                    agFlushSync(useFlushSync, () => setCellCtrls(nextCells));
+                const prevCellCtrls = cellCtrlsRef.current;
+                const nextCells = getNextValueIfDifferent(prevCellCtrls, next, domOrderRef.current);
+                if (nextCells !== prevCellCtrls) {
+                    cellCtrlsRef.current = nextCells;
+                    if (enableUses) {
+                        cellsChanged.current();
+                    } else {
+                        agFlushSync(useFlushSync, () => setCellCtrlsFlushSync(nextCells));
+                    }
                 }
             },
-            showFullWidth: (compDetails) => setFullWidthCompDetails(compDetails),
-            getFullWidthCellRenderer: () => fullWidthCompRef.current,
+            getPinnedLeftRowElement: () => ePinnedLeftCells.current ?? undefined,
+            getScrollingRowElement: () => eScrollingCells.current ?? undefined,
+            getPinnedRightRowElement: () => ePinnedRightCells.current ?? undefined,
+            refreshPinnedSections: () => refreshWidths((v) => v + 1),
+            showFullWidth: (compDetails) => {
+                embeddedFullWidthCompDetailsRef.current = undefined;
+                setEmbeddedFullWidthCompDetails(undefined);
+                setEmbeddedSectionHasContent({ left: true, center: true, right: true });
+                fullWidthParamsRef.current = compDetails.params;
+                setFullWidthCompDetails(compDetails);
+            },
+            showEmbeddedFullWidth: (compDetails) => {
+                setFullWidthCompDetails(undefined);
+                setEmbeddedSectionHasContent({ left: true, center: true, right: true });
+                fullWidthEmbeddedLeftParamsRef.current = compDetails.left.params;
+                fullWidthEmbeddedCenterParamsRef.current = compDetails.center.params;
+                fullWidthEmbeddedRightParamsRef.current = compDetails.right.params;
+                embeddedFullWidthCompDetailsRef.current = compDetails;
+                setEmbeddedFullWidthCompDetails(compDetails);
+            },
+            getFullWidthCellRenderers: () => {
+                if (rowCtrl.isEmbeddedFullWidth) {
+                    return [
+                        fullWidthEmbeddedLeftCompRef.current,
+                        fullWidthEmbeddedCenterCompRef.current,
+                        fullWidthEmbeddedRightCompRef.current,
+                    ].filter((r) => r != null);
+                }
+                return fullWidthCompRef.current ? [fullWidthCompRef.current] : [];
+            },
+            getFullWidthCellRendererParams: () =>
+                fullWidthParamsRef.current ?? fullWidthEmbeddedCenterParamsRef.current,
+            getFullWidthCellRendererParamsForPinned: (pinned) =>
+                pinned === 'left'
+                    ? fullWidthEmbeddedLeftParamsRef.current
+                    : pinned === 'right'
+                      ? fullWidthEmbeddedRightParamsRef.current
+                      : fullWidthEmbeddedCenterParamsRef.current,
             refreshFullWidth: (getUpdatedParams) => {
+                const fullWidthParams = getUpdatedParams();
+                fullWidthParamsRef.current = fullWidthParams;
                 if (canRefreshFullWidthRef.current) {
                     setFullWidthCompDetails((prevFullWidthCompDetails) => ({
                         ...prevFullWidthCompDetails!,
-                        params: getUpdatedParams(),
+                        params: fullWidthParams,
                     }));
                     return true;
                 } else {
                     if (!fullWidthCompRef.current || !fullWidthCompRef.current.refresh) {
                         return false;
                     }
-                    return fullWidthCompRef.current.refresh(getUpdatedParams());
+                    return fullWidthCompRef.current.refresh(fullWidthParams);
                 }
+            },
+            refreshEmbeddedFullWidth: (getUpdatedParams) => {
+                const leftParams = getUpdatedParams('left');
+                const centerParams = getUpdatedParams(null);
+                const rightParams = getUpdatedParams('right');
+
+                fullWidthEmbeddedLeftParamsRef.current = leftParams;
+                fullWidthEmbeddedCenterParamsRef.current = centerParams;
+                fullWidthEmbeddedRightParamsRef.current = rightParams;
+
+                const leftRef = fullWidthEmbeddedLeftCompRef.current;
+                const centerRef = fullWidthEmbeddedCenterCompRef.current;
+                const rightRef = fullWidthEmbeddedRightCompRef.current;
+
+                const currentDetails = embeddedFullWidthCompDetailsRef.current;
+                let nextDetails: HorizontalSectionMap<UserCompDetails> | undefined;
+
+                const refreshSection = (
+                    section: HorizontalSection,
+                    params: ICellRendererParams,
+                    renderer: ICellRenderer | undefined,
+                    hasContent: boolean
+                ): boolean => {
+                    const details = currentDetails?.[section];
+                    const isStatelessFrameworkRenderer =
+                        !!details?.componentFromFramework && isComponentStateless(details.componentClass);
+
+                    if (isStatelessFrameworkRenderer) {
+                        if (!gos.get('reactiveCustomComponents') || !currentDetails) {
+                            return false;
+                        }
+
+                        nextDetails ??= { ...currentDetails };
+                        nextDetails[section] = { ...details, params };
+                        return true;
+                    }
+
+                    return renderer?.refresh?.(params) ?? !hasContent;
+                };
+
+                const leftRefreshed = refreshSection(
+                    'left',
+                    leftParams,
+                    leftRef,
+                    rowCtrl.embeddedSectionHasContent.left
+                );
+                const centerRefreshed = refreshSection('center', centerParams, centerRef, true);
+                const rightRefreshed = refreshSection(
+                    'right',
+                    rightParams,
+                    rightRef,
+                    rowCtrl.embeddedSectionHasContent.right
+                );
+
+                if (nextDetails) {
+                    embeddedFullWidthCompDetailsRef.current = nextDetails;
+                    setEmbeddedFullWidthCompDetails(nextDetails);
+                }
+
+                return leftRefreshed && centerRefreshed && rightRefreshed;
             },
         };
         rowCtrl.setComp(compProxy, eRef, containerType, compBean.current);
     }, []);
 
+    const showEmbeddedFullWidth = isFullWidth && rowCtrl.shouldCreateCellSections();
+
     useLayoutEffect(
-        () => showJsComp(fullWidthCompDetails, context, eGui.current!, fullWidthCompRef),
+        () => showJsComp(fullWidthCompDetails, context, eFullWidthAnchor.current ?? eGui.current!, fullWidthCompRef),
         [fullWidthCompDetails]
     );
+    useLayoutEffect(() => {
+        if (!ePinnedLeftCells.current) {
+            return;
+        }
+        return showJsComp(
+            embeddedFullWidthCompDetails?.left,
+            context,
+            ePinnedLeftCells.current,
+            fullWidthEmbeddedLeftCompRef
+        );
+    }, [embeddedFullWidthCompDetails?.left]);
+    useLayoutEffect(() => {
+        if (!eScrollingCells.current) {
+            return;
+        }
+        return showJsComp(
+            embeddedFullWidthCompDetails?.center,
+            context,
+            eScrollingCells.current,
+            fullWidthEmbeddedCenterCompRef
+        );
+    }, [embeddedFullWidthCompDetails?.center]);
+    useLayoutEffect(() => {
+        if (!ePinnedRightCells.current) {
+            return;
+        }
+        return showJsComp(
+            embeddedFullWidthCompDetails?.right,
+            context,
+            ePinnedRightCells.current,
+            fullWidthEmbeddedRightCompRef
+        );
+    }, [embeddedFullWidthCompDetails?.right]);
+    useLayoutEffect(() => {
+        if (!showEmbeddedFullWidth) {
+            return;
+        }
+        const updateLaneVisibility = () => {
+            const next = {
+                left: !!ePinnedLeftCells.current?.firstElementChild,
+                center: !!eScrollingCells.current?.firstElementChild,
+                right: !!ePinnedRightCells.current?.firstElementChild,
+            };
+            rowCtrl.embeddedSectionHasContent = next;
+            setEmbeddedSectionHasContent((prev) =>
+                prev.left === next.left && prev.center === next.center && prev.right === next.right ? prev : next
+            );
+        };
+
+        updateLaneVisibility();
+        const observer = new MutationObserver(updateLaneVisibility);
+        if (ePinnedLeftCells.current) {
+            observer.observe(ePinnedLeftCells.current, { childList: true });
+        }
+        if (eScrollingCells.current) {
+            observer.observe(eScrollingCells.current, { childList: true });
+        }
+        if (ePinnedRightCells.current) {
+            observer.observe(ePinnedRightCells.current, { childList: true });
+        }
+
+        return () => observer.disconnect();
+    }, [showEmbeddedFullWidth, embeddedFullWidthCompDetails]);
 
     const rowStyles = useMemo(() => {
         const res = { top, transform };
@@ -152,7 +358,32 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
     }, [top, transform, userStyles]);
 
     const showFullWidthFramework = isFullWidth && fullWidthCompDetails?.componentFromFramework;
-    const showCells = !isFullWidth && cellCtrls != null;
+    const showCells = !isFullWidth && cellCtrlsMerged != null;
+
+    const { leftCellCtrls, centerCellCtrls, rightCellCtrls } = useMemo(() => {
+        const left: CellCtrl[] = [];
+        const center: CellCtrl[] = [];
+        const right: CellCtrl[] = [];
+
+        for (const cellCtrl of cellCtrlsMerged ?? []) {
+            const pinned = cellCtrl.column.getPinned();
+            if (pinned === 'left') {
+                left.push(cellCtrl);
+            } else if (pinned === 'right') {
+                right.push(cellCtrl);
+            } else {
+                center.push(cellCtrl);
+            }
+        }
+
+        return {
+            leftCellCtrls: left,
+            centerCellCtrls: center,
+            rightCellCtrls: right,
+        };
+    }, [cellCtrlsMerged]);
+
+    const { leftWidth, centerWidth, rightWidth, renderLeft, renderRight } = rowCtrl.getMappedPinnedCellGroupWidths();
 
     const reactFullWidthCellRendererStateless = useMemo(() => {
         const res =
@@ -167,11 +398,11 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
             reactFullWidthCellRendererStateless && !!fullWidthCompDetails && !!gos.get('reactiveCustomComponents');
     }, [reactFullWidthCellRendererStateless, fullWidthCompDetails]);
 
-    const showCellsJsx = () =>
-        cellCtrls?.map((cellCtrl) => (
+    const showCellsJsx = (cellCtrls: CellCtrl[]) =>
+        cellCtrls.map((cellCtrl) => (
             <CellComp
                 cellCtrl={cellCtrl}
-                editingRow={rowCtrl.editing}
+                editingCell={editSvc?.isEditing(cellCtrl, { withOpenEditor: true }) ?? false}
                 printLayout={rowCtrl.printLayout}
                 key={cellCtrl.instanceId}
             />
@@ -179,14 +410,54 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
 
     const showFullWidthFrameworkJsx = () => {
         const FullWidthComp = fullWidthCompDetails!.componentClass;
+        return reactFullWidthCellRendererStateless ? (
+            <FullWidthComp {...fullWidthCompDetails!.params} />
+        ) : (
+            <FullWidthComp {...fullWidthCompDetails!.params} ref={fullWidthCompRef} />
+        );
+    };
+
+    const showEmbeddedFrameworkSection = (section: HorizontalSection) => {
+        const details = embeddedFullWidthCompDetails?.[section];
+        if (!details?.componentFromFramework) {
+            return null;
+        }
+
+        const FullWidthComp = details.componentClass;
+        const compRef =
+            section === 'left'
+                ? fullWidthEmbeddedLeftCompRef
+                : section === 'right'
+                  ? fullWidthEmbeddedRightCompRef
+                  : fullWidthEmbeddedCenterCompRef;
+        const stateless = isComponentStateless(details.componentClass);
+        return stateless ? <FullWidthComp {...details.params} /> : <FullWidthComp {...details.params} ref={compRef} />;
+    };
+
+    const renderCellSection = (
+        sectionClass: string,
+        ref: React.Ref<HTMLDivElement>,
+        width: number,
+        children: React.ReactNode,
+        pinned: boolean = false,
+        shouldRender: boolean = true
+    ) => {
+        if (!shouldRender) {
+            return null;
+        }
+        if (pinned) {
+            return (
+                <div className={sectionClass} role="presentation" style={{ width: `${width}px` }}>
+                    <div className="ag-grid-container-wrapper" role="presentation" ref={ref}>
+                        {children}
+                    </div>
+                </div>
+            );
+        }
         return (
-            <>
-                {reactFullWidthCellRendererStateless ? (
-                    <FullWidthComp {...fullWidthCompDetails!.params} />
-                ) : (
-                    <FullWidthComp {...fullWidthCompDetails!.params} ref={fullWidthCompRef} />
-                )}
-            </>
+            <div className={sectionClass} role="presentation" ref={ref} style={{ width: `${width}px` }}>
+                {children}
+            </div>
         );
     };
 
@@ -199,8 +470,38 @@ const RowComp = ({ rowCtrl, containerType }: { rowCtrl: RowCtrl; containerType: 
             row-id={rowId}
             row-business-key={rowBusinessKey}
         >
-            {showCells && showCellsJsx()}
-            {showFullWidthFramework && showFullWidthFrameworkJsx()}
+            {showCells || showEmbeddedFullWidth ? (
+                <>
+                    {renderCellSection(
+                        'ag-grid-pinned-left-cells',
+                        ePinnedLeftCells,
+                        leftWidth,
+                        showCells ? showCellsJsx(leftCellCtrls) : showEmbeddedFrameworkSection('left'),
+                        true,
+                        renderLeft
+                    )}
+                    {renderCellSection(
+                        'ag-grid-scrolling-cells',
+                        eScrollingCells,
+                        centerWidth,
+                        showCells ? showCellsJsx(centerCellCtrls) : showEmbeddedFrameworkSection('center')
+                    )}
+                    {renderCellSection(
+                        'ag-grid-pinned-right-cells',
+                        ePinnedRightCells,
+                        rightWidth,
+                        showCells ? showCellsJsx(rightCellCtrls) : showEmbeddedFrameworkSection('right'),
+                        true,
+                        renderRight
+                    )}
+                </>
+            ) : showFullWidthFramework ? (
+                <div className="ag-full-width-anchor" role={fullWidthAnchorRole} ref={eFullWidthAnchor}>
+                    {showFullWidthFrameworkJsx()}
+                </div>
+            ) : isFullWidth ? (
+                <div className="ag-full-width-anchor" role={fullWidthAnchorRole} ref={eFullWidthAnchor} />
+            ) : null}
         </div>
     );
 };

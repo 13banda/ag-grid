@@ -1,8 +1,13 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, themeQuartz } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations, themeQuartz } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -16,23 +21,31 @@ const myTheme = themeQuartz.withParams({
 
 const gridOptions: GridOptions<IOlympicData> = {
     theme: myTheme,
-    rowData: null,
     columnDefs: [
         {
             headerName: 'Athlete',
             children: [
-                { field: 'athlete', minWidth: 170, rowGroup: true },
-                { field: 'age', rowGroup: true },
-                { field: 'country' },
+                { field: 'athlete', minWidth: 170, rowGroup: true, enableRowGroup: true, enablePivot: true },
+                { field: 'age', rowGroup: true, enableRowGroup: true, enablePivot: true },
+                { field: 'country', enableRowGroup: true, enablePivot: true },
             ],
         },
         {
             headerName: 'Event',
-            children: [{ field: 'year' }, { field: 'date' }, { field: 'sport' }],
+            children: [
+                { field: 'year', enableRowGroup: true, enablePivot: true },
+                { field: 'date' },
+                { field: 'sport', enableRowGroup: true, enablePivot: true },
+            ],
         },
         {
             headerName: 'Medals',
-            children: [{ field: 'gold' }, { field: 'silver' }, { field: 'bronze' }, { field: 'total' }],
+            children: [
+                { field: 'gold', enableValue: true },
+                { field: 'silver', enableValue: true },
+                { field: 'bronze', enableValue: true },
+                { field: 'total', enableValue: true },
+            ],
         },
     ],
     defaultColDef: {

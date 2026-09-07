@@ -15,11 +15,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 declare let window: any;
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     LocaleModule,
@@ -27,7 +32,6 @@ ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     NumberFilterModule,
     DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const filterParams: INumberFilterParams = {
@@ -85,7 +89,18 @@ const containsFilterParams: ITextFilterParams = {
         {
             displayKey: 'regexp',
             displayName: 'Regular Expression',
-            predicate: ([fv1]: any[], cellValue) => cellValue == null || new RegExp(fv1, 'gi').test(cellValue),
+            predicate: ([fv1]: any[], cellValue) => {
+                if (cellValue === null) return true;
+
+                try {
+                    let regex = new RegExp(fv1, 'gi');
+                    return regex.test(cellValue);
+                } catch {
+                    // Invalid RegExp, default to showing everything
+                    return true;
+                }
+            },
+
             numberOfInputs: 1,
         },
         {

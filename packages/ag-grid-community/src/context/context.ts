@@ -1,6 +1,16 @@
+import type {
+    AgCoreBeanCollection,
+    AgSingletonBeanClass,
+    ClassImp,
+    IAriaAnnouncementService,
+    IContext,
+} from 'ag-stack';
+
 import type { AlignedGridsService } from '../alignedGrids/alignedGridsService';
 import type { ApiFunctionService } from '../api/apiFunctionService';
 import type { GridApi } from '../api/gridApi';
+import type { FilterStage } from '../clientSideRowModel/filterStage';
+import type { SortStage } from '../clientSideRowModel/sortStage';
 import type { ColumnAutosizeService } from '../columnAutosize/columnAutosizeService';
 import type { ColumnAnimationService } from '../columnMove/columnAnimationService';
 import type { ColumnMoveService } from '../columnMove/columnMoveService';
@@ -14,6 +24,7 @@ import type { ColumnNameService } from '../columns/columnNameService';
 import type { ColumnViewportService } from '../columns/columnViewportService';
 import type { DataTypeService } from '../columns/dataTypeService';
 import type { SelectionColService } from '../columns/selectionColService';
+import type { UserColumnService } from '../columns/userColumns/userColumnService';
 import type { VisibleColsService } from '../columns/visibleColsService';
 import type { AgComponentUtils } from '../components/framework/agComponentUtils';
 import type { FrameworkComponentWrapper } from '../components/framework/frameworkComponentWrapper';
@@ -24,12 +35,13 @@ import type { DragAndDropService } from '../dragAndDrop/dragAndDropService';
 import type { DragService } from '../dragAndDrop/dragService';
 import type { HorizontalResizeService } from '../dragAndDrop/horizontalResizeService';
 import type { RowDragService } from '../dragAndDrop/rowDragService';
+import type { RowDropHighlightService } from '../dragAndDrop/rowDropHighlightService';
+import type { EditModelService } from '../edit/editModelService';
 import type { EditService } from '../edit/editService';
-import type { RowEditService } from '../edit/rowEditService';
 import type { GridOptions } from '../entities/gridOptions';
 import type { Environment } from '../environment';
-import type { EventService } from '../eventService';
-import type { AgGlobalEventListener } from '../events';
+import type { AgEventTypeParams, AgGlobalEventListener } from '../events';
+import type { GridSerializer } from '../export/gridSerializer';
 import type { ColumnFilterService } from '../filter/columnFilterService';
 import type { FilterManager } from '../filter/filterManager';
 import type { FilterValueService } from '../filter/filterValueService';
@@ -37,44 +49,79 @@ import type { QuickFilterService } from '../filter/quickFilterService';
 import type { FocusService } from '../focusService';
 import type { ScrollVisibleService } from '../gridBodyComp/scrollVisibleService';
 import type { GridDestroyService } from '../gridDestroyService';
+import type { GridOptionsWithDefaults } from '../gridOptionsDefault';
 import type { GridOptionsService } from '../gridOptionsService';
 import type { RowNodeBlockLoader } from '../infiniteRowModel/rowNodeBlockLoader';
 import type { IChartService } from '../interfaces/IChartService';
 import type { IRangeService } from '../interfaces/IRangeService';
+import type { IColumnHeaderEditService } from '../interfaces/columnHeaderEdit';
+import type { EditStrategyType } from '../interfaces/editStrategyType';
+import type { IFormulaDataService, IFormulaInputManagerService, IFormulaService } from '../interfaces/formulas';
 import type { IAdvancedFilterService } from '../interfaces/iAdvancedFilterService';
 import type { IAggColumnNameService } from '../interfaces/iAggColumnNameService';
 import type { IAggFuncService } from '../interfaces/iAggFuncService';
+import type { IAggregatedChildrenSvc } from '../interfaces/iAggregatedChildrenSvc';
 import type { IAutoColService } from '../interfaces/iAutoColService';
-import type { IClientSideNodeManager } from '../interfaces/iClientSideNodeManager';
+import type { ICalculatedColumnsService } from '../interfaces/iCalculatedColumns';
 import type { IClipboardService } from '../interfaces/iClipboardService';
-import type { IColsService } from '../interfaces/iColsService';
+import type { IPivotColsService, IRowGroupColsService, IValueColsService } from '../interfaces/iColsService';
+import type { IColumnStateUpdateStrategy } from '../interfaces/iColumnStateUpdateStrategy';
+import type { AgGridCommon } from '../interfaces/iCommon';
 import type { IContextMenuService } from '../interfaces/iContextMenu';
 import type { ICsvCreator } from '../interfaces/iCsvCreator';
 import type { IExcelCreator } from '../interfaces/iExcelCreator';
-import type { IExpansionService } from '../interfaces/iExpansionService';
+import type {
+    IExpansionService,
+    RowGroupBulkExpansionState,
+    RowGroupExpansionState,
+} from '../interfaces/iExpansionService';
+import type { IFindService } from '../interfaces/iFind';
 import type { IFooterService } from '../interfaces/iFooterService';
 import type { IFrameworkOverrides } from '../interfaces/iFrameworkOverrides';
-import type { IGroupHideOpenParentsService } from '../interfaces/iGroupHideOpenParentsService';
+import type { IGroupEditService } from '../interfaces/iGroupEditService';
+import type { IGroupFilterService } from '../interfaces/iGroupFilterService';
+import type { IGroupHierarchyColService } from '../interfaces/iGroupHierarchyColService';
 import type { IMenuFactory } from '../interfaces/iMenuFactory';
+import type { IMultiFilterService } from '../interfaces/iMultiFilterService';
+import type { IFilterPanelService, ISelectableFilterService } from '../interfaces/iNewFiltersToolPanel';
+import type { IPdfCreator } from '../interfaces/iPdfCreator';
+import type { IPinnedRowModel } from '../interfaces/iPinnedRowModel';
 import type { IPivotColDefService } from '../interfaces/iPivotColDefService';
 import type { IPivotResultColsService } from '../interfaces/iPivotResultColsService';
 import type { IRowChildrenService } from '../interfaces/iRowChildrenService';
+import type { IRowGroupPanelBuilder } from '../interfaces/iRowGroupPanelBuilder';
+import type { IRowGroupingEditValueSvc } from '../interfaces/iRowGroupingEditValueSvc';
 import type { IRowModel } from '../interfaces/iRowModel';
-import type { IRowNodeStage } from '../interfaces/iRowNodeStage';
+import type {
+    IRowNodeAggregationStage,
+    IRowNodeFilterAggregateStage,
+    IRowNodeFilterStage,
+    IRowNodeFlattenStage,
+    IRowNodeGroupStage,
+    IRowNodePivotStage,
+    IRowNodeSortStage,
+} from '../interfaces/iRowNodeStage';
 import type { ISelectionService } from '../interfaces/iSelectionService';
 import type { IServerSideTransactionManager } from '../interfaces/iServerSideRowModel';
 import type { IShowRowGroupColsService } from '../interfaces/iShowRowGroupColsService';
+import type { IShowRowGroupColsValueService } from '../interfaces/iShowRowGroupColsValueService';
+import type { IShowValuesAsService } from '../interfaces/iShowValuesAsService';
 import type { ISideBarService } from '../interfaces/iSideBar';
 import type { IStickyRowService } from '../interfaces/iStickyRows';
+import type { ITestIdService } from '../interfaces/iTestIdService';
+import type { IToolbarService } from '../interfaces/iToolbar';
+import type { IWatermark } from '../interfaces/iWatermark';
 import type { IMasterDetailService } from '../interfaces/masterDetail';
+import type { INotesDataService, INotesService } from '../interfaces/notes';
 import type { IRenderStatusService } from '../interfaces/renderStatusService';
+import type { IRowNumbersService } from '../interfaces/rowNumbers';
+import type { IChangedPathFactory } from '../main-internal';
 import type { AnimationFrameService } from '../misc/animationFrameService';
 import type { ApiEventService } from '../misc/apiEvents/apiEventService';
-import type { LocaleService } from '../misc/locale/localeService';
+import type { IconService } from '../misc/iconService';
 import type { MenuService } from '../misc/menu/menuService';
 import type { StateService } from '../misc/state/stateService';
 import type { TouchService } from '../misc/touchService';
-import { _unRegisterGridModules } from '../modules/moduleRegistry';
 import type { CellNavigationService } from '../navigation/cellNavigationService';
 import type { HeaderNavigationService } from '../navigation/headerNavigationService';
 import type { NavigationService } from '../navigation/navigationService';
@@ -83,35 +130,34 @@ import type { PageBoundsService } from '../pagination/pageBoundsService';
 import type { PaginationAutoPageSizeService } from '../pagination/paginationAutoPageSizeService';
 import type { PaginationService } from '../pagination/paginationService';
 import type { PinnedColumnService } from '../pinnedColumns/pinnedColumnService';
-import type { PinnedRowModel } from '../pinnedRowModel/pinnedRowModel';
-import type { AriaAnnouncementService } from '../rendering/ariaAnnouncementService';
 import type { AutoWidthCalculator } from '../rendering/autoWidthCalculator';
 import type { CellFlashService } from '../rendering/cell/cellFlashService';
+import type { ColumnDelayRenderService } from '../rendering/columnDelayRenderService';
 import type { OverlayService } from '../rendering/overlays/overlayService';
 import type { RowAutoHeightService } from '../rendering/row/rowAutoHeightService';
 import type { RowContainerHeightService } from '../rendering/rowContainerHeightService';
 import type { RowRenderer } from '../rendering/rowRenderer';
+import type { RowSpanService } from '../rendering/spanning/rowSpanService';
+import type { SpannedRowRenderer } from '../rendering/spanning/spannedRowRenderer';
 import type { RowNodeSorter } from '../sort/rowNodeSorter';
 import type { SortService } from '../sort/sortService';
 import type { CellStyleService } from '../styling/cellStyleService';
 import type { RowStyleService } from '../styling/rowStyleService';
 import type { SyncService } from '../syncService';
 import type { TooltipService } from '../tooltip/tooltipService';
+import type { TooltipTouchCoordinator } from '../tooltip/tooltipTouchCoordinator';
 import type { UndoRedoService } from '../undoRedo/undoRedoService';
+import type { ErrorOverlayService } from '../validation/errorOverlay/errorOverlayService';
+import type { LogService } from '../validation/logService';
 import type { ValidationService } from '../validation/validationService';
+import type { ChangeDetectionService } from '../valueService/changeDetectionService';
 import type { ExpressionService } from '../valueService/expressionService';
 import type { ValueCache } from '../valueService/valueCache';
 import type { ValueService } from '../valueService/valueService';
 import type { PopupService } from '../widgets/popupService';
-import type { GenericContextParams, GenericSingletonBean } from './genericContext';
-import { GenericContext } from './genericContext';
 
-export interface ContextParams extends GenericContextParams<BeanName, BeanCollection> {
-    gridId: string;
-    destroyCallback?: () => void;
-}
-
-export interface SingletonBean extends GenericSingletonBean<BeanName, BeanCollection> {}
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface SingletonBean extends AgSingletonBeanClass<BeanCollection> {}
 
 export type DynamicBeanName =
     | 'detailCellRendererCtrl'
@@ -121,7 +167,38 @@ export type DynamicBeanName =
     | 'headerFilterCellCtrl'
     | 'headerGroupCellCtrl'
     | 'rangeHandle'
-    | 'tooltipFeature';
+    | 'pageNumbers'
+    | 'tooltipFeature'
+    | 'highlightTooltipFeature'
+    | 'tooltipStateManager'
+    | 'groupStrategy'
+    | 'treeGroupStrategy'
+    | EditStrategyType
+    | 'rowNumberRowResizer'
+    | 'agSetColumnFilterHandler'
+    | 'agMultiColumnFilterHandler'
+    | 'agGroupColumnFilterHandler'
+    | 'agNumberColumnFilterHandler'
+    | 'agBigIntColumnFilterHandler'
+    | 'agDateColumnFilterHandler'
+    | 'agTextColumnFilterHandler';
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export type ToolbarItemComponentName =
+    | 'agButtonToolbarItem'
+    | 'agFindToolbarItem'
+    | 'agMenuToolbarItem'
+    | 'agPivotPanelToolbarItem'
+    | 'agQuickFilterToolbarItem'
+    | 'agRowGroupPanelToolbarItem';
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export type StatusPanelComponentName =
+    | 'agAggregationComponent'
+    | 'agSelectedRowCountComponent'
+    | 'agTotalRowCountComponent'
+    | 'agFilteredRowCountComponent'
+    | 'agTotalAndFilteredRowCountComponent';
 
 export type UserComponentName =
     | 'agDragAndDropImage'
@@ -134,15 +211,21 @@ export type UserComponentName =
     | 'agSkeletonCellRenderer'
     | 'agCheckboxCellRenderer'
     | 'agLoadingOverlay'
+    | 'agExportingOverlay'
     | 'agNoRowsOverlay'
+    | 'agNoMatchingRowsOverlay'
+    | 'agFileInputOverlay'
+    | 'agErrorOverlay'
     | 'agTooltipComponent'
     | 'agReadOnlyFloatingFilter'
     | 'agTextColumnFilter'
     | 'agNumberColumnFilter'
+    | 'agBigIntColumnFilter'
     | 'agDateColumnFilter'
     | 'agDateInput'
     | 'agTextColumnFloatingFilter'
     | 'agNumberColumnFloatingFilter'
+    | 'agBigIntColumnFloatingFilter'
     | 'agDateColumnFloatingFilter'
     | 'agMultiColumnFilter'
     | 'agMultiColumnFloatingFilter'
@@ -158,38 +241,52 @@ export type UserComponentName =
     | 'agDateStringCellEditor'
     | 'agCheckboxCellEditor'
     | 'agLargeTextCellEditor'
+    | 'agFormulaCellEditor'
     | 'agRichSelect'
     | 'agRichSelectCellEditor'
     | 'agMenuItem'
     | 'agColumnsToolPanel'
     | 'agFiltersToolPanel'
+    | 'agNewFiltersToolPanel'
     | 'agGroupRowRenderer'
     | 'agGroupCellRenderer'
     | 'agDetailCellRenderer'
     | 'agSparklineCellRenderer'
-    | 'agAggregationComponent'
-    | 'agSelectedRowCountComponent'
-    | 'agTotalRowCountComponent'
-    | 'agFilteredRowCountComponent'
-    | 'agTotalAndFilteredRowCountComponent';
+    | StatusPanelComponentName
+    | ToolbarItemComponentName
+    | 'agFindCellRenderer';
 
-export type ClassImp = new (...args: []) => object;
-export type ComponentMeta =
-    | ClassImp
-    | {
-          classImp: ClassImp;
-          /** Default params for provided components */
-          params?: any;
-      };
+interface ComponentMetaWithParams {
+    classImp: ClassImp;
+    /** Default params for provided components */
+    params?: any;
+    /** Update params for provided components before they are created */
+    processParams?: ProcessParamsFunc;
+}
+interface ComponentMetaFunc {
+    getComp: (beans: BeanCollection) => ClassImp | ComponentMetaWithParams;
+}
 
-export interface CoreBeanCollection {
-    context: Context;
+export function isComponentMetaFunc(
+    componentMeta: ClassImp | ComponentMetaWithParams | ComponentMetaFunc
+): componentMeta is ComponentMetaFunc {
+    return typeof componentMeta === 'object' && !!(componentMeta as ComponentMetaFunc).getComp;
+}
+
+export type ComponentMeta = ClassImp | ComponentMetaWithParams | ComponentMetaFunc;
+
+export type ProcessParamsFunc<TParams = any> = (params: TParams, beans: BeanCollection) => TParams;
+
+interface CoreBeanCollection extends AgCoreBeanCollection<
+    GridOptionsWithDefaults,
+    AgEventTypeParams,
+    AgGridCommon<any, any>,
+    GridOptionsService
+> {
     pageBoundsListener: PageBoundsListener;
-    gos: GridOptionsService;
     environment: Environment;
     rowRenderer: RowRenderer;
     valueSvc: ValueService;
-    eventSvc: EventService;
     colModel: ColumnModel;
     colViewport: ColumnViewportService;
     colNames: ColumnNameService;
@@ -219,36 +316,42 @@ export interface CoreBeanCollection {
     rowModel: IRowModel;
     ctrlsSvc: CtrlsService;
     valueCache?: ValueCache;
-    localeSvc?: LocaleService;
     syncSvc: SyncService;
-    ariaAnnounce: AriaAnnouncementService;
+    ariaAnnounce: IAriaAnnouncementService;
     rangeSvc?: IRangeService;
     validation?: ValidationService;
+    log: LogService;
     gridApi: GridApi;
     gridOptions: GridOptions;
     eGridDiv: HTMLElement;
+    eRootDiv: HTMLElement;
     pivotResultCols?: IPivotResultColsService;
     autoColSvc?: IAutoColService;
     selectionColSvc?: SelectionColService;
+    rowNumbersSvc?: IRowNumbersService;
     colDefFactory?: ColumnDefFactory;
     colAutosize?: ColumnAutosizeService;
-    rowGroupColsSvc?: IColsService;
-    valueColsSvc?: IColsService;
-    pivotColsSvc?: IColsService;
+    rowGroupColsSvc?: IRowGroupColsService;
+    valueColsSvc?: IValueColsService;
+    showValuesAsSvc?: IShowValuesAsService;
+    pivotColsSvc?: IPivotColsService;
     quickFilter?: QuickFilterService;
     showRowGroupCols?: IShowRowGroupColsService;
+    showRowGroupColValueSvc?: IShowRowGroupColsValueService;
     dataTypeSvc?: DataTypeService;
     globalListener: AgGlobalEventListener;
     globalSyncListener: AgGlobalEventListener;
     stateSvc?: StateService;
     overlays?: OverlayService;
-    pinnedRowModel?: PinnedRowModel;
+    errorOverlay?: ErrorOverlayService;
+    pinnedRowModel?: IPinnedRowModel;
     menuSvc?: MenuService;
     apiEventSvc?: ApiEventService;
     undoRedo?: UndoRedoService;
     rowNodeBlockLoader?: RowNodeBlockLoader;
     csvCreator?: ICsvCreator;
     excelCreator?: IExcelCreator;
+    pdfCreator?: IPdfCreator;
     clipboardSvc?: IClipboardService;
     cellNavigation?: CellNavigationService;
     scrollVisibleSvc: ScrollVisibleService;
@@ -262,204 +365,107 @@ export interface CoreBeanCollection {
     enterpriseMenuFactory?: IMenuFactory;
     contextMenuSvc?: IContextMenuService;
     editSvc?: EditService;
-    rowEditSvc?: RowEditService;
+    editModelSvc?: EditModelService;
     alignedGridsSvc?: AlignedGridsService;
     paginationAutoPageSizeSvc?: PaginationAutoPageSizeService;
     pagination?: PaginationService;
     pageBounds: PageBoundsService;
     apiFunctionSvc: ApiFunctionService;
     gridDestroySvc: GridDestroyService;
-    expansionSvc?: IExpansionService;
+    expansionSvc?: IExpansionService<RowGroupExpansionState | RowGroupBulkExpansionState>;
     sideBar?: ISideBarService;
+    toolbar?: IToolbarService;
     ssrmTxnManager?: IServerSideTransactionManager;
     aggFuncSvc?: IAggFuncService;
     advancedFilter: IAdvancedFilterService;
-    filterStage?: IRowNodeStage;
-    sortStage?: IRowNodeStage;
-    flattenStage?: IRowNodeStage;
-    groupStage?: IRowNodeStage;
-    aggStage?: IRowNodeStage;
-    pivotStage?: IRowNodeStage;
-    filterAggStage?: IRowNodeStage;
+    filterStage?: FilterStage;
+    sortStage?: SortStage;
+    groupFilterStage?: IRowNodeFilterStage;
+    groupSortStage?: IRowNodeSortStage;
+    flattenStage?: IRowNodeFlattenStage;
+    groupStage?: IRowNodeGroupStage;
+    aggStage?: IRowNodeAggregationStage;
+    aggChildrenSvc?: IAggregatedChildrenSvc;
+    pivotStage?: IRowNodePivotStage;
+    filterAggStage?: IRowNodeFilterAggregateStage;
     rowNodeSorter?: RowNodeSorter;
     pivotColDefSvc?: IPivotColDefService;
     chartSvc?: IChartService;
     aggColNameSvc?: IAggColumnNameService;
     renderStatus?: IRenderStatusService;
+    rowDropHighlightSvc?: RowDropHighlightService;
     rowDragSvc?: RowDragService;
+    groupEditSvc?: IGroupEditService;
+    rowGroupingEditValueSvc?: IRowGroupingEditValueSvc;
     stickyRowSvc?: IStickyRowService;
-    groupHideOpenParentsSvc?: IGroupHideOpenParentsService;
     filterValueSvc?: FilterValueService;
-    csrmNodeSvc?: IClientSideNodeManager;
-    csrmPathTreeNodeSvc?: IClientSideNodeManager;
-    csrmChildrenTreeNodeSvc?: IClientSideNodeManager;
     cellFlashSvc?: CellFlashService;
     masterDetailSvc?: IMasterDetailService;
     tooltipSvc?: TooltipService;
-    colGroupSvc?: ColumnGroupService;
+    tooltipTouchSvc?: TooltipTouchCoordinator;
+    colGroupSvc: ColumnGroupService;
+    userColumnSvc?: UserColumnService;
     rowAutoHeight?: RowAutoHeightService;
     rowChildrenSvc?: IRowChildrenService;
     footerSvc?: IFooterService;
     touchSvc?: TouchService;
+    rowSpanSvc?: RowSpanService;
+    spannedRowRenderer?: SpannedRowRenderer;
+    findSvc?: IFindService;
+    rowGroupPanelBuilder?: IRowGroupPanelBuilder;
+    groupFilter?: IGroupFilterService;
+    multiFilter?: IMultiFilterService;
+    filterPanelSvc?: IFilterPanelService;
+    selectableFilter?: ISelectableFilterService;
+    testIdSvc?: ITestIdService;
+    colDelayRenderSvc?: ColumnDelayRenderService;
+    gridSerializer?: GridSerializer;
+    licenseManager?: IWatermark;
+    changedPathFactory?: IChangedPathFactory;
+    changeDetectionSvc?: ChangeDetectionService;
+    iconSvc: IconService;
+    groupHierarchyColSvc?: IGroupHierarchyColService;
+    formulaDataSvc?: IFormulaDataService;
+    formula?: IFormulaService;
+    formulaInputManager?: IFormulaInputManagerService;
+    calculatedColsSvc?: ICalculatedColumnsService;
+    notesDataSvc?: INotesDataService;
+    notesSvc?: INotesService;
+    colHeaderEditSvc?: IColumnHeaderEditService;
+    columnStateUpdateStrategy: IColumnStateUpdateStrategy;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export type BeanCollection = CoreBeanCollection & {
     // `unknown | undefined` to make sure the type is handled correctly when used
-    [key in Exclude<BeanName, keyof CoreBeanCollection>]?: unknown;
+    [key in UntypedBeanNames]?: unknown;
 };
 
-export class Context extends GenericContext<BeanName, BeanCollection> {
-    private gridId: string;
-    private destroyCallback?: () => void;
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export type Context = IContext<BeanCollection>;
 
-    protected override init(params: ContextParams): void {
-        this.gridId = params.gridId;
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export type BeanName = keyof BeanCollection;
 
-        this.beans.context = this;
-        this.destroyCallback = params.destroyCallback;
-        super.init(params);
-    }
-
-    public override destroy(): void {
-        super.destroy();
-        _unRegisterGridModules(this.gridId);
-        this.destroyCallback?.();
-    }
-
-    public getGridId(): string {
-        return this.gridId;
-    }
-}
-
-export type BeanName =
+/** Things used in enterprise or elsewhere that we haven't created interfaces for */
+type UntypedBeanNames =
     | 'advFilterExpSvc'
-    | 'advancedFilter'
+    | 'advFilterSetSvc'
     | 'advSettingsMenuFactory'
-    | 'aggFuncSvc'
-    | 'agCompUtils'
-    | 'aggColNameSvc'
-    | 'aggStage'
-    | 'alignedGridsSvc'
-    | 'animationFrameSvc'
-    | 'apiFunctionSvc'
-    | 'ariaAnnounce'
-    | 'apiEventSvc'
-    | 'autoColSvc'
-    | 'autoWidthCalc'
-    | 'beans'
-    | 'cellFlashSvc'
-    | 'cellNavigation'
-    | 'cellStyles'
-    | 'changeDetectionSvc'
-    | 'chartColSvc'
+    | 'autoGenColsSvc'
+    | 'agChartsExports'
     | 'chartCrossFilterSvc'
     | 'chartMenuItemMapper'
     | 'chartMenuListFactory'
     | 'chartMenuSvc'
     | 'chartTranslation'
-    | 'chartSvc'
-    | 'agChartsExports'
-    | 'clipboardSvc'
-    | 'colAnimation'
-    | 'colAutosize'
     | 'colChooserFactory'
-    | 'colDefFactory'
-    | 'colFilter'
-    | 'colFlex'
-    | 'colGroupSvc'
-    | 'colHover'
     | 'colMenuFactory'
-    | 'colModel'
-    | 'colMoves'
-    | 'colNames'
-    | 'colResize'
     | 'colToolPanelFactory'
-    | 'colViewport'
-    | 'pivotResultCols'
-    | 'context'
-    | 'contextMenuSvc'
-    | 'selectionColSvc'
-    | 'ctrlsSvc'
-    | 'csvCreator'
-    | 'dataTypeSvc'
-    | 'visibleCols'
-    | 'dragAndDrop'
-    | 'dragSvc'
-    | 'editSvc'
-    | 'excelCreator'
-    | 'enterpriseMenuFactory'
-    | 'environment'
-    | 'eventSvc'
-    | 'eGridDiv'
     | 'enterpriseChartProxyFactory'
-    | 'expansionSvc'
-    | 'expressionSvc'
-    | 'filterAggStage'
-    | 'filterManager'
-    | 'filterMenuFactory'
-    | 'filterStage'
-    | 'filterValueSvc'
-    | 'flashCellSvc'
-    | 'flattenStage'
-    | 'focusSvc'
-    | 'footerSvc'
-    | 'funcColsSvc'
-    | 'pivotColsSvc'
-    | 'rowGroupColsSvc'
-    | 'valueColsSvc'
-    | 'frameworkCompWrapper'
-    | 'frameworkOverrides'
-    | 'globalListener'
-    | 'globalSyncListener'
-    | 'gridApi'
-    | 'gridDestroySvc'
-    | 'gridOptions'
-    | 'gos'
-    | 'gridOptionsWrapper'
-    | 'gridSerializer'
-    | 'groupHideOpenParentsSvc'
-    | 'groupStage'
-    | 'headerNavigation'
-    | 'horizontalResizeSvc'
     | 'lazyBlockLoadingSvc'
-    | 'licenseManager'
-    | 'localeSvc'
-    | 'masterDetailSvc'
     | 'menuItemMapper'
-    | 'menuSvc'
     | 'menuUtils'
-    | 'navigation'
-    | 'overlays'
-    | 'paginationAutoPageSizeSvc'
-    | 'pagination'
-    | 'pinnedRowModel'
-    | 'pinnedCols'
-    | 'pivotColDefSvc'
-    | 'pivotStage'
-    | 'popupSvc'
-    | 'quickFilter'
-    | 'rangeSvc'
-    | 'pageBoundsListener'
-    | 'pageBounds'
-    | 'registry'
-    | 'renderStatus'
-    | 'rowAutoHeight'
-    | 'rowChildrenSvc'
-    | 'rowContainerHeight'
-    | 'rowDragSvc'
-    | 'rowEditSvc'
-    | 'rowModel'
-    | 'rowNodeBlockLoader'
-    | 'rowNodeSorter'
-    | 'rowRenderer'
-    | 'rowStyleSvc'
-    | 'scrollVisibleSvc'
-    | 'selectionController'
-    | 'selectionSvc'
-    | 'showRowGroupCols'
-    | 'sideBar'
-    | 'sortSvc'
-    | 'sortStage'
     | 'ssrmBlockUtils'
     | 'ssrmExpandListener'
     | 'ssrmFilterListener'
@@ -468,19 +474,9 @@ export type BeanName =
     | 'ssrmSortSvc'
     | 'ssrmStoreFactory'
     | 'ssrmStoreUtils'
-    | 'ssrmTxnManager'
-    | 'stateSvc'
     | 'statusBarSvc'
-    | 'stickyRowSvc'
-    | 'syncSvc'
-    | 'tooltipSvc'
-    | 'touchSvc'
-    | 'undoRedo'
-    | 'userCompFactory'
-    | 'valueCache'
-    | 'valueSvc'
-    | 'validationLogger'
-    | 'validation'
-    | 'csrmNodeSvc'
-    | 'csrmPathTreeNodeSvc'
-    | 'csrmChildrenTreeNodeSvc';
+    | 'testIdSvc'
+    | 'toolbarMenuBuilder'
+    | 'formula'
+    | 'showValuesAsSvc'
+    | 'studio';

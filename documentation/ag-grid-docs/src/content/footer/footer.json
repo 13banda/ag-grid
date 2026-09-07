@@ -1,0 +1,121 @@
+[
+    {
+        "title": "Documentation",
+        "links": [
+            {
+                "name": "Getting Started",
+                "url": "/documentation/"
+            },
+            {
+                "name": "Roadmap",
+                "url": "/roadmap/"
+            },
+            {
+                "name": "Changelog",
+                "url": "/changelog/"
+            },
+            {
+                "name": "Pipeline",
+                "url": "/pipeline/"
+            },
+            {
+                "name": "Documentation Archive",
+                "url": "/documentation-archive/"
+            }
+        ]
+    },
+    {
+        "title": "Support & Community",
+        "links": [
+            {
+                "name": "Stack Overflow",
+                "url": "https://stackoverflow.com/questions/tagged/ag-grid",
+                "newTab": true
+            },
+            {
+                "name": "License & Pricing",
+                "url": "/license-pricing/"
+            },
+            {
+                "name": "Support via Zendesk",
+                "url": "https://ag-grid.zendesk.com/",
+                "newTab": true
+            },
+            {
+                "name": "Security",
+                "url": "/data-grid/security/"
+            }
+        ]
+    },
+    {
+        "title": "The Company",
+        "links": [
+            {
+                "name": "AG Charts",
+                "url": "https://www.ag-grid.com/charts/"
+            },
+            {
+                "name": "AG Studio",
+                "url": "https://www.ag-grid.com/studio/"
+            },
+            {
+                "name": "About",
+                "url": "/about/"
+            },
+            {
+                "name": "Contact Us",
+                "url": "/contact/"
+            },
+            {
+                "name": "Blog",
+                "url": "https://www.ag-grid.com/blog/"
+            },
+            {
+                "name": "Privacy Policy",
+                "url": "/privacy/"
+            },
+            {
+                "name": "Cookies Policy",
+                "url": "/cookies/"
+            },
+            {
+                "name": "Manage Cookies",
+                "url": "#manage_cookies",
+                "showCookiesPrefs": true
+            },
+            {
+                "name": "Modern Slavery",
+                "url": "/modern-slavery/"
+            },
+            {
+                "name": "Sitemap",
+                "url": "https://www.ag-grid.com/sitemap/"
+            }
+        ]
+    },
+    {
+        "title": "Follow",
+        "links": [
+            {
+                "name": "GitHub",
+                "url": "https://github.com/ag-grid/ag-grid",
+                "iconName": "github"
+            },
+            {
+                "name": "X",
+                "url": "https://x.com/ag_grid",
+                "iconName": "xLogo"
+            },
+            {
+                "name": "YouTube",
+                "url": "https://youtube.com/c/ag-grid",
+                "iconName": "youtube"
+            },
+            {
+                "name": "LinkedIn",
+                "url": "https://www.linkedin.com/company/ag-grid",
+                "iconName": "linkedin"
+            }
+        ]
+    }
+]

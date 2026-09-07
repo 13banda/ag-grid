@@ -1,6 +1,17 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import {
+    ClientSideRowModelModule,
+    ModuleRegistry,
+    PinnedRowModule,
+    createGrid,
+    enableDevValidations,
+} from 'ag-grid-community';
 import { CellSelectionModule, ClipboardModule, ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -8,7 +19,7 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     CellSelectionModule,
-    ValidationModule /* Development Only */,
+    PinnedRowModule,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -31,6 +42,11 @@ const gridOptions: GridOptions<IOlympicData> = {
         minWidth: 100,
     },
     cellSelection: true,
+    enableRowPinning: true,
+    isRowPinned: (node) => {
+        const country = node.data?.country;
+        return country == 'Norway' ? 'top' : null;
+    },
 };
 
 // setup the grid after the page has finished loading

@@ -1,29 +1,45 @@
-import type { ComponentSelector, IWatermark, NamedBean } from 'ag-grid-community';
-import { BeanStub, _getDocument } from 'ag-grid-community';
+import { _getDocument } from 'ag-stack';
+
+import type { Component, ComponentSelector, IWatermark, NamedBean } from 'ag-grid-community';
+import { BeanStub } from 'ag-grid-community';
 
 import type { ILicenseManager } from './shared/licenseManager';
 import { LicenseManager } from './shared/licenseManager';
 import { AgWatermarkSelector } from './watermark';
 
+interface BaseLicenseManager {
+    isDisplayWatermark(): boolean;
+    getWatermarkMessage(): string;
+}
+
 export class GridLicenseManager extends BeanStub implements NamedBean, IWatermark {
     beanName = 'licenseManager' as const;
 
-    private licenseManager: LicenseManager;
+    private licenseManager: BaseLicenseManager;
 
     public postConstruct(): void {
         this.validateLicense();
     }
 
     public validateLicense(): void {
-        this.licenseManager = new LicenseManager(_getDocument(this.beans));
-        this.licenseManager.validateLicense();
+        const beans = this.beans;
+        if (beans.studio) {
+            this.licenseManager = {
+                isDisplayWatermark: () => false,
+                getWatermarkMessage: () => '',
+            };
+        } else {
+            const licenseManager = new LicenseManager(_getDocument(beans));
+            this.licenseManager = licenseManager;
+            licenseManager.validateLicense();
+        }
     }
 
     static getLicenseDetails(licenseKey: string) {
         return new LicenseManager(null as any).getLicenseDetails(licenseKey);
     }
 
-    public getWatermarkSelector(): ComponentSelector {
+    public getWatermarkSelector(): ComponentSelector<Component> {
         return AgWatermarkSelector;
     }
 

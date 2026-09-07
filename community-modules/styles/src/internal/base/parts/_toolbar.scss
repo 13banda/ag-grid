@@ -1,0 +1,252 @@
+@use 'ag';
+
+@mixin output {
+    .ag-toolbar {
+        display: flex;
+        align-items: center;
+        overflow: auto hidden;
+        scrollbar-width: thin;
+        border-bottom: var(--ag-borders) var(--ag-border-color);
+        min-height: var(--ag-header-height);
+        background-color: var(--ag-toolbar-background-color);
+        color: var(--ag-toolbar-text-color);
+        font-family: var(--ag-header-font-family);
+        font-size: var(--ag-header-font-size);
+        white-space: nowrap;
+    }
+
+    .ag-toolbar-right-start {
+        margin-inline-start: auto;
+    }
+
+    .ag-toolbar-item {
+        display: inline-flex;
+        margin: 0 calc(var(--ag-grid-size, 8px) * 2);
+    }
+
+    .ag-toolbar-item:where(:not(.ag-toolbar-panel)) {
+        font-weight: var(--ag-header-font-weight);
+    }
+
+    .ag-toolbar-button-wrapper {
+        display: inline-flex;
+        padding: calc(var(--ag-grid-size) * 0.25);
+        height: 100%;
+    }
+
+    .ag-toolbar-button {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--ag-grid-size);
+        padding: calc(var(--ag-grid-size));
+        border: 0;
+        background: transparent;
+        color: var(--ag-toolbar-text-color);
+        cursor: pointer;
+        line-height: 1;
+        white-space: nowrap;
+        outline: none;
+        font-family: var(--ag-header-font-family);
+        font-size: var(--ag-header-font-size);
+        font-weight: var(--ag-header-font-weight);
+    }
+
+    .ag-toolbar-button-wrapper:hover {
+        background-color: var(--ag-icon-button-hover-background-color, transparent);
+        color: var(--ag-icon-button-hover-color, var(--ag-foreground-color));
+    }
+
+    .ag-toolbar-button-wrapper:hover .ag-toolbar-button,
+    .ag-toolbar-button-wrapper:hover .ag-toolbar-button .ag-icon {
+        color: var(--ag-icon-button-hover-color, var(--ag-foreground-color));
+    }
+
+    .ag-toolbar > .ag-toolbar-button-wrapper:first-child > .ag-toolbar-button {
+        border-start-start-radius: calc(var(--ag-border-radius) + 1px);
+    }
+
+    .ag-toolbar > .ag-toolbar-button-wrapper:last-child > .ag-toolbar-button {
+        border-start-end-radius: calc(var(--ag-border-radius) + 1px);
+    }
+
+    .ag-toolbar-button:focus-visible {
+        box-shadow: var(--ag-input-focus-box-shadow);
+    }
+
+    .ag-toolbar-button:focus:not(:focus-visible) {
+        box-shadow: none;
+    }
+
+    .ag-toolbar-button:disabled {
+        opacity: 0.5;
+        cursor: default;
+        pointer-events: none;
+    }
+
+    .ag-toolbar-panel {
+        display: inline-flex;
+        // Grow to share the spare width equally with a flex-basis of 0, so panels
+        // keep a stable size and don't collapse when their content changes (e.g.
+        // dragging a pill out). The default min-width:auto keeps each panel at least
+        // as wide as its content, so when pills overflow the panel expands and the
+        // toolbar scrolls instead of clipping.
+        flex: 1 0 0;
+    }
+
+    .ag-toolbar-input {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        min-width: 200px;
+        max-width: none;
+        margin: 0 calc(var(--ag-grid-size) * 2);
+    }
+
+    .ag-toolbar-input + .ag-toolbar-input {
+        margin-inline-start: 0;
+    }
+
+    .ag-toolbar > .ag-toolbar-input:first-child,
+    .ag-toolbar-right-start + .ag-toolbar-input {
+        margin-inline-start: var(--ag-grid-size);
+    }
+
+    .ag-toolbar > .ag-toolbar-input:last-child {
+        margin-inline-end: var(--ag-grid-size);
+    }
+
+    .ag-toolbar-input-icon {
+        position: absolute;
+        display: inline-flex;
+        align-items: center;
+        color: var(--ag-toolbar-text-color);
+        opacity: 0.5;
+        pointer-events: none;
+        inset-inline-start: var(--ag-grid-size);
+
+        // The icon precedes the input in the DOM and `.ag-input-wrapper` is itself positioned, so
+        // without this the input's opaque background paints over the glyph. The Find item hid the
+        // problem by making its input transparent; the Quick Filter item showed no icon at all.
+        // Mirrors the same rule in `packages/ag-grid-enterprise/src/toolbar/agToolbar.css`.
+        z-index: 1;
+    }
+
+    .ag-toolbar-input-field {
+        color: var(--ag-foreground-color);
+        font-size: var(--ag-font-size);
+        font-family: var(--ag-header-font-family);
+        font-weight: var(--ag-header-font-weight);
+        line-height: 1.5;
+        outline: none;
+        border: var(--ag-borders-input) var(--ag-input-border-color);
+        border-radius: var(--ag-border-radius);
+        width: 100%;
+        padding-block: calc(var(--ag-grid-size) * 0.5);
+        padding-inline: calc(var(--ag-icon-size) + var(--ag-grid-size) * 2) var(--ag-grid-size);
+    }
+
+    // High-specificity padding override — beats theme text-input padding-left rules
+    // (which reach .ag-theme-X .ag-ltr input[class^='ag-'][type='text'] = 0-4-1)
+    .ag-toolbar-input {
+        input[class^='ag-'][type='text'].ag-toolbar-input-field {
+            @include ag.unthemed-rtl(
+                (
+                    padding-left: calc(var(--ag-icon-size) + var(--ag-grid-size) * 2),
+                )
+            );
+        }
+    }
+
+    .ag-toolbar-input-field:focus {
+        box-shadow: var(--ag-input-focus-box-shadow);
+        border: var(--ag-borders-input) var(--ag-input-focus-border-color);
+    }
+
+    .ag-toolbar-input-field::placeholder {
+        color: var(--ag-disabled-foreground-color);
+    }
+
+    .ag-toolbar-input-widget {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .ag-toolbar-panel .ag-column-drop-horizontal {
+        background-color: transparent;
+        border-bottom: none;
+        padding: 0;
+        font-size: var(--ag-font-size);
+        font-family: var(--ag-font-family);
+    }
+
+    .ag-toolbar .ag-column-drop-horizontal {
+        border-bottom: none;
+        background-color: transparent;
+
+        // Prevent scrolling - necessary because tabbing to select a drop zone pill
+        // scrolls the container to show the pill, and we want the containing scroll
+        // container to be the toolbar, not the drop zone panel within it
+        overflow: visible;
+    }
+
+    .ag-toolbar-button-chevron {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .ag-toolbar-separator {
+        align-self: stretch;
+        width: 0;
+        margin: calc(var(--ag-grid-size) * 1.75) 0;
+        border-inline-start: solid var(--ag-toolbar-separator-width) var(--ag-toolbar-separator-color);
+    }
+
+    .ag-toolbar-find {
+        gap: calc(var(--ag-grid-size) * 0.5);
+        width: 280px;
+        max-width: none;
+        min-width: 220px;
+        border: var(--ag-borders-input) var(--ag-input-border-color);
+        border-radius: var(--ag-border-radius);
+        background-color: var(--ag-background-color);
+    }
+
+    .ag-toolbar-find:focus-within {
+        box-shadow: var(--ag-input-focus-box-shadow);
+        border: var(--ag-borders-input) var(--ag-input-focus-border-color);
+    }
+
+    .ag-toolbar-find .ag-toolbar-input-field {
+        border: none;
+        background-color: transparent;
+        flex: 1;
+        min-width: 0;
+    }
+
+    // high-specificity overrides to prevent theme text-input rules reinstating border/shadow
+    .ag-toolbar .ag-toolbar-find input[class^='ag-'][type='text'].ag-toolbar-input-field {
+        border: none;
+        box-shadow: none;
+
+        &:focus {
+            border: none;
+            box-shadow: none;
+        }
+    }
+
+    .ag-toolbar-find-match-count {
+        white-space: nowrap;
+        font-size: var(--ag-font-size);
+        color: inherit;
+        opacity: 0.7;
+        user-select: none;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+        text-align: end;
+    }
+
+    .ag-toolbar-find-button {
+        flex-shrink: 0;
+        padding: calc(var(--ag-grid-size) * 0.5);
+    }
+}

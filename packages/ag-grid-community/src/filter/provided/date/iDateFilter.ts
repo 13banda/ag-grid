@@ -1,24 +1,54 @@
 import type { IFilterParams } from '../../../interfaces/iFilter';
 import type { IScalarFilterParams } from '../iScalarFilter';
-import type { ISimpleFilterModel } from '../iSimpleFilter';
+import type {
+    CustomFilterOptionKey,
+    DateFilterOptionKey,
+    IFilterOptionDef,
+    ISimpleFilterModel,
+    ISimpleFilterModelPresetType,
+} from '../iSimpleFilter';
 
 // The date filter model takes strings, although the filter actually works with dates. This is because a Date object
 // won't convert easily to JSON. When the model is used for doing the filtering, it's converted to a Date object.
 
 export interface DateFilterModel extends ISimpleFilterModel {
+    /** One of the Date Filter's options, or a Custom Filter Option's `displayKey`. */
+    type?: DateFilterOptionKey | CustomFilterOptionKey | null;
     /** Filter type is always `'date'` */
     filterType?: 'date';
     /**
-     * The date value(s) associated with the filter. The type is `string` and format is always
-     * `YYYY-MM-DD hh:mm:ss` e.g. 2019-05-24 00:00:00. Custom filters can have no values (hence both
-     * are optional). Range filter has two values (from and to).
+     * The date value(s) associated with the filter.
+     * The type is `string` and the format is `YYYY-MM-DD hh:mm:ss`, e.g. 2019-05-24 00:00:00.
+     * If `useIsoSeparator = true`, the format is instead `YYYY-MM-DDThh:mm:ss`.
+     * If `includeTime = false`, or `cellDataType = 'date'` (and `includeTime` is not set), the time part is omitted and the format is `YYYY-MM-DD`, e.g. 2019-05-24.
+     * Custom filters can have no values (hence both are optional). Range filter has two values (from and to).
      */
-    dateFrom: string | null;
+    dateFrom: string | null | undefined;
     /**
      * Range filter `to` date value.
      */
-    dateTo: string | null;
+    dateTo: string | null | undefined;
 }
+
+/**
+ * Date filter model used when a built-in preset range (for example, Today or Last 7 Days) is selected.
+ * `dateFrom` and `dateTo` are always `undefined` and the `type` carries the preset key.
+ */
+export interface PresetDateRangeFilterModel extends DateFilterModel {
+    /**
+     * Preset range type (for example, `today` or `last7Days`).
+     */
+    type: ISimpleFilterModelPresetType;
+    /**
+     * Preset range does not provide an explicit `from` date.
+     */
+    dateFrom: undefined;
+    /**
+     * Preset range does not provide an explicit `to` date.
+     */
+    dateTo: undefined;
+}
+
 /**
  * Parameters provided by the grid to the `init` method of a `DateFilter`.
  * Do not use in `colDef.filterParams` - see `IDateFilterParams` instead.
@@ -30,7 +60,14 @@ export type DateFilterParams<TData = any> = IDateFilterParams & IFilterParams<TD
  */
 
 export interface IDateFilterParams extends IScalarFilterParams {
-    /** Required if the data for the column are not native JS `Date` objects. */
+    /** Array of filter options to present to the user, and the options the Advanced Filter offers for the column. */
+    filterOptions?: (IFilterOptionDef | DateFilterOptionKey)[];
+    /** The default filter option to be selected. Must be one of the offered options. */
+    defaultOption?: DateFilterOptionKey | CustomFilterOptionKey;
+    /**
+     * Required if the data for the column are not native JS `Date` objects.
+     * If cell values can contain invalid dates, should also implement `isValidDate`.
+     */
     comparator?: IDateComparatorFunc;
     /**
      * Defines whether the grid uses the browser date picker or a plain text box.
@@ -66,8 +103,26 @@ export interface IDateFilterParams extends IScalarFilterParams {
      * @default YYYY-MM-DD
      */
     inRangeFloatingFilterDateFormat?: string;
+    /**
+     * If providing a `comparator` and cell values can contain invalid dates,
+     * this can be implemented to allow invalid date values to be filtered out
+     * (as the comparator only allows for greater than, less than and equals).
+     */
+    isValidDate?: (value: any) => boolean;
+    /**
+     * Defines whether time should be included when filtering dates.
+     *
+     * - `true`: Include the time component in date comparisons.
+     * - `false`: Only compare dates without considering the time component.
+     *
+     * @default false
+     */
+    includeTime?: boolean;
+    /**
+     * By default, the `dateFrom` and `dateTo` values in the filter model will be in the format `YYYY-MM-DD hh:mm:ss`.
+     * Set this to `true` to instead use the format `YYYY-MM-DDThh:mm:ss`.
+     */
+    useIsoSeparator?: boolean;
 }
 
-export interface IDateComparatorFunc {
-    (filterLocalDateAtMidnight: Date, cellValue: any): number;
-}
+export type IDateComparatorFunc = (filterLocalDateAtMidnight: Date, cellValue: any) => number;

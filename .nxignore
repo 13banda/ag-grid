@@ -1,0 +1,12 @@
+# Ignore .rulesync symlinks as nx format doesn't handle these well.
+.rulesync/**
+!.rulesync/README.md
+.patches/
+patches/
+
+# Files without Prettier parsers
+*.sh
+*.patch
+.gitrepo
+.nxignore
+.prettierignore

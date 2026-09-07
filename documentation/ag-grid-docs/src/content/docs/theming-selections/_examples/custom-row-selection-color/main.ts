@@ -1,11 +1,20 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, themeQuartz } from 'ag-grid-community';
+import { AllCommunityModule, ModuleRegistry, createGrid, enableDevValidations, themeQuartz } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const myTheme = themeQuartz.withParams({
-    /* bright green, 10% opacity */
+    // bright green, 10% opacity
     selectedRowBackgroundColor: 'rgba(0, 255, 0, 0.1)',
+
+    // alternating row colors will be visible through the semi-transparent
+    // selection background color
+    oddRowBackgroundColor: '#8881',
 });
 
 const columnDefs: ColDef[] = [
@@ -25,7 +34,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     theme: myTheme,
-    rowData: null,
     columnDefs: columnDefs,
     rowSelection: { mode: 'multiRow' },
     defaultColDef: {
@@ -34,7 +42,13 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     onFirstDataRendered: (params) => {
         params.api.forEachNode((node) => {
-            if (node.rowIndex === 2 || node.rowIndex === 3 || node.rowIndex === 4) {
+            if (
+                node.rowIndex === 2 ||
+                node.rowIndex === 3 ||
+                node.rowIndex === 4 ||
+                node.rowIndex === 5 ||
+                node.rowIndex === 6
+            ) {
                 node.setSelected(true);
             }
         });

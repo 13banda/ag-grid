@@ -1,4 +1,6 @@
-import { KeyCode } from '../constants/keyCode';
+import { KeyCode, _exists, _last, _missing, _throttle } from 'ag-stack';
+
+import { isRowNumberCol } from '../columns/columnUtils';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { BeanCollection } from '../context/context';
@@ -11,15 +13,14 @@ import { _isGroupRowsSticky } from '../gridOptionsUtils';
 import { getFocusHeaderRowCount } from '../headerRendering/headerUtils';
 import type { NavigateToNextCellParams, TabToNextCellParams } from '../interfaces/iCallbackParams';
 import type { CellPosition } from '../interfaces/iCellPosition';
+import type { Column } from '../interfaces/iColumn';
 import type { WithoutGridCommon } from '../interfaces/iCommon';
-import type { VerticalScrollPosition } from '../interfaces/iRowNode';
+import type { RowPinnedType, VerticalScrollPosition } from '../interfaces/iRowNode';
 import type { RowPosition } from '../interfaces/iRowPosition';
 import { CellCtrl } from '../rendering/cell/cellCtrl';
 import { RowCtrl } from '../rendering/row/rowCtrl';
-import { _last } from '../utils/array';
-import { _focusNextGridCoreContainer, _isHeaderFocusSuppressed } from '../utils/focus';
-import { _throttle } from '../utils/function';
-import { _exists, _missing } from '../utils/generic';
+import { _focusNextGridCoreContainer, _isHeaderFocusSuppressed } from '../utils/gridFocus';
+import { _clamp } from '../utils/number';
 
 interface NavigateParams {
     /** The rowIndex to vertically scroll to. */
@@ -32,12 +33,22 @@ interface NavigateParams {
     focusIndex: number;
     focusColumn: AgColumn;
     isAsync?: boolean;
+    rowPinned?: RowPinnedType;
 }
 
+type FindNextCellToFocusOnParams = {
+    backwards: boolean;
+    startEditing: boolean;
+    skipToNextEditableCell?: boolean;
+};
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class NavigationService extends BeanStub implements NamedBean {
     beanName = 'navigation' as const;
 
     private gridBodyCon: GridBodyCtrl;
+    private currentColumnWithoutSpan: Column | null = null;
+    private hasColumnWithoutSpanListener = false;
 
     constructor() {
         super();
@@ -119,8 +130,15 @@ export class NavigationService extends BeanStub implements NamedBean {
         return true;
     }
 
-    private navigateTo(navigateParams: NavigateParams): void {
-        const { scrollIndex, scrollType, scrollColumn, focusIndex, focusColumn } = navigateParams;
+    private navigateTo({
+        scrollIndex,
+        scrollType,
+        scrollColumn,
+        focusIndex,
+        focusColumn,
+        isAsync,
+        rowPinned,
+    }: NavigateParams): void {
         const { scrollFeature } = this.gridBodyCon;
 
         if (_exists(scrollColumn) && !scrollColumn.isPinned()) {
@@ -135,22 +153,22 @@ export class NavigationService extends BeanStub implements NamedBean {
         // however, this behavior will cause the cell border to be cut off, or if we have sticky rows, the
         // cell will be completely hidden, so we call ensureIndexVisible without a position to guarantee
         // minimal scroll to get the row into view.
-        if (!navigateParams.isAsync) {
+        if (!isAsync) {
             scrollFeature.ensureIndexVisible(focusIndex);
         }
 
-        const { focusSvc, rangeSvc } = this.beans;
+        const { focusSvc } = this.beans;
 
         // if we don't do this, the range will be left on the last cell, which will leave the last focused cell
         // highlighted.
         focusSvc.setFocusedCell({
             rowIndex: focusIndex,
             column: focusColumn,
-            rowPinned: null,
+            rowPinned,
             forceBrowserFocus: true,
         });
 
-        rangeSvc?.setRangeToCell({ rowIndex: focusIndex, rowPinned: null, column: focusColumn });
+        this.setRangeToCellIfSupported({ rowIndex: focusIndex, rowPinned, column: focusColumn });
     }
 
     // this method is throttled, see the `constructor`
@@ -240,12 +258,22 @@ export class NavigationService extends BeanStub implements NamedBean {
             scrollType = 'top';
         }
 
+        // focusIndex is always a body-row index (derived from rowModel/pageBounds above),
+        // so the normalisation target is in the body row model regardless of gridCell.rowPinned.
+        const targetPosition: CellPosition = {
+            rowIndex: focusIndex,
+            column: gridCell.column as AgColumn,
+            rowPinned: null,
+        };
+        const normalisedPosition = this.getNormalisedPosition(targetPosition);
+        const { rowIndex: normFocusIndex, column: normFocusColumn } = normalisedPosition ?? targetPosition;
+
         this.navigateTo({
             scrollIndex,
             scrollType,
             scrollColumn: null,
-            focusIndex,
-            focusColumn: gridCell.column as AgColumn,
+            focusIndex: normFocusIndex,
+            focusColumn: normFocusColumn as AgColumn,
         });
     }
 
@@ -302,7 +330,7 @@ export class NavigationService extends BeanStub implements NamedBean {
             currentIndex += step;
         }
 
-        return Math.max(0, Math.min(currentIndex, lastRowIndex));
+        return _clamp(currentIndex, 0, lastRowIndex);
     }
 
     private getViewportHeight(): number {
@@ -311,7 +339,7 @@ export class NavigationService extends BeanStub implements NamedBean {
         const scrollbarWidth = this.beans.scrollVisibleSvc.getScrollbarWidth();
         let pixelsInOnePage = scrollPosition.bottom - scrollPosition.top;
 
-        if (beans.ctrlsSvc.get('center').isHorizontalScrollShowing()) {
+        if (beans.scrollVisibleSvc.isHorizontalScrollShowing()) {
             pixelsInOnePage -= scrollbarWidth;
         }
 
@@ -333,16 +361,25 @@ export class NavigationService extends BeanStub implements NamedBean {
     }
 
     private onCtrlUpDownLeftRight(key: string, gridCell: CellPosition): void {
-        const cellToFocus = this.beans.cellNavigation!.getNextCellToFocus(key, gridCell, true)!;
-        const { rowIndex } = cellToFocus;
-        const column = cellToFocus.column as AgColumn;
+        const cellToFocus = this.beans.cellNavigation!.getNextCellToFocus(key, gridCell, true);
+
+        if (!cellToFocus) {
+            return;
+        }
+
+        // in case we have col spanning we get the cellComp and use it to get the
+        // position. This was we always focus the first cell inside the spanning.
+        const normalisedPosition = this.getNormalisedPosition(cellToFocus);
+        const { rowIndex, rowPinned, column } = normalisedPosition ?? cellToFocus;
+        const col = column as AgColumn;
 
         this.navigateTo({
             scrollIndex: rowIndex,
             scrollType: null,
-            scrollColumn: column,
+            scrollColumn: col,
             focusIndex: rowIndex,
-            focusColumn: column,
+            focusColumn: col,
+            rowPinned,
         });
     }
 
@@ -350,10 +387,22 @@ export class NavigationService extends BeanStub implements NamedBean {
     // same cell into view (which means either scroll all the way up, or all the way down).
     private onHomeOrEndKey(key: string): void {
         const homeKey = key === KeyCode.PAGE_HOME;
-        const { visibleCols, pageBounds } = this.beans;
+        const { visibleCols, pageBounds, rowModel } = this.beans;
         const allColumns: AgColumn[] = visibleCols.allCols;
-        const columnToSelect = homeKey ? allColumns[0] : _last(allColumns);
         const scrollIndex = homeKey ? pageBounds.getFirstRow() : pageBounds.getLastRow();
+        const rowNode = rowModel.getRow(scrollIndex);
+
+        if (!rowNode) {
+            return;
+        }
+
+        const columnToSelect = (homeKey ? allColumns : [...allColumns].reverse()).find(
+            (col) => !col.isSuppressNavigable(rowNode) && !isRowNumberCol(col)
+        );
+
+        if (!columnToSelect) {
+            return;
+        }
 
         this.navigateTo({
             scrollIndex: scrollIndex,
@@ -391,21 +440,20 @@ export class NavigationService extends BeanStub implements NamedBean {
             const firstRow = rowPinned ? rowIndex === 0 : rowIndex === pageBounds.getFirstRow();
             if (firstRow) {
                 if (gos.get('headerHeight') === 0 || _isHeaderFocusSuppressed(beans)) {
-                    _focusNextGridCoreContainer(beans, true, true);
+                    _focusNextGridCoreContainer(beans, true, 'force');
                 } else {
                     keyboardEvent.preventDefault();
                     focusSvc.focusPreviousFromFirstCell(keyboardEvent);
                 }
             }
         } else {
-            // if the case it's a popup editor, the focus is on the editor and not the previous cell.
-            // in order for the tab navigation to work, we need to focus the browser back onto the
-            // previous cell.
-            if (previous instanceof CellCtrl) {
-                previous.focusCell(true);
+            // anchor container navigation on the cell when focus is in an editor or renderer child.
+            // re-focusing the cell itself would unnecessarily re-dispatch cellFocused.
+            if (previous instanceof CellCtrl && !previous.hasBrowserFocus(true)) {
+                previous.focusCell({ forceBrowserFocus: true });
             }
 
-            if ((!backwards && focusSvc.focusOverlay(false)) || _focusNextGridCoreContainer(beans, backwards)) {
+            if (focusSvc.focusOverlay(false) || _focusNextGridCoreContainer(beans, backwards)) {
                 keyboardEvent.preventDefault();
             }
         }
@@ -427,40 +475,34 @@ export class NavigationService extends BeanStub implements NamedBean {
         // or that the focusedCell is a Full Width Row
         if (!cellOrRow) {
             cellOrRow = rowRenderer.getRowByPosition(focusedCell);
-            if (!cellOrRow || !cellOrRow.isFullWidth()) {
+            if (!cellOrRow?.isFullWidth()) {
                 return false;
             }
         }
 
-        return !!this.tabToNextCellCommon(cellOrRow, backwards, event);
+        return !!this.tabToNextCellCommon(cellOrRow, backwards, event, 'api');
     }
 
     private tabToNextCellCommon(
         previous: CellCtrl | RowCtrl,
         backwards: boolean,
-        event?: KeyboardEvent
+        event?: KeyboardEvent,
+        source: 'api' | 'ui' = 'ui'
     ): boolean | null {
-        let editing = previous.editing;
+        const { editSvc, focusSvc } = this.beans;
 
-        // if cell is not editing, there is still chance row is editing if it's Full Row Editing
-        if (!editing && previous instanceof CellCtrl) {
-            const cell = previous as CellCtrl;
-            const row = cell.rowCtrl;
-            if (row) {
-                editing = row.editing;
-            }
+        let res: boolean | null | undefined;
+        const cellCtrl = previous instanceof CellCtrl ? previous : previous.getAllCellCtrls()?.[0];
+
+        const wasEditing = editSvc?.isEditing();
+        if (wasEditing) {
+            res = editSvc?.moveToNextCell(cellCtrl, backwards, event, source);
         }
 
-        let res: boolean | null;
-
-        if (editing) {
-            // if we are editing, we know it's not a Full Width Row (RowComp)
-            if (this.gos.get('editType') === 'fullRow') {
-                res = this.moveToNextEditingRow(previous as CellCtrl, backwards, event);
-            } else {
-                res = this.moveToNextEditingCell(previous as CellCtrl, backwards, event);
-            }
-        } else {
+        // if the cell was editing and res is false, it could be because validation blocked the edit
+        // if that is not the case and we are no longer editing, this means the `moveToNextCell` couldn't find
+        // another editable cell, so we switch to `moveToNextCellNotEditing` to find the next cell to focus on.
+        if (!wasEditing || (res === false && !editSvc?.isEditing())) {
             res = this.moveToNextCellNotEditing(previous, backwards);
         }
 
@@ -469,89 +511,7 @@ export class NavigationService extends BeanStub implements NamedBean {
         }
 
         // if a cell wasn't found, it's possible that focus was moved to the header
-        return res || !!this.beans.focusSvc.focusedHeader;
-    }
-
-    // returns null if no navigation should be performed
-    private moveToNextEditingCell(
-        previousCell: CellCtrl,
-        backwards: boolean,
-        event: KeyboardEvent | null = null
-    ): boolean | null {
-        const previousPos = previousCell.cellPosition;
-
-        // before we stop editing, we need to focus the cell element
-        // so the grid doesn't detect that focus has left the grid
-        previousCell.eGui.focus();
-
-        // need to do this before getting next cell to edit, in case the next cell
-        // has editable function (eg colDef.editable=func() ) and it depends on the
-        // result of this cell, so need to save updates from the first edit, in case
-        // the value is referenced in the function.
-        previousCell.stopEditing();
-
-        // find the next cell to start editing
-        const nextCell = this.findNextCellToFocusOn(previousPos, backwards, true) as CellCtrl | false;
-        if (nextCell === false) {
-            return null;
-        }
-        if (nextCell == null) {
-            return false;
-        }
-
-        // only prevent default if we found a cell. so if user is on last cell and hits tab, then we default
-        // to the normal tabbing so user can exit the grid.
-        this.beans.editSvc?.startEditing(nextCell, null, true, event);
-        nextCell.focusCell(false);
-        return true;
-    }
-
-    // returns null if no navigation should be performed
-    private moveToNextEditingRow(
-        previousCell: CellCtrl,
-        backwards: boolean,
-        event: KeyboardEvent | null = null
-    ): boolean | null {
-        const previousPos = previousCell.cellPosition;
-
-        // find the next cell to start editing
-        const nextCell = this.findNextCellToFocusOn(previousPos, backwards, true) as CellCtrl | false;
-        if (nextCell === false) {
-            return null;
-        }
-        if (nextCell == null) {
-            return false;
-        }
-
-        const nextPos = nextCell.cellPosition;
-
-        const previousEditable = this.isCellEditable(previousPos);
-        const nextEditable = this.isCellEditable(nextPos);
-
-        const rowsMatch =
-            nextPos && previousPos.rowIndex === nextPos.rowIndex && previousPos.rowPinned === nextPos.rowPinned;
-
-        const { editSvc, rowEditSvc } = this.beans;
-        if (previousEditable) {
-            editSvc?.setFocusOutOnEditor(previousCell);
-        }
-
-        if (!rowsMatch) {
-            const pRow = previousCell.rowCtrl;
-            editSvc?.stopRowEditing(pRow);
-
-            const nRow = nextCell.rowCtrl;
-            rowEditSvc?.startEditing(nRow, undefined, undefined, event);
-        }
-
-        if (nextEditable) {
-            editSvc?.setFocusInOnEditor(nextCell);
-            nextCell.focusCell();
-        } else {
-            nextCell.focusCell(true);
-        }
-
-        return true;
+        return res || !!focusSvc.focusedHeader;
     }
 
     // returns null if no navigation should be performed
@@ -564,11 +524,15 @@ export class NavigationService extends BeanStub implements NamedBean {
                 ...previousCell.getRowPosition(),
                 column: backwards ? displayedColumns[0] : _last(displayedColumns),
             };
+
+            if (this.gos.get('embedFullWidthRows')) {
+                cellPos.column = previousCell.getNavigationColumn();
+            }
         } else {
-            cellPos = previousCell.cellPosition;
+            cellPos = previousCell.getFocusedCellPosition();
         }
         // find the next cell to start editing
-        const nextCell = this.findNextCellToFocusOn(cellPos, backwards, false);
+        const nextCell = this.findNextCellToFocusOn(cellPos, { backwards, startEditing: false });
 
         // only prevent default if we found a cell. so if user is on last cell and hits tab, then we default
         // to the normal tabbing so user can exit the grid.
@@ -576,9 +540,9 @@ export class NavigationService extends BeanStub implements NamedBean {
             return null;
         }
         if (nextCell instanceof CellCtrl) {
-            nextCell.focusCell(true);
+            nextCell.focusCell({ forceBrowserFocus: true });
         } else if (nextCell) {
-            return this.tryToFocusFullWidthRow(nextCell.getRowPosition(), backwards);
+            return this.tryToFocusFullWidthRow(nextCell, backwards);
         }
 
         return _exists(nextCell);
@@ -586,16 +550,15 @@ export class NavigationService extends BeanStub implements NamedBean {
 
     /**
      * called by the cell, when tab is pressed while editing.
-     * @return: RenderedCell when navigation successful, false if navigation should not be performed, otherwise null
+     * @returns RenderedCell when navigation successful, false if navigation should not be performed, otherwise null
      */
-    private findNextCellToFocusOn(
+    public findNextCellToFocusOn(
         previousPosition: CellPosition,
-        backwards: boolean,
-        startEditing: boolean
-    ): CellCtrl | RowCtrl | null | false {
+        { backwards, startEditing, skipToNextEditableCell }: FindNextCellToFocusOnParams
+    ): CellCtrl | CellPosition | null | false {
         let nextPosition: CellPosition | null | undefined = previousPosition;
         const beans = this.beans;
-        const { cellNavigation, gos, focusSvc, rowRenderer, rangeSvc } = beans;
+        const { cellNavigation, gos, focusSvc, rowRenderer } = beans;
 
         while (true) {
             if (previousPosition !== nextPosition) {
@@ -657,7 +620,7 @@ export class NavigationService extends BeanStub implements NamedBean {
             // (except for the last one) which causes grid to stall for a while.
             // note - for full row edit, we do focus non-editable cells, as the row stays in edit mode.
             const fullRowEdit = gos.get('editType') === 'fullRow';
-            if (startEditing && !fullRowEdit) {
+            if (startEditing && (!fullRowEdit || skipToNextEditableCell)) {
                 const cellIsEditable = this.isCellEditable(nextPosition);
                 if (!cellIsEditable) {
                     continue;
@@ -677,16 +640,21 @@ export class NavigationService extends BeanStub implements NamedBean {
                 if (!row || !row.isFullWidth() || startEditing) {
                     continue;
                 }
-                return row;
+
+                return { ...row.getRowPosition(), column: nextPosition?.column };
             }
 
             if (cellNavigation!.isSuppressNavigable(nextCell.column, nextCell.rowNode)) {
                 continue;
             }
 
+            // when spanning we need to focus a specific index of the spanned cell, by
+            // setting it into the focused cell position we can try to force focus to this specific pos
+            nextCell.setFocusedCellPosition(nextPosition);
+
             // by default, when we click a cell, it gets selected into a range, so to keep keyboard navigation
             // consistent, we set into range here also.
-            rangeSvc?.setRangeToCell(nextPosition);
+            this.setRangeToCellIfSupported(nextPosition);
 
             // we successfully tabbed onto a grid cell, so return true
             return nextCell;
@@ -724,13 +692,19 @@ export class NavigationService extends BeanStub implements NamedBean {
         currentCell: CellPosition,
         allowUserOverride: boolean
     ) {
+        const isVertical = key === KeyCode.UP || key === KeyCode.DOWN;
+        const currentCellWithoutSpan =
+            isVertical && this.currentColumnWithoutSpan
+                ? { ...currentCell, column: this.currentColumnWithoutSpan }
+                : currentCell;
+
         // we keep searching for a next cell until we find one. this is how the group rows get skipped
-        let nextCell: CellPosition | null = currentCell;
+        let nextCell: CellPosition | null = currentCellWithoutSpan;
         let hitEdgeOfGrid = false;
         const beans = this.beans;
         const { cellNavigation, focusSvc, gos } = beans;
 
-        while (nextCell && (nextCell === currentCell || !this.isValidNavigateCell(nextCell))) {
+        while (nextCell && (nextCell === currentCellWithoutSpan || !this.isValidNavigateCell(nextCell))) {
             // if the current cell is spanning across multiple columns, we need to move
             // our current position to be the last cell on the right before finding the
             // the next target.
@@ -748,11 +722,11 @@ export class NavigationService extends BeanStub implements NamedBean {
             hitEdgeOfGrid = _missing(nextCell);
         }
 
-        if (hitEdgeOfGrid && event && event.key === KeyCode.UP) {
+        if (hitEdgeOfGrid && event?.key === KeyCode.UP) {
             nextCell = {
                 rowIndex: -1,
                 rowPinned: null,
-                column: currentCell.column,
+                column: currentCellWithoutSpan.column,
             };
         }
 
@@ -789,7 +763,10 @@ export class NavigationService extends BeanStub implements NamedBean {
             const headerLen = getFocusHeaderRowCount(beans);
 
             focusSvc.focusHeaderPosition({
-                headerPosition: { headerRowIndex: headerLen + nextCell.rowIndex, column: currentCell.column },
+                headerPosition: {
+                    headerRowIndex: headerLen + nextCell.rowIndex,
+                    column: nextCell.column ?? currentCell.column,
+                },
                 event: event || undefined,
                 fromCell: true,
             });
@@ -802,12 +779,36 @@ export class NavigationService extends BeanStub implements NamedBean {
         const normalisedPosition = this.getNormalisedPosition(nextCell);
         if (normalisedPosition) {
             this.focusPosition(normalisedPosition);
+            if (nextCell.column !== normalisedPosition.column) {
+                this.setCurrentColumnWithoutSpan(nextCell.column);
+            }
         } else {
             this.tryToFocusFullWidthRow(nextCell);
         }
     }
 
+    private setCurrentColumnWithoutSpan(column: Column): void {
+        if (!this.hasColumnWithoutSpanListener) {
+            const clearCurrentColumnWithoutSpan = () => {
+                this.currentColumnWithoutSpan = null;
+            };
+            this.addManagedEventListeners({
+                cellFocused: clearCurrentColumnWithoutSpan,
+                headerFocused: clearCurrentColumnWithoutSpan,
+            });
+            this.hasColumnWithoutSpanListener = true;
+        }
+
+        // preserve the requested column while focus is on the cell that spans it
+        this.currentColumnWithoutSpan = column;
+    }
+
     private getNormalisedPosition(cellPosition: CellPosition): CellPosition | null {
+        const isSpannedCell = !!this.beans.spannedRowRenderer?.getCellByPosition(cellPosition);
+        if (isSpannedCell) {
+            return cellPosition;
+        }
+
         // ensureCellVisible first, to make sure cell at position is rendered.
         this.ensureCellVisible(cellPosition);
 
@@ -818,7 +819,8 @@ export class NavigationService extends BeanStub implements NamedBean {
             return null;
         }
 
-        cellPosition = cellCtrl.cellPosition;
+        cellPosition = cellCtrl.getFocusedCellPosition();
+
         // we call this again, as nextCell can be different to it's previous value due to Column Spanning
         // (ie if cursor moving from right to left, and cell is spanning columns, then nextCell was the
         // last column in the group, however now it's the first column in the group). if we didn't do
@@ -833,7 +835,7 @@ export class NavigationService extends BeanStub implements NamedBean {
         const { visibleCols, rowRenderer, focusSvc, eventSvc } = this.beans;
         const displayedColumns = visibleCols.allCols;
         const rowComp = rowRenderer.getRowByPosition(position);
-        if (!rowComp || !rowComp.isFullWidth()) {
+        if (!rowComp?.isFullWidth()) {
             return false;
         }
 
@@ -865,7 +867,7 @@ export class NavigationService extends BeanStub implements NamedBean {
     }
 
     private focusPosition(cellPosition: CellPosition) {
-        const { focusSvc, rangeSvc } = this.beans;
+        const { focusSvc } = this.beans;
         focusSvc.setFocusedCell({
             rowIndex: cellPosition.rowIndex,
             column: cellPosition.column,
@@ -873,7 +875,15 @@ export class NavigationService extends BeanStub implements NamedBean {
             forceBrowserFocus: true,
         });
 
-        rangeSvc?.setRangeToCell(cellPosition);
+        this.setRangeToCellIfSupported(cellPosition);
+    }
+
+    private setRangeToCellIfSupported(cellPosition: CellPosition): void {
+        if (isRowNumberCol(cellPosition.column)) {
+            return;
+        }
+
+        this.beans.rangeSvc?.setRangeToCell(cellPosition);
     }
 
     private isValidNavigateCell(cell: CellPosition): boolean {
@@ -920,6 +930,20 @@ export class NavigationService extends BeanStub implements NamedBean {
         if (!gridCell.column.isPinned()) {
             scrollFeature.ensureColumnVisible(gridCell.column);
         }
+    }
+
+    public ensureColumnVisible(column: AgColumn): void {
+        const scrollFeature = this.gridBodyCon.scrollFeature;
+
+        // this scrolls the column into view
+        if (!column.isPinned()) {
+            scrollFeature.ensureColumnVisible(column);
+        }
+    }
+
+    public ensureRowVisible(rowIndex: number): void {
+        const scrollFeature = this.gridBodyCon.scrollFeature;
+        scrollFeature.ensureIndexVisible(rowIndex);
     }
 }
 

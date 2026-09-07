@@ -6,14 +6,26 @@ Date Filters allow you to filter date data.
 
 {% imageCaption imagePath="resources/date-filter.png" alt="Date Filter" centered=true /%}
 
-Configure as follows:
+## Enabling Date Filters
+
+{% gridExampleRunner title="Date Filter" name="date-filter" /%}
+
+The Date Filter is the default filter used in AG Grid Community for columns with date [Cell Data Type](./cell-data-types/), but it can also be explicitly configured as shown below:
 
 ```{% frameworkTransform=true %}
 const gridOptions = {
     columnDefs: [
         {
-            field: 'date',
-            // configure column to use the Date Filter
+            field: 'startDate',
+            // Date Filter is used by default in Community version for date columns
+            filter: true,
+            filterParams: {
+                // pass in additional parameters to the Date Filter
+            },
+        },
+        {
+            field: 'endDate',
+            // explicitly configure column to use the Date Filter
             filter: 'agDateColumnFilter',
             filterParams: {
                 // pass in additional parameters to the Date Filter
@@ -23,20 +35,9 @@ const gridOptions = {
 }
 ```
 
-The example below shows the Date Filter in action:
+## Date Filter Parameters
 
-* The **Date** column is using a Date Filter.
-* A [Date Filter Comparator](#date-filter-comparator) is provided to parse the data and allow date comparisons to be made.
-* The minimum valid year is set to `2000`, and maximum valid year is `2021`. Dates outside this range will be considered invalid, and will:
-  * Deactivate the column filter. This avoids the filter getting applied as the user is typing a year - for example suppose the user is typing the year `2008`, the filter doesn't execute for values `2`, `20` or `200` (as the text `2008` is partially typed).
-  * Be highlighted with a red border (default theme) or other theme-appropriate highlight.
-* the `inRangeFloatingFilterDateFormat` property has been set to define a custom date format, this is only shown in the floating filter panel when an in-range filter has been applied.
-
-{% gridExampleRunner title="Date Picker" name="date-filter"  exampleHeight=520 /%}
-
-## Configuration
-
-Date Filters are configured though the `filterParams` attribute of the column definition (`IDateFilterParams` interface):
+Date Filters are configured through the `filterParams` attribute of the column definition (`IDateFilterParams` interface):
 
 {% interfaceDocumentation interfaceName="IDateFilterParams" overrideSrc="filter-date/date-filter-params.json" config={"description":"", "sortAlphabetically":true} /%}
 
@@ -44,10 +45,13 @@ Date Filters are configured though the `filterParams` attribute of the column de
 
 The example below demonstrates configuring date range filtering in the Date Filter with minimum and maximum validation dates:
 
-* The `minValidDate` parameter is set to `2008-01-08` using a string.
-* The `maxValidDate` is dynamically set to tomorrow's date using JavaScript's Date object.
-* Together, `minValidDate` and `maxValidDate` restrict the selectable date range.
-* Any manually entered or selected dates outside the valid range will be invalid.
+- For the **Start Date** column:
+    - The `minValidDate` parameter is set to `'2000-01-01'` using a string.
+    - The `maxValidDate` is dynamically set to tomorrow's date using a `Date` object.
+- For the **End Date** column:
+    - The `minValidYear` parameter is set to `2010`.
+    - The `maxValidYear` parameter is set to `2030`.
+- Dates outside the valid ranges will be invalid.
 
 {% gridExampleRunner title="Setting Date Range For Filter" name="range-for-date-filter"  exampleHeight=520 /%}
 
@@ -55,19 +59,25 @@ The example below demonstrates configuring date range filtering in the Date Filt
 
 Dates can be represented in your data in many ways e.g. as a JavaScript `Date` object, as a string in a particular format such as `'26-MAR-2020'`, or something else. How you represent dates will be particular to your application.
 
-By default, the date filter assumes you are using JavaScript `Date` objects. If this is the case, the date filter will work out of the box. However, if your date is in any other format you will have to provide your own `comparator` to perform the date comparisons.
+The Date Filter will automatically be configured to work correctly if the [Cell Data Type](./cell-data-types/) is `date`, `dateString`, `dateTime` or `dateTimeString`.
+
+{% note %}
+If using `Date` objects, the default date comparator assumes that the `Date`s do not have a time (e.g. they are at midnight local time). If your dates have times, then you will either need to override the [Filter Values](#filter-values) to remove the time, to switch cell data type to `dateTime`, or provide a `comparator` that can handle the time.
+{% /note %}
+
+If you are not using Cell Data Types (and the cell value is not a `Date` object, which will also work automatically), then a `comparator` needs to be configured to allow the Date Filter to perform the date comparisons.
 
 {% interfaceDocumentation interfaceName="IDateFilterParams" names=["comparator"] config={"description":"", "overrideBottomMargin":"1rem"} /%}
 
 The `comparator` function takes two parameters. The first parameter is a JavaScript `Date` object for the selected date in the filter (with the time set to midnight). The second parameter is the current value of the cell in the row being evaluated. The function must return:
 
-* Any number < 0 if the cell value is less than the filter date.
-* 0 if the dates are the same.
-* Any number > 0 if the cell value is greater than the filter date.
+- Any number < 0 if the cell value is less than the filter date.
+- 0 if the dates are the same.
+- Any number > 0 if the cell value is greater than the filter date.
 
 This pattern is intended to be similar to the JavaScript `compareTo(a, b)` function.
 
-Below is an example of using a date filter with a comparator.
+A date filter with a comparator can be configured similar to the following:
 
 ```{% frameworkTransform=true %}
 const gridOptions = {
@@ -110,11 +120,17 @@ const gridOptions = {
 
 Once the date comparator callback is provided, then the Date Filter is able to perform all the comparison operations it needs, e.g. 'Less Than', 'Greater Than' and 'Equals'.
 
+If the cell values can contain invalid dates, then the `isValidDate` filter param should be implemented alongside `comparator` to allow the invalid date values to be filtered out.
+
+The example below demonstrates configuring a comparator:
+
+{% gridExampleRunner title="Date Filter Comparator" name="date-filter-comparator" /%}
+
 ## Filter Model
 
 The Filter Model describes the current state of the applied Date Filter. The Date Filter Model represents the Date as a string in format `'YYYY-MM-DD'`, however when doing comparisons the date is provided as a JavaScript `Date` object as that's what date pickers typically work with. The model uses string representation to make it easier to save and avoid any timezone issues.
 
-If only one [Filter Condition](./filter-conditions/) is set, this will be a `DateFilterModel`:
+If only one [Filter Condition](./filter-conditions/#filter-options) is set, this will be a `DateFilterModel`:
 
 {% interfaceDocumentation interfaceName="DateFilterModel" config={"description":""} /%}
 
@@ -133,8 +149,6 @@ interface ICombinedSimpleModel<DateFilterModel> {
 
 type JoinOperator = 'AND' | 'OR';
 ```
-
-Note that in AG Grid versions prior to 29.2, only two Filter Conditions were supported. These appeared in the Combined Model as properties `condition1` and `condition2`. The grid will still accept and supply models using these properties, but this behaviour is deprecated. The `conditions` property should be used instead.
 
 An example of a Filter Model with two conditions is as follows:
 
@@ -162,22 +176,110 @@ const dateEquals04OrEquals08 = {
 
 The Date Filter presents a list of [Filter Options](./filter-conditions/#filter-options) to the user.
 
-The list of options are as follows:
+The list of options is as follows:
 
-| Option Name             | Option Key            | Included by Default |
-| ----------------------- | --------------------- | ------------------- |
-| Equals                  | `equals`              | Yes                 |
-| Does not equal          | `notEqual`            | Yes                 |
-| Before                  | `lessThan`            | Yes                 |
-| After                   | `greaterThan`         | Yes                 |
-| Between                 | `inRange`             | Yes                 |
-| Blank                   | `blank`               | Yes                 |
-| Not blank               | `notBlank`            | Yes                 |
-| Choose one              | `empty`               | No                  |
+| Option Name    | Option Key    | Included by Default |
+| -------------- | ------------- | ------------------- |
+| Equals         | `equals`      | Yes                 |
+| Does not equal | `notEqual`    | Yes                 |
+| Before         | `lessThan`    | Yes                 |
+| After          | `greaterThan` | Yes                 |
+| Between        | `inRange`     | Yes                 |
+| Blank          | `blank`       | Yes                 |
+| Not blank      | `notBlank`    | Yes                 |
+| Choose one     | `empty`       | No                  |
 
 Note that the `empty` filter option is primarily used when creating [Custom Filter Options](./filter-conditions/#custom-filter-options). When 'Choose one' is displayed, the filter is not active.
 
 The default option for the Date Filter is `equals`.
+
+When providing filter options, the default filter option (or the first option if no default set) must be an option that displays an input or the `empty` filter option (as a filter option with no inputs would mean the filter is active by default).
+
+## Built-in Named & Relative Date Ranges
+
+Date Filter supports a set of predefined named and relative date ranges to make common filtering tasks easier. These ranges are relative to the browser local time. These are ideal for users who want to filter by familiar time periods like "Last Week", "Year to Date", or "Next 30 Days" without extending a grid with a custom solution.
+
+{% note %}
+Built-in named and relative date ranges are evaluated using the browser’s local time zone, not server time. This means results can differ between users in different time zones, and results can change when the local date changes and the filter is re-applied.
+
+Week-based ranges (such as `thisWeek` and `lastWeek`) use the first day of the week from the browser’s locale settings. If the locale does not provide this information, Monday is used.
+{% /note %}
+
+### Enabling Built-in Date Ranges
+
+To enable the built-in date ranges, add them to the `filterOptions` array in your date filter configuration. The options are not included by default.
+
+#### Example: Enable Built-in Date Ranges
+
+{% gridExampleRunner title="Built-in Date Ranges" name="built-in-date-ranges" exampleHeight=640 /%}
+
+Example above uses following configuration:
+
+```ts
+// Enable built-in date ranges
+const columnDefs: ColDef[] = [
+  {
+    filter: 'agDateColumnFilter',
+    filterParams: {
+      // Enable built-in named & relative date ranges
+      filterOptions: [
+        'empty', // optional: show 'Choose one' option first
+        'yesterday',
+        'today',
+        'tomorrow',
+        'last7Days',
+        'lastWeek',
+        'thisWeek',
+        'nextWeek',
+        'last30Days',
+        'lastMonth',
+        // ... All other preset ranges
+      ],
+      // Other filter settings...
+    },
+  },
+];
+```
+
+### Available Built-in Date Filter Options
+
+| Option Name        | Option Key     | Time Range Start >=                    | Time Range End <              |
+| ------------------ | -------------- | -------------------------------------- | :---------------------------- |
+| Today              | `today`        | `Start Of Today`                       | `Start Of Tomorrow`           |
+| Yesterday          | `yesterday`    | `Start Of Yesterday`                   | `Start Of Today`              |
+| Tomorrow           | `tomorrow`     | `Start Of Tomorrow`                    | `Start Of Day After Tomorrow` |
+| This Week          | `thisWeek`     | `Start Of Current Week`                | `Start Of Next Week`          |
+| Last Week          | `lastWeek`     | `Start Of Previous Week`               | `Start Of Current Week`       |
+| Next Week          | `nextWeek`     | `Start Of Next Week`                   | `Start Of Week After Next`    |
+| This Month         | `thisMonth`    | `Start Of Current Month`               | `Start Of Next Month`         |
+| Last Month         | `lastMonth`    | `Start Of Previous Month`              | `Start Of Current Month`      |
+| Next Month         | `nextMonth`    | `Start Of Next Month`                  | `Start Of Month After Next`   |
+| This Quarter       | `thisQuarter`  | `Start Of Current Quarter`             | `Start Of Next Quarter`       |
+| Last Quarter       | `lastQuarter`  | `Start Of Previous Quarter`            | `Start Of Current Quarter`    |
+| Next Quarter       | `nextQuarter`  | `Start Of Next Quarter`                | `Start Of Quarter After Next` |
+| This Year          | `thisYear`     | `Start Of Current Year`                | `Start Of Next Year`          |
+| Last Year          | `lastYear`     | `Start Of Previous Year`               | `Start Of Current Year`       |
+| Next Year          | `nextYear`     | `Start Of Next Year`                   | `Start Of Year After Next`    |
+| Year to Date (YTD) | `yearToDate`   | `Start Of Current Year`                | `Start Of Tomorrow`           |
+| Last 7 Days        | `last7Days`    | `Start of the day 7 days before today` | `Start Of Tomorrow`           |
+| Last 30 Days       | `last30Days`   | `Start Of Today minus 30 days`         | `Start Of Tomorrow`           |
+| Last 90 Days       | `last90Days`   | `Start Of Today minus 90 days`         | `Start Of Tomorrow`           |
+| Last 6 Months      | `last6Months`  | `Start Of Today minus 6 months`        | `Start Of Tomorrow`           |
+| Last 12 Months     | `last12Months` | `Start Of Today minus 12 months`       | `Start Of Tomorrow`           |
+| Last 24 Months     | `last24Months` | `Start Of Today minus 24 months`       | `Start Of Tomorrow`           |
+
+{% note %}
+`Start Of Today`, `Start Of Tomorrow`, `Start Of XXX` point to the beginning of the corresponding day, e.g. `00:00:00.000` in the browser’s local time zone.
+{% /note %}
+
+For date range filters, the Grid State model matches the SSRM request model shape. See [SSRM Preset Date Range Filters](./server-side-model-filtering/#preset-date-range-filters) for the server-side filtering contract.
+
+## Range Input Validation and Error States
+
+When using the `inRange` filter type, the grid performs input validation to ensure the bounds of the range produce a valid filter; that is, where the start date is earlier than the end date.
+
+Where this is not the case, the last edited input will display a red border and a hover tooltip directing the user to enter a valid date. While the filter is in an invalid state, the filter will not be applied.
+Screen readers that respond to the `aria-invalid` attribute or the `ValidityState` of the input will detect the input as invalid.
 
 ## Filter Values
 
@@ -213,12 +315,12 @@ The example below shows how to register a custom date component that contains an
 
 Applying the Date Filter is described in more detail in the following sections:
 
-* [Apply, Clear, Reset and Cancel Buttons](./filter-applying/#apply-clear-reset-and-cancel-buttons)
-* [Applying the UI Model](./filter-applying/#applying-the-ui-model)
+- [Apply, Clear, Reset and Cancel Buttons](./filter-applying/#apply-clear-reset-and-cancel-buttons)
+- [Applying the UI Model](./filter-applying/#applying-the-ui-model)
 
 ## Blank Cells
 
-If the row data contains blanks (i.e. `null` or `undefined`), by default the row won't be included in filter results. To change this, use the filter params `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange`. For example, the code snippet below configures a filter to include `null` for equals, but not for less than, greater than or in range (between):
+If the row data contains blanks (i.e. `null`, `undefined`, or an empty or whitespace-only string), by default the row won't be included in filter results. To change this, use the filter params `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange`. For example, the code snippet below configures a filter to include `null` for equals, but not for less than, greater than or in range (between):
 
 ```js
 const filterParams = {
@@ -232,15 +334,11 @@ const filterParams = {
 
 In the following example you can filter by date and see how blank values are included. Note the following:
 
-* Column **Date** has both `null` and `undefined` values resulting in blank cells.
-* Toggle the controls on the top to see how `includeBlanksInEquals`, `includeBlanksInNotEqual`,  `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange` impact the search result.
+- Column **Date** has both `null` and `undefined` values resulting in blank cells.
+- Toggle the controls on the top to see how `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange` impact the search result.
 
 {% gridExampleRunner title="Date Null Filtering" name="date-null-filtering" exampleHeight=310 /%}
 
 ## Data Updates
 
 The Date Filter is not affected by data changes. When the grid data is updated, the filter value will remain unchanged and the filter will be re-applied based on the updated data (e.g. the displayed rows will update if necessary).
-
-## Next Up
-
-Continue to the next section to learn about [Set Filters](./filter-set/).

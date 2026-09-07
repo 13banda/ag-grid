@@ -1,0 +1,28 @@
+import { TestGridsManager } from 'ag-test-utils';
+
+import { CellStyleModule, RowSelectionModule } from 'ag-grid-community';
+import { FindModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+import { getTestGenerator } from '../../../util';
+import { rowModelGridOptions } from '../../grid-config';
+import { findSnapshotter, getGridOptions_checkboxes, getTestConcerns_checkboxes } from '../../grouping-test-utils';
+
+describe('ag-grid find API', () => {
+    const gridsManager = new TestGridsManager({
+        modules: [FindModule, RowGroupingModule, CellStyleModule, RowSelectionModule],
+    });
+    const createTests = getTestGenerator(gridsManager, findSnapshotter);
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    const gridOptions = rowModelGridOptions.csrm;
+    describe('with rowModelType=clientSide - checkboxes', () => {
+        createTests(getTestConcerns_checkboxes(gridOptions), getGridOptions_checkboxes(gridOptions));
+    });
+});

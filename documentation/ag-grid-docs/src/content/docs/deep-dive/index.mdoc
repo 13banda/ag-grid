@@ -1,8 +1,9 @@
 ---
 title: "Creating a Basic Grid"
+description: "Learn to create and configure an AG Grid from scratch, covering row data, column definitions, grid options, formatting, and custom components."
 ---
 
-An introduction to the key concepts of AG Grid.
+Learn how to create and configure an AG Grid instance from scratch. This guide introduces the essential concepts required to build an interactive grid, including setting up row data, defining columns, applying grid options, formatting cell values, and adding custom components.
 
 ## Overview
 
@@ -23,69 +24,70 @@ Once complete, you'll have an interactive grid, with custom components and forma
 ## Create a Basic Grid
 
 {% if isFramework("javascript") %}
+
 <!-- Create a Basic Grid -->
 
 Complete our [Quick Start](./getting-started/) (or open the example below in CodeSandbox / Plunker) to start with a basic grid, comprised of:
 
-1) **Grid Options:** An object which holds all of the options for the grid, such as Row Data & Column Definitions.
-1) **Row Data:** The data to be displayed.
-1) **Column Definition:** Defines & controls grid columns.
-1) **Container:** A div that contains and defines the grid's dimensions.
-1) **Grid API:** Provides access to Grid API methods. Initialised when creating a new grid.
+1. **Grid Options:** An object which holds all of the options for the grid, such as Row Data & Column Definitions.
+1. **Row Data:** The data to be displayed.
+1. **Column Definition:** Defines & controls grid columns.
+1. **Container:** A div that contains and defines the grid's dimensions.
+1. **Grid API:** Provides access to Grid API methods. Initialised when creating a new grid.
 
 {% gridExampleRunner title="Basic Example" name="basic-example"  exampleHeight=220 /%}
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Create a Basic Grid -->
 
 Complete our [Quick Start](./getting-started/) (or open the example below in CodeSandbox / Plunker) to start with a basic grid, comprised of:
 
-1) **Row Data:** The data to be displayed.
-1) **Column Definition:** Defines & controls grid columns.
-1) **Container:** A div that contains the grid and defines it's dimensions.
-1) **Grid Component:** The `AgGridReact` component with **Row Data** and **Column Definition** props.
+1. **Row Data:** The data to be displayed.
+1. **Column Definition:** Defines & controls grid columns.
+1. **Container:** A div that contains the grid and defines its dimensions.
+1. **Grid Component:** The `AgGridReact` component with **Row Data** and **Column Definition** props.
 
 {% gridExampleRunner title="Basic Example" name="basic-example"  exampleHeight=220 /%}
 
 _Note: `rowData` and `columnDefs` arrays use the `useState` hook. We recommend `useState` if the data is mutable, otherwise `useMemo` is preferable. Read our [Best Practices](./react-hooks/) guide to learn more about using React hooks with AG Grid._
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Create a Basic Grid -->
 
 Complete our [Quick Start](./getting-started/) (or open the example below in CodeSandbox / Plunker) to start with a basic grid, comprised of:
 
-1) **Row Data:** The data to be displayed.
-1) **Column Definition:** Defines & controls grid columns.
-1) **Grid Component:** The `ag-grid-angular` component, with Dimensions, Row Data, and Column Definition attributes
+1. **Row Data:** The data to be displayed.
+1. **Column Definition:** Defines & controls grid columns.
+1. **Grid Component:** The `ag-grid-angular` component, with Dimensions, Row Data, and Column Definition attributes
 
 {% gridExampleRunner title="Basic Example" name="basic-example"  exampleHeight=220 /%}
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Create a Basic Grid -->
 
 Complete our [Quick Start](./getting-started/) (or open the example below in CodeSandbox / Plunker) to start with a basic grid, comprised of:
 
-1) **Row Data:** The data to be displayed.
-1) **Column Definition:** Defines & controls grid columns.
-1) **Grid Component:** The `ag-grid-vue` component, with Dimensions, Row Data, and Column Definition attributes
+1. **Row Data:** The data to be displayed.
+1. **Column Definition:** Defines & controls grid columns.
+1. **Grid Component:** The `ag-grid-vue` component, with Dimensions, Row Data, and Column Definition attributes
 
 {% gridExampleRunner title="Basic Example" name="basic-example"  exampleHeight=220 /%}
 
-***
 {% /if %}
 
 ## Load New Data
 
 {% if isFramework("javascript") %}
+
 <!-- Load New Data -->
 
 The Grid API provides a way of interacting with the grid. To update the data within the grid, we can use the `setGridOption` API. Let's test this by fetching some data and updating our grid with the response:
@@ -101,7 +103,7 @@ Now that we're loading data from an external source, we can empty our `rowData` 
 ```jsx
 const gridOptions = {
     rowData: [],
-    colDefs: [
+    columnDefs: [
         { field: "mission" },
         { field: "company" },
         { field: "location" },
@@ -119,10 +121,10 @@ When we run our application, we should see a grid with ~1,400 rows of new data, 
 
 _Note: There are a large number of APIs available. See our [API Docs](./grid-api/) for an exhaustive list._
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Load New Data -->
 
 As `rowData` is a reactive property, any updates to its state will be reflected in the grid. Let's test this by fetching some data from an external server and updating `rowData` with the response:
@@ -161,10 +163,10 @@ When we run our application, we should see a grid with ~1,400 rows of new data, 
 
 _Note: All properties that are not tagged as 'initial' are reactive. See our [API docs](./grid-options/) for a complete list._
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Load New Data -->
 
 As rowData is a managed property, any updates to its value will be reflected in the grid. Let's test this by fetching some data from an external server with [Angular's HttpClient](https://angular.dev/guide/http) and updating rowData with the response.
@@ -178,7 +180,7 @@ First we need to hook into the `gridReady` event by adding `(gridReady)="onGridR
     [rowData]="rowData"
     [columnDefs]="colDefs"
     (gridReady)="onGridReady($event)"
-    />
+/>
 ```
 
 _Note: [Grid Events](./deep-dive/#handle-grid-events) are covered in more detail later on_
@@ -219,10 +221,10 @@ When we run our application, we should see a grid with ~1,400 rows of new data, 
 
 _Note: All [Grid Option](./grid-options/) properties tagged as 'managed' are automatically updated when their value changes._
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Load New Data -->
 
 As rowData is a managed property, any updates to its value will be reflected in the grid. Let's test this by fetching some data from an external server and updating rowData with the response.
@@ -266,12 +268,12 @@ When we run our application, we should see a grid with ~1,400 rows of new data, 
 
 Note: All [Grid Option](./grid-options/) properties tagged as 'managed' are automatically updated when their value changes.
 
-***
 {% /if %}
 
 ## Configure Columns
 
 {% if isFramework("javascript") %}
+
 <!-- Configure Columns -->
 
 Now that we have a basic grid with some arbitrary data, we can start to configure the grid with _**Column Properties**_.
@@ -293,6 +295,7 @@ _Note: Column properties can be used to configure a wide-range of features; refe
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Configure Columns -->
 
 Now that we have a basic grid with some arbitrary data, we can start to configure the grid with _**Column Properties**_.
@@ -314,6 +317,7 @@ _Note: Column properties can be used to configure a wide-range of features; refe
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Configure Columns -->
 
 Now that we have a basic grid with some arbitrary data, we can start to configure the grid with _**Column Properties**_.
@@ -335,6 +339,7 @@ _Note: Column properties can be used to configure a wide-range of features; refe
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Configure Columns -->
 
 Now that we have a basic grid with some arbitrary data, we can start to configure the grid with _**Column Properties**_.
@@ -345,7 +350,7 @@ Column Properties can be added to one or more columns to enable/disable column-s
 const colDefs = ref([
     { field: "mission", filter: true },
     // ...
-];
+]);
 ```
 
 We should now be able to filter the 'mission' column - you can test this by filtering for the 'Apollo' missions:
@@ -358,6 +363,7 @@ _Note: Column properties can be used to configure a wide-range of features; refe
 ### Default Column Definitions
 
 {% if isFramework("javascript") %}
+
 <!-- Default Column Definitions -->
 
 The example above demonstrates how to configure a single column. To apply this configuration across all columns we can use _**Default Column Definitions**_ instead. Let's make all of our columns filterable by adding the `defaultColDef` property to our Grid Options object, and setting `filter: true`:
@@ -377,10 +383,10 @@ The grid should now allow filtering on all columns:
 
 _Note: Column Definitions take precedence over Default Column Definitions_
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Default Column Definitions -->
 
 The example above demonstrates how to configure a single column. To apply this configuration across all columns we can use _**Default Column Definitions**_ instead. Let's make all of our columns filterable by creating a `defaultColDef` object, setting `filter: true`, and passing this to the grid via the `defaultColDef` prop:
@@ -405,10 +411,10 @@ The grid should now allow filtering on all columns:
 
 _Note: Column Definitions take precedence over Default Column Definitions_
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Default Column Definitions -->
 
 The example above demonstrates how to configure a single column. To apply this configuration across all columns we can use _**Default Column Definitions**_ instead. Let's make all of our columns filterable by creating a `defaultColDef` object, setting `filter: true`, and passing this to our template:
@@ -421,15 +427,15 @@ The example above demonstrates how to configure a single column. To apply this c
         <ag-grid-angular
             ...
             [defaultColDef]="defaultColDef"
-            />
+        />
     </div>
     `,
     // ...
 })
 
 export class AppComponent {
-    // Default Column Definitions: Apply configuration across all columns
-    defaultColDef: ColDef = {
+// Default Column Definitions: Apply configuration across all columns
+defaultColDef: ColDef = {
         filter: true
     }
     // ...
@@ -442,10 +448,10 @@ The grid should now allow filtering on all columns:
 
 _Note: Column Definitions take precedence over Default Column Definitions_
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Default Column Definitions -->
 
 The example above demonstrates how to configure a single column. To apply this configuration across all columns we can use _**Default Column Definitions**_ instead. Let's make all of our columns filterable by creating a `defaultColDef` object with the property `filter: true`:
@@ -457,11 +463,11 @@ const App = {
             filter: true
         });
         // ...
+        return {
+            defaultColDef
+            // ...
+        };
     }
-    return {
-        defaultColDef
-        // ...
-    };
     // ...
 }
 ```
@@ -490,12 +496,12 @@ The grid should now allow filtering on all columns:
 
 _Note: Column Definitions take precedence over Default Column Definitions_
 
-***
 {% /if %}
 
 ## Configure The Grid
 
 {% if isFramework("javascript") %}
+
 <!-- Configure The Grid-->
 
 So far we've covered creating a grid, updating the data within the grid, and configuring columns. This section introduces **Grid Options**, which control functionality that extends across both rows & columns, such as Pagination and Row Selection.
@@ -515,10 +521,10 @@ We should now see Pagination has been enabled on the grid:
 
 _Refer to our detailed [Grid Options](./grid-options/) documentation for a full list of options._
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Configure The Grid-->
 
 So far we've covered creating a grid, updating the data within the grid, and configuring columns. This section introduces **Grid Options**, which control functionality that extends across both rows & columns, such as Pagination and Row Selection.
@@ -540,10 +546,10 @@ We should now see Pagination has been enabled on the grid:
 
 _Refer to our detailed [Grid Options](./grid-options/) documentation for a full list of options._
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Configure The Grid-->
 
 So far we've covered creating a grid, updating the data within the grid, and configuring columns. This section introduces **Grid Options**, which control functionality that extends across both rows & columns, such as Pagination and Row Selection.
@@ -555,7 +561,7 @@ Grid Options are passed to the grid via attributes on the `ag-grid-angular` comp
 <ag-grid-angular
     ...
     [pagination]="true"
-    />
+/>
 ```
 
 We should now see Pagination has been enabled on the grid:
@@ -564,10 +570,10 @@ We should now see Pagination has been enabled on the grid:
 
 _Refer to our detailed [Grid Options](./grid-options/) documentation for a full list of options._
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Configure The Grid-->
 
 So far we've covered creating a grid, updating the data within the grid, and configuring columns. This section introduces **Grid Options**, which control functionality that extends across both rows & columns, such as Pagination and Row Selection.
@@ -577,7 +583,7 @@ Grid Options are added directly to the `ag-grid-vue` component. Let's test this 
 ```jsx
 const App = {
     name: "App",
-    template: 
+    template:
         `
         <ag-grid-vue
             style="width: 100%; height: 100%"
@@ -598,12 +604,12 @@ We should now see Pagination has been enabled on the grid:
 
 _Refer to our detailed [Grid Options](./grid-options/) documentation for a full list of options._
 
-***
 {% /if %}
 
 ## Format Cell Values
 
 {% if isFramework("javascript") %}
+
 <!-- Format Cell Values-->
 
 The data supplied to the grid usually requires some degree of formatting. For basic text formatting we can use **Value Formatters**.
@@ -615,7 +621,7 @@ columnDefs: [
     {
         field: "price",
         // Return formatted value
-        valueFormatter: (params) => { return '£' + params.value.toLocaleString(); }
+        valueFormatter: (params) => { return params.value == null ? '' : '£' + params.value.toLocaleString(); }
     },
 ],
 ```
@@ -626,10 +632,10 @@ The grid should now show the formatted value in the 'price' column:
 
 _Note: Read our [Value Formatter](./value-formatters/) page for more information on formatting cell values_
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Format Cell Values-->
 
 The data supplied to the grid usually requires some degree of formatting. For basic text formatting we can use **Value Formatters**.
@@ -641,7 +647,7 @@ const [colDefs] = useState([
     {
         field: "price",
         // Return a formatted string for this column
-        valueFormatter: params => { return '£' + params.value.toLocaleString(); }
+        valueFormatter: params => { return params.value == null ? '' : '£' + params.value.toLocaleString(); }
     },
     // ...
 ]);
@@ -653,10 +659,10 @@ The grid should now show the formatted value in the 'price' column:
 
 _Note: Read our [Value Formatter](./value-formatters/) page for more information on formatting cell values_
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Format Cell Values-->
 
 The data supplied to the grid usually requires some degree of formatting. For basic text formatting we can use **Value Formatters**.
@@ -667,7 +673,7 @@ The data supplied to the grid usually requires some degree of formatting. For ba
 colDefs: ColDef[] = [
     {
         field: "price",
-        valueFormatter: params => { return '£' + params.value.toLocaleString(); } // Format with inline function
+        valueFormatter: params => { return params.value == null ? '' : '£' + params.value.toLocaleString(); } // Format with inline function
     },
     // ...
 ];
@@ -679,10 +685,10 @@ The grid should now show the formatted value in the 'price' column:
 
 _Note: Read our [Value Formatter](./value-formatters/) page for more information on formatting cell values_
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Format Cell Values-->
 
 The data supplied to the grid usually requires some degree of formatting. For basic text formatting we can use **Value Formatters**.
@@ -691,7 +697,7 @@ The data supplied to the grid usually requires some degree of formatting. For ba
 
 ```jsx
 const colDefs = ref([
-    { field: "price", valueFormatter: (params) => { return '£' + params.value.toLocaleString(); } },
+    { field: "price", valueFormatter: (params) => { return params.value == null ? '' : '£' + params.value.toLocaleString(); } },
     // ...
 ]);
 ```
@@ -706,6 +712,7 @@ _Note: Read our [Value Formatter](./value-formatters/) page for more information
 ## Custom Cell Components
 
 {% if isFramework("javascript") %}
+
 <!-- Custom Cell Components-->
 
 **Value Formatters** are useful for basic formatting, but for more advanced use-cases we can use **Cell Renderers** instead.
@@ -721,10 +728,12 @@ class CompanyLogoRenderer {
     // Optional: Params for rendering. The same params that are passed to the cellRenderer function.
     init(params) {
         let companyLogo = document.createElement('img');
-        companyLogo.src = `https://www.ag-grid.com/example-assets/space-company-logos/${params.value.toLowerCase()}.png`
+        if (params.value != null) {
+            companyLogo.src = `https://www.ag-grid.com/example-assets/space-company-logos/${params.value.toLowerCase()}.png`
+        }
         companyLogo.setAttribute('style', 'display: block; width: 25px; height: auto; max-height: 50%; margin-right: 12px; filter: brightness(1.1)');
         let companyName = document.createElement('p');
-        companyName.textContent = params.value;
+        companyName.textContent = params.value ?? '';
         companyName.setAttribute('style', 'text-overflow: ellipsis; overflow: hidden; white-space: nowrap;');
         this.eGui = document.createElement('span');
         this.eGui.setAttribute('style', 'display: flex; height: 100%; width: 100%; align-items: center')
@@ -762,10 +771,10 @@ Now, when we run the grid, we should see a company logo next to the name:
 
 _Note: Read our [Cell Components](./component-cell-renderer/) page for more information on using custom components in cells_
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Custom Cell Components-->
 
 **Value Formatters** are useful for basic formatting, but for more advanced use-cases we can use **Cell Renderers** instead.
@@ -800,10 +809,10 @@ Now, when we run the grid, we should see a company logo next to the name:
 
 _Note: Read our [Cell Components](./component-cell-renderer/) page for more information on using custom components in cells_
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Custom Cell Components-->
 
 **Value Formatters** are useful for basic formatting, but for more advanced use-cases we can use **Cell Renderers** instead.
@@ -817,7 +826,6 @@ Let's try this by creating a new component to display the company logo in the 'c
 @Component({
     selector: 'app-company-logo-renderer',
     standalone: true,
-    imports: [CommonModule],
     template: `<span>@if(value){<img [alt]="value" [src]="'https://www.ag-grid.com/example-assets/space-company-logos/' + value.toLowerCase() + '.png'" /> <p>{{ value }}</p>}</span>`,
     styles: ["img {display: block; width: 25px; height: auto; max-height: 50%; margin-right: 12px; filter: brightness(1.2);} span {display: flex; height: 100%; width: 100%; align-items: center} p { text-overflow: ellipsis; overflow: hidden; white-space: nowrap }"]
     })
@@ -829,7 +837,6 @@ Let's try this by creating a new component to display the company logo in the 'c
         this.value = params.value;
     }
 
-    // Return Cell Value
     refresh(params: ICellRendererParams): boolean {
         this.value = params.value;
         return true;
@@ -855,10 +862,10 @@ Now, when we run the grid, we should see a company logo next to the name:
 
 _Note: Read our [Cell Components](./component-cell-renderer/) page for more information on using custom components in cells_
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Custom Cell Components-->
 
 **Value Formatters** are useful for basic formatting, but for more advanced use-cases we can use **Cell Renderers** instead.
@@ -912,12 +919,12 @@ Now, when we run the grid, we should see a company logo next to the name:
 
 _Note: Read our [Cell Components](./component-cell-renderer/) page for more information on using custom components in cells_
 
-***
 {% /if %}
 
 ## Handle Grid Events
 
 {% if isFramework("javascript") %}
+
 <!-- Handle Grid Events-->
 
 In the last section of this tutorial we're going to hook into events raised by the grid using _**Grid Events**_.
@@ -947,10 +954,10 @@ Now, when we click on a cell we should be able to edit it and see the new value 
 
 _Refer to our [Grid Events](./grid-events/) documentation for a full list of events raised by the grid_
 
-***
 {% /if %}
 
 {% if isFramework("react") %}
+
 <!-- Handle Grid Events-->
 
 In the last section of this tutorial we're going to hook into events raised by the grid using _**Grid Events**_.
@@ -978,10 +985,10 @@ Now, when we click on a cell we should be able to edit it and see the new value 
 
 _Refer to our [Grid Events](./grid-events/) documentation for a full list of events raised by the grid_
 
-***
 {% /if %}
 
 {% if isFramework("angular") %}
+
 <!-- Handle Grid Events-->
 
 In the last section of this tutorial we're going to hook into events raised by the grid using _**Grid Events**_.
@@ -992,7 +999,7 @@ Let's try this out by enabling cell editing with `editable: true` on the Default
 
 ```ts
 // Default Column Definitions: Apply configuration across all columns
-    defaultColDef: ColDef = {
+defaultColDef: ColDef = {
     editable: true
     // ...
 }
@@ -1007,14 +1014,14 @@ onCellValueChanged = (event: CellValueChangedEvent) => {
 }
 ```
 
-Finally, let's add the `gridReady` attribute to the `ag-grid-angular` component, with the value as the function we've just created:
+Finally, let's add the `cellValueChanged` attribute to the `ag-grid-angular` component, with the value as the function we've just created:
 
 ```ts
 <!-- The AG Grid component, with various Grid Option properties -->
 <ag-grid-angular
-    (gridReady)="onGridReady($event)"
+    (cellValueChanged)="onCellValueChanged($event)"
     ...
-    />
+/>
 ```
 
 Now, when we click on a cell we should be able to edit it and see the new value logged to the console:
@@ -1023,10 +1030,10 @@ Now, when we click on a cell we should be able to edit it and see the new value 
 
 _Refer to our [Grid Events](./grid-events/) documentation for a full list of events raised by the grid_
 
-***
 {% /if %}
 
 {% if isFramework("vue") %}
+
 <!-- Handle Grid Events-->
 
 In the last section of this tutorial we're going to hook into events raised by the grid using _**Grid Events**_.
@@ -1072,33 +1079,32 @@ _Refer to our [Grid Events](./grid-events/) documentation for a full list of eve
 
 Let's put what you've learned so far into action by modifying the grid:
 
-1) Enable filtering on all columns
+1. Enable filtering on all columns
 
-   _Hint: `filter` is a Column Definition property_
+    _Hint: `filter` is a Column Definition property_
 
-1) Enable multiple row selection
+1. Enable multiple row selection
 
-   _Hint: `selection` is a Grid Option property_
+    _Hint: `rowSelection` is a Grid Option property_
 
-1) Log a message to the console when a row selection is changed
+1. Log a message to the console when a row selection is changed
 
-   _Hint: `onSelectionChanged` is a Grid Event_
+    _Hint: `onSelectionChanged` is a Grid Event_
 
-1) Format the Date column using `.toLocaleDateString()`;
+1. Format the Date column using `.toLocaleDateString()`;
 
-   _Hint: Use a `valueFormatter` on the 'Date' column to format its value_
+    _Hint: Use a `valueFormatter` on the 'Date' column to format its value_
 
-1) Add a Cell Renderer to display [ticks](https://www.ag-grid.com/example-assets/icons/tick-in-circle.png) and [crosses](https://www.ag-grid.com/example-assets/icons/cross-in-circle.png) in place of checkboxes on the 'Successful' column:
+1. Add a Cell Renderer to display [ticks](https://www.ag-grid.com/example-assets/icons/tick-in-circle.png) and [crosses](https://www.ag-grid.com/example-assets/icons/cross-in-circle.png) in place of checkboxes on the 'Successful' column:
 
-   _Hint: Use a `cellRenderer` on the 'successful' column_
+    _Hint: Use a `cellRenderer` on the 'successful' column_
 
 Once complete, your grid should look like the example below. If you're stuck, check out the source code to see how its done:
 
 {% gridExampleRunner title="Testing Example" name="testing-example"  exampleHeight=550 /%}
 
-***
-
 ## Summary
+
 <!-- Summary-->
 
 Congratulations! You've completed the tutorial and built your first grid. By now, you should be familiar with the key concepts of AG Grid:

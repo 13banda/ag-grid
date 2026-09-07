@@ -19,7 +19,7 @@ const gridOptions = {
         {
             field: 'employee',
             valueGetter: params => params.data.firstName,
-            valueFormatter: params => params.value.toUpperCase(),
+            valueFormatter: params => params.value?.toUpperCase() ?? '',
         },
         // column definition using expressions
         {
@@ -41,18 +41,18 @@ In this example string expressions are used instead of functions for `valueGette
 
 The following variables are available to the expression with the following params mapping:
 
-* `x` => params.value
-* `value` => params.value
-* `oldValue` => params.oldValue
-* `newValue` => params.newValue
-* `node` => params.node
-* `data` => params.data
-* `colDef` => params.colDef
-* `column` => params.column
-* `columnGroup` => params.columnGroup
-* `getValue` => params.getValue
-* `api` => params.api
-* `ctx` => params.context
+- `x` => params.value
+- `value` => params.value
+- `oldValue` => params.oldValue
+- `newValue` => params.newValue
+- `node` => params.node
+- `data` => params.data
+- `colDef` => params.colDef
+- `column` => params.column
+- `columnGroup` => params.columnGroup
+- `getValue` => params.getValue
+- `api` => params.api
+- `ctx` => params.context
 
 For example, for `valueFormatter`'s, you can access to the value via the 'x' and 'value' attributes. However in `valueGetter`'s, the 'x' and 'value' will be undefined as these are not part of the `valueGetter` params.
 
@@ -65,6 +65,12 @@ functions and thus benefit from compile time checks, debugging etc.
 
 The advantage of expressions is that they are more compact, and it keeps your column definitions as simple JSON objects
 (just strings, no functions) which makes them candidates for saving in offline storage (e.g. storing a report definition in a database).
+
+{% note %}
+String based expressions are parsed and evaluated as JavaScript. Use of this form of expression may require configuration of your [Content Security Policy](./security/#content-security-policy-csp).
+
+Functions are recommended for most use cases, unless there is a specific need for string-based expressions.
+{% /note %}
 
 ## Cell Expressions
 
@@ -90,11 +96,11 @@ Because you have access to the context (ctx) in your expression, you can add fun
 
 This example demonstrates cell expressions. The second column values in the LHS (Left-Hand Side) grid all have expressions. The following can be noted:
 
-* "Number Squared" and "Number x 2" both take the number from the header as an input.
-* "Today's Date" prints the date.
-* "Sum A" and "Sum B" both call a user provided function that is attached to the context (Note that "Sum A" and "Sum B" are using values from the RHS grid).
+- "Number Squared" and "Number x 2" both take the number from the header as an input.
+- "Today's Date" prints the date.
+- "Sum A" and "Sum B" both call a user provided function that is attached to the context (Note that "Sum A" and "Sum B" are using values from the RHS grid).
 
-{% gridExampleRunner title="Cell Expressions" name="cell-expressions" typescriptOnly=true exampleHeight=455 /%}
+{% gridExampleRunner title="Cell Expressions" name="cell-expressions" exampleHeight=455 /%}
 
 ## How Expressions Work
 
@@ -105,13 +111,13 @@ When you provide an expression to the grid, the grid converts the expression int
 colDef.valueGetter = 'data.firstName';
 
 // the grid will then compile the above to this:
-___compiledValueGetter = (node, data, colDef, column, api, context, getValue) => {
+___compiledValueGetter = (node, data, colDef, column, api, ctx, getValue) => {
     return data.firstName;
 }
 ```
 
 If your expression has the word `return` in it, then the grid will assume it is a multi line expression and will not wrap it.
 
-If your valueGetter does not have the word 'return' in it, then the grid will insert the 'return' statement and the ';' for you.
+If your value getter does not have the word `return` in it, then the grid will insert the `return` statement and the `;` for you.
 
-If your expression has many lines, then you will need to provide the ';' at the end of each line and also provide the 'return' statement.
+If your expression has many lines, then you will need to provide the `;` at the end of each line and also provide the `return` statement.

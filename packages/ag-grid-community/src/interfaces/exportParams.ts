@@ -1,5 +1,6 @@
 import type { Column, ColumnGroup } from './iColumn';
 import type { AgGridCommon } from './iCommon';
+import type { CellValueResolveFrom } from './iEditService';
 import type { IRowNode } from './iRowNode';
 import type { RowPosition } from './iRowPosition';
 
@@ -65,6 +66,28 @@ export interface BaseExportParams {
      * @default false
      */
     skipPinnedBottom?: boolean;
+    /**
+     * Set to `true` to omit the body copies of manually pinned rows. The rows in the pinned sections
+     * are still exported unless `skipPinnedTop` or `skipPinnedBottom` is enabled.
+     * @default false
+     */
+    skipPinnedRowDuplicates?: boolean;
+
+    /**
+     * The base source to use for getting cell values.
+     * - `'data'`: values from the underlying row data
+     * - `'batch'`: pending batch edit values (falls back to data if not in batch mode)
+     * - `'edit'`: current editor values including live typing
+     * @default 'data'
+     */
+    valueFrom?: CellValueResolveFrom;
+
+    /**
+     * Apply the Show Values As transform (e.g. a percentage of a total) on top of the `valueFrom` base, so the
+     * export carries the displayed value for columns with an active mode. Columns without one export the base value.
+     * @default true
+     */
+    transformValues?: boolean;
 
     /**
      * A callback function that will be invoked once per row in the grid. Return true to omit the row from the export.
@@ -101,6 +124,12 @@ export interface ExportParams<T> extends BaseExportParams {
 
     /** A callback function to return content to be inserted below a row in the export. */
     getCustomContentBelowRow?: (params: ProcessRowGroupForExportParams) => T | undefined;
+
+    /**
+     * Set to `true` to allow the contents of the Row Numbers column to be exported.
+     * @default false
+     */
+    exportRowNumbers?: boolean;
 }
 
 export type PackageFileParams<T> = T & {
@@ -143,27 +172,52 @@ export interface ShouldRowBeSkippedParams<TData = any, TContext = any> extends A
     node: IRowNode<TData>;
 }
 
+export type ProcessCellForClipboard<TData = any, TContext = any> = (
+    params: ProcessCellForExportParams<TData, TContext>
+) => any;
+export type ProcessCellFromClipboard<TData = any, TContext = any> = (
+    params: ProcessCellForExportParams<TData, TContext>
+) => any;
+
 export interface ProcessCellForExportParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /** The raw cell value before any formatting or processing. */
     value: any;
+    /**
+     * The zero-based row index in the exported output, including any prepended content rows.
+     * Only populated for file export flows (`'excel'`, `'csv'`); omitted for clipboard flows.
+     */
     accumulatedRowIndex?: number;
+    /** The row node for the cell. May be `null` or `undefined` for clipboard flows when no row is associated. */
     node?: IRowNode<TData> | null;
+    /** The column for the cell. */
     column: Column;
-    type: string; // clipboard, dragCopy (ctrl+D), export
+    /** The operation that triggered the callback */
+    type: string;
     /** Utility function to parse a value using the column's `colDef.valueParser` */
     parseValue: (value: string) => any;
     /** Utility function to format a value using the column's `colDef.valueFormatter` */
     formatValue: (value: any) => string;
 }
 
+export type ProcessHeaderForClipboard<TData = any, TContext = any> = (
+    params: ProcessHeaderForExportParams<TData, TContext>
+) => any;
 export interface ProcessHeaderForExportParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /** The grid column */
     column: Column;
 }
 
+export type ProcessGroupHeaderForClipboard<TData = any, TContext = any> = (
+    params: ProcessGroupHeaderForExportParams<TData, TContext>
+) => any;
 export interface ProcessGroupHeaderForExportParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /** The grid column group */
     columnGroup: ColumnGroup;
 }
 
 export interface ProcessRowGroupForExportParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /** Row node. */
     node: IRowNode<TData>;
+    /** The grid column */
     column?: Column;
 }

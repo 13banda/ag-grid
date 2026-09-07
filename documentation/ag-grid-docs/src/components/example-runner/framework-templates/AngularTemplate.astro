@@ -1,10 +1,9 @@
 ---
 import { MetaData } from './lib/MetaData';
-import { ExampleStyle } from './lib/ExampleStyle';
-import { Styles } from './lib/Styles';
-import { Extras } from './lib/Extras';
-import { SystemJs } from './lib/SystemJs';
-import { pathJoin } from '@utils/pathJoin';
+import ExampleStyle from './lib/ExampleStyle.astro';
+import Styles from './lib/Styles.astro';
+import Extras from './lib/Extras.astro';
+import { ExampleModules } from './lib/ExampleModules';
 import { getCacheBustingUrl } from '@utils/gridLibraryPaths';
 import { Scripts } from './lib/Scripts';
 
@@ -12,34 +11,41 @@ interface Props {
     isDev: boolean;
     title: string;
     isEnterprise: boolean;
+    isIntegratedCharts?: boolean;
 
     modifiedTimeMs: number;
     entryFileName: string;
+    fileNames: string[];
 
     styleFiles?: string[];
     scriptFiles: string[];
     appLocation: string;
-    boilerplatePath: string;
     extraStyles?: string;
-    children?: any;
+    headFragment?: string;
     extras?: string[];
+    usesMathRandom?: boolean;
+    transpileInBrowser?: boolean;
+    nonce?: string;
 }
 
 const {
     title,
     isDev,
     isEnterprise,
+    isIntegratedCharts,
     modifiedTimeMs,
     appLocation,
     entryFileName,
+    fileNames,
     styleFiles,
     scriptFiles,
-    boilerplatePath,
     extraStyles,
+    headFragment,
     extras,
+    usesMathRandom,
+    transpileInBrowser,
+    nonce,
 } = Astro.props as Props;
-
-const startFile = pathJoin(appLocation, entryFileName);
 ---
 
 <html lang="en">
@@ -55,24 +61,39 @@ const startFile = pathJoin(appLocation, entryFileName);
                 : []}
         />
         <Extras extras={extras ?? []} />
+        <Fragment set:html={headFragment} />
     </head>
     <body>
         <my-app></my-app>
 
-        <script is:inline>
+        <script
+            is:inline
+            nonce={nonce}
+            define:vars={{
+                appLocation,
+            }}
+        >
+            window.__basePath = appLocation;
+        </script>
+
+        <script is:inline nonce={nonce}>
             document.write('<base href="' + document.location + '" />');
         </script>
-        <script is:inline src="https://cdn.jsdelivr.net/npm/core-js-bundle@3.6.5/minified.js"></script>
-        <script is:inline src="https://cdn.jsdelivr.net/npm/zone.js@0.14.3/bundles/zone.umd.min.js"></script>
+        <script is:inline nonce={nonce} src="https://cdn.jsdelivr.net/npm/core-js-bundle@3.6.5/minified.js"></script>
+        <script is:inline nonce={nonce} src="https://cdn.jsdelivr.net/npm/zone.js@0.14.3/bundles/zone.umd.min.js"
+        ></script>
 
-        {scriptFiles && <Scripts baseUrl={appLocation} files={scriptFiles} />}
-        <SystemJs
-            isDev={isDev}
-            boilerplatePath={boilerplatePath}
+        {scriptFiles && <Scripts baseUrl={appLocation} files={scriptFiles} nonce={nonce} />}
+        <ExampleModules
             appLocation={appLocation}
-            startFile={startFile}
+            entryFileName={entryFileName}
+            fileNames={fileNames}
             internalFramework={'angular'}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={isIntegratedCharts}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         />
         <Styles
             baseUrl={appLocation}

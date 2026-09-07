@@ -6,10 +6,15 @@ import {
     NumberFilterModule,
     PinnedRowModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     PinnedRowModule,
@@ -20,7 +25,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     TextFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
@@ -77,7 +81,6 @@ let gridApi: GridApi<IOlympicData>;
 const gridOptions: GridOptions<IOlympicData> = {
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
     pinnedTopRowData: [
         {
             athlete: 'TOP (athlete)',

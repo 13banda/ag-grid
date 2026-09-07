@@ -54,7 +54,6 @@
     font-size: var(--text-fs-lg);
     font-weight: var(--text-semibold);
     color: var(--color-util-brand-600);
-    text-transform: capitalize;
 
     #{$selector-darkmode} & {
         color: var(--color-util-brand-900);
@@ -65,7 +64,6 @@
     font-size: 40px;
     font-weight: var(--text-bold);
     letter-spacing: -1px;
-    text-transform: capitalize;
 
     @media screen and (max-width: $breakpoint-landing-page-medium) {
         padding: 0;
@@ -85,6 +83,15 @@
     text-align: left;
     margin-bottom: $spacing-size-12;
     gap: $spacing-size-2;
+}
+
+// Lays out the section's CTAs in a row. A section with a single CTA is unaffected; sections that
+// add a secondary CTA wrap onto a second line rather than overflowing on narrow viewports.
+.ctaGroup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: $spacing-size-3;
 }
 
 .ctaButton {
@@ -115,6 +122,10 @@
 .CTAWithFrameworks {
     display: flex;
     align-items: flex-end;
+
+    @media screen and (max-width: 440px) {
+        transform: translateX(-10%) scale(0.8);
+    }
 }
 
 .frameworkSelector {
@@ -242,7 +253,6 @@
 }
 
 .frameworkName {
-    text-transform: capitalize;
     font-weight: 600;
 }
 

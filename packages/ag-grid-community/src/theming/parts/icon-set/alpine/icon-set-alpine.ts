@@ -1,8 +1,8 @@
-import { createPart } from '../../../Part';
-import { sharedIconStylesCSS } from '../shared-icon-styles.css-GENERATED';
-import { iconSetAlpineCSS } from './icon-set-alpine.css-GENERATED';
+import { createPart } from 'ag-stack';
+
+import iconSetAlpineCSS from './icon-set-alpine.css';
 
 export const iconSetAlpine = /*#__PURE__*/ createPart({
     feature: 'iconSet',
-    css: () => sharedIconStylesCSS + iconSetAlpineCSS,
+    css: iconSetAlpineCSS,
 });

@@ -1,0 +1,541 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import styles from '../../pages-styles/beyond-the-prompt.module.scss';
+
+import { Icon } from '@ag-website-shared/components/icon/Icon';
+import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
+import { DISABLE_MARKDOWN_DOCS } from '@constants';
+import {
+    PAGE_CONTENT,
+    SESSIONS,
+    SPEAKERS,
+    headSlug,
+    sessionDurationMins,
+    sessionSlug,
+    sessionThumbSlug,
+    youtubeId,
+} from '@utils/beyondThePromptSessions';
+import CommunityMenu from '@ag-website-shared/components/community/components/CommunityMenu';
+import communityMenu from '@ag-website-shared/content/community/community-menu.json';
+
+const SOCIAL_IMAGE_URL = 'images/campaigns/beyond-the-prompt/social-card.png';
+
+// Featured faces for the hero (use the SVG illustrations).
+// Order is intentional: the middle slot drops down in the layout to create a
+// small zigzag, so the bookend slots (1 and 3) sit at the natural top while
+// slot 2 takes the dropped position.
+const HERO_FACES = [
+    { name: 'Maggie', src: 'images/campaigns/beyond-the-prompt/svg/maggie.svg' },
+    { name: 'Stephen', src: 'images/campaigns/beyond-the-prompt/svg/stephen.svg' },
+    { name: 'Matt Pocock', src: 'images/campaigns/beyond-the-prompt/svg/matt-pocock.svg' },
+];
+
+// Photos from the day, shown as a black-and-white carousel (webp conversions
+// of the event photography).
+const GALLERY_IMAGES = [
+    'images/campaigns/beyond-the-prompt/gallery/gallery-01.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-02.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-03.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-04.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-05.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-06.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-07.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-08.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-09.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-10.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-11.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-12.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-13.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-14.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-15.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-16.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-17.webp',
+    'images/campaigns/beyond-the-prompt/gallery/gallery-18.webp',
+];
+
+const markdownUrl = DISABLE_MARKDOWN_DOCS ? undefined : urlWithBaseUrl('/community/beyond-the-prompt.md');
+---
+
+{/* Astro hoists these <link> tags into <head> at build time, so the Geist fonts only load on this page. */}
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap"
+    rel="stylesheet"
+/>
+
+{
+    /*
+    Page-only global override: the campaign uses a #F2F2F2 page background, but the
+    html/body still default to white from the global design system so over-scroll
+    (macOS bounce, mobile rubber-band) flashes white. Scope this to the page by
+    only emitting it from this .astro file.
+*/
+}
+<style is:global>
+    html,
+    body {
+        background-color: #f2f2f2;
+    }
+
+    /*
+        Brand-coloured text selection. `::selection` is a pseudo-element and
+        can't be hashed by CSS Modules, so we route it through `is:global`,
+        but because this <style> block lives in a page component, it's
+        only emitted into the bundle for this route, so other pages keep
+        the browser default.
+    */
+    ::selection {
+        background-color: #f43800;
+        color: #fff;
+    }
+</style>
+
+<Layout
+    title={'Beyond the Prompt: AG Grid & Bryntum Conference, 19 May 2026'}
+    description={'A one-day conference from AG Grid and Bryntum on building AI-assisted applications that hold up in production. Tuesday 19 May 2026, IET London.'}
+    showDocsNav={false}
+    showSearchBar={false}
+    hideHeader={false}
+    hideFooter={true}
+    overrideSocialImage={SOCIAL_IMAGE_URL}
+    showAnnouncementBanner={false}
+    markdownUrl={markdownUrl}
+>
+    <div class={styles.page}>
+        <nav class={styles.communityNav} aria-label="Community">
+            <div class={styles.container}>
+                <CommunityMenu client:load path={Astro.url.pathname} menu={communityMenu} />
+            </div>
+        </nav>
+        <section class={styles.hero} id="top">
+            <div class={styles.container}>
+                <div class={styles.heroInner}>
+                    <div class={styles.heroContent}>
+                        <div class={styles.heroLogos}>
+                            <img
+                                src={urlWithBaseUrl('images/ag-logos/svg-logos/AG-Grid-Logo_Light-Theme.svg')}
+                                alt="AG Grid"
+                                class={styles.heroLogoAg}
+                            />
+                            <span class={styles.heroLogoX} aria-hidden="true">×</span>
+                            <img
+                                src={urlWithBaseUrl('images/campaigns/bryntum-logo.webp')}
+                                alt="Bryntum"
+                                class={styles.heroLogoBryntum}
+                            />
+                        </div>
+
+                        <p class={styles.eyebrow}>AG Grid × Bryntum Event Series</p>
+
+                        <h1 class={styles.heroTitle}>
+                            <img
+                                src={urlWithBaseUrl('images/campaigns/beyond-the-prompt/logo-btp.svg')}
+                                alt="Beyond the Prompt"
+                                class={styles.heroTitleLogo}
+                                width="338"
+                                height="238"
+                            />
+                        </h1>
+
+                        <h2 class={styles.heroTagline}>
+                            A one-day conference on building applications that hold up in production, hosted by
+                            <span class={styles.noWrap}>AG Grid</span> and Bryntum.
+                        </h2>
+
+                        <ul class={styles.heroMeta}>
+                            <li>
+                                <Icon name="mapPin" />
+                                <span>New York City</span>
+                                <span class={styles.heroMetaNewBadge}>New!</span>
+                            </li>
+                        </ul>
+
+                        <a href="#notify" class={styles.heroNotifyBtn}>Get notified</a>
+                    </div>
+
+                    <div class={styles.heroFaces} aria-hidden="true">
+                        {
+                            HERO_FACES.map((face) => (
+                                <img src={urlWithBaseUrl(face.src)} alt="" class={styles.heroFace} loading="eager" />
+                            ))
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class={styles.heroVideo} aria-label="Beyond the Prompt recap">
+            <div class={styles.container}>
+                <div class={styles.heroVideoFrame}>
+                    <button
+                        type="button"
+                        class={styles.heroVideoPlay}
+                        data-session-modal
+                        data-youtube-id="LvGRBbTuAnM"
+                        aria-label="Play the conference recap"
+                    >
+                        <img
+                            src={urlWithBaseUrl('images/campaigns/beyond-the-prompt/recap.webp')}
+                            alt="Beyond the Prompt recap"
+                            class={styles.heroVideoThumb}
+                            loading="lazy"
+                        />
+                        <span class={styles.heroVideoPlayIcon} aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class={styles.intro}>
+            <div class={styles.container}>
+                <div class={styles.introGrid}>
+                    <div class={styles.introText}>
+                        <div class={styles.sectionHeader}>
+                            <h2 class={styles.sectionTitle}>{PAGE_CONTENT.intro.heading}</h2>
+                        </div>
+                        <div class={styles.introBody}>
+                            {PAGE_CONTENT.intro.body.map((paragraph) => <p>{paragraph}</p>)}
+                        </div>
+                    </div>
+                    <img
+                        class={styles.introImage}
+                        src={urlWithBaseUrl('images/campaigns/beyond-the-prompt/intro-production.webp')}
+                        alt="Beyond the Prompt signage at IET London"
+                        loading="lazy"
+                    />
+                </div>
+            </div>
+        </section>
+
+        <section id="programme" class={styles.programmeSection}>
+            <div class={styles.sectionRule}>
+                <p class={styles.programmeLocation}>{PAGE_CONTENT.programme.location}</p>
+                <div class={styles.programmeTabs} role="tablist" aria-label="Programme">
+                    <button
+                        type="button"
+                        role="tab"
+                        id="tab-talks"
+                        class={styles.programmeTab}
+                        aria-controls="panel-talks"
+                        aria-selected="true"
+                        data-tab="talks"
+                    >
+                        Talks
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        id="tab-speakers"
+                        class={styles.programmeTab}
+                        aria-controls="panel-speakers"
+                        aria-selected="false"
+                        data-tab="speakers"
+                    >
+                        Speakers
+                    </button>
+                </div>
+            </div>
+
+            <div id="panel-speakers" role="tabpanel" aria-labelledby="tab-speakers" data-panel="speakers" hidden>
+                <div class={styles.container}>
+                    <p class={styles.sectionLead}>{PAGE_CONTENT.programme.speakersLead}</p>
+
+                    <div class={styles.speakerGrid}>
+                        {
+                            SPEAKERS.map((speaker) => (
+                                <article class={styles.speakerCard}>
+                                    <div class={styles.speakerImageWrap}>
+                                        <img
+                                            src={urlWithBaseUrl(speaker.image)}
+                                            alt={speaker.name}
+                                            class:list={[
+                                                styles.speakerImage,
+                                                speaker.imageFit === 'contain' && styles.speakerImageContain,
+                                            ]}
+                                            loading="lazy"
+                                        />
+                                        {/*
+                                        Re-shaded variant for the orange hover state. Sits on top of
+                                        the default illustration via `position: absolute` so the two
+                                        portraits crossfade in place when the card is hovered. The
+                                        wrap turns orange in CSS at the same time, so the orange-bg
+                                        SVG's dither/knockout reads correctly. Decorative; the
+                                        first <img> already carries the speaker's name as alt text.
+                                    */}
+                                        {speaker.imageOrange && (
+                                            <img
+                                                src={urlWithBaseUrl(speaker.imageOrange)}
+                                                alt=""
+                                                aria-hidden="true"
+                                                class:list={[
+                                                    styles.speakerImage,
+                                                    styles.speakerImageOrange,
+                                                    speaker.imageFit === 'contain' && styles.speakerImageContain,
+                                                ]}
+                                                loading="lazy"
+                                            />
+                                        )}
+                                    </div>
+                                    <h3 class={styles.speakerName}>{speaker.name}</h3>
+                                    <p class={styles.speakerTitle}>{speaker.title}</p>
+                                    <p class={styles.speakerBio}>{speaker.bio}</p>
+                                </article>
+                            ))
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div id="panel-talks" role="tabpanel" aria-labelledby="tab-talks" data-panel="talks">
+                <div class={styles.container}>
+                    <div class={styles.agenda}>
+                        <div class={styles.agendaHead}>
+                            <span>Title</span>
+                            <span>Speakers</span>
+                        </div>
+                        <ol class={styles.agendaList}>
+                            {
+                                SESSIONS.map((item) => {
+                                    const thumbSlug = sessionThumbSlug(item);
+                                    const mins = sessionDurationMins(item);
+                                    return (
+                                        <li class={styles.agendaRow} data-session-row>
+                                            <div class={styles.agendaBody}>
+                                                {item.youtubeUrl && (
+                                                    <span class={styles.agendaThumbWrap}>
+                                                        <img
+                                                            class={styles.agendaThumb}
+                                                            src={
+                                                                thumbSlug
+                                                                    ? urlWithBaseUrl(
+                                                                          `images/campaigns/beyond-the-prompt/thumbnails/${thumbSlug}.webp`
+                                                                      )
+                                                                    : `https://i.ytimg.com/vi/${youtubeId(item.youtubeUrl)}/hqdefault.jpg`
+                                                            }
+                                                            alt=""
+                                                            aria-hidden="true"
+                                                            loading="lazy"
+                                                        />
+                                                        <span class={styles.agendaThumbPlay} aria-hidden="true" />
+                                                    </span>
+                                                )}
+                                                <div class={styles.agendaText}>
+                                                    {mins && <p class={styles.agendaDuration}>{mins} mins</p>}
+                                                    {item.youtubeUrl ? (
+                                                        <a
+                                                            class={styles.agendaTitleLink}
+                                                            href={urlWithBaseUrl(
+                                                                `/session/${sessionSlug(item.title)}/`
+                                                            )}
+                                                            data-session-modal
+                                                            data-youtube-id={youtubeId(item.youtubeUrl)}
+                                                        >
+                                                            <h3 class={styles.agendaTitle}>{item.title}</h3>
+                                                        </a>
+                                                    ) : (
+                                                        <h3 class={styles.agendaTitle}>{item.title}</h3>
+                                                    )}
+                                                    {item.description && (
+                                                        <p class={styles.agendaDescription}>{item.description}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div
+                                                class:list={[
+                                                    styles.agendaSpeakersCol,
+                                                    item.speakers &&
+                                                        item.speakers.length > 1 &&
+                                                        styles.agendaSpeakersColMulti,
+                                                    item.speakers &&
+                                                        item.speakers.length > 2 &&
+                                                        styles.agendaSpeakersColWide,
+                                                ]}
+                                            >
+                                                {item.speakers?.map((sp) => (
+                                                    <div class={styles.agendaSpeaker}>
+                                                        <span class={styles.agendaAvatar} aria-hidden="true">
+                                                            <img
+                                                                src={urlWithBaseUrl(
+                                                                    `images/campaigns/beyond-the-prompt/heads/${headSlug(sp.name)}-cream.webp`
+                                                                )}
+                                                                alt=""
+                                                                loading="lazy"
+                                                                class={styles.agendaAvatarImg}
+                                                            />
+                                                            <img
+                                                                src={urlWithBaseUrl(
+                                                                    `images/campaigns/beyond-the-prompt/heads/${headSlug(sp.name)}-orange.webp`
+                                                                )}
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                loading="lazy"
+                                                                class:list={[
+                                                                    styles.agendaAvatarImg,
+                                                                    styles.agendaAvatarImgOrange,
+                                                                ]}
+                                                            />
+                                                        </span>
+                                                        <span class={styles.agendaSpeakerName}>
+                                                            {sp.name} ({sp.role})
+                                                        </span>
+                                                        <img
+                                                            class={styles.agendaSpeakerRotating}
+                                                            data-head={headSlug(sp.name)}
+                                                            src={urlWithBaseUrl(
+                                                                `images/campaigns/beyond-the-prompt/heads/${headSlug(sp.name)}-orange.webp`
+                                                            )}
+                                                            alt=""
+                                                            aria-hidden="true"
+                                                            loading="lazy"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {item.youtubeUrl && (
+                                                <span class={styles.agendaWatch} aria-hidden="true">
+                                                    Watch talk →
+                                                </span>
+                                            )}
+                                        </li>
+                                    );
+                                })
+                            }
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class={styles.gallerySection} aria-label="Photos from the day" data-gallery>
+            <div class={styles.galleryViewport}>
+                {/* Slides are rendered twice so the marquee loops seamlessly. */}
+                <ol class={styles.galleryTrack} aria-hidden="true">
+                    {
+                        [...GALLERY_IMAGES, ...GALLERY_IMAGES].map((src) => (
+                            <li
+                                class:list={[
+                                    styles.gallerySlide,
+                                    (src.includes('gallery-17') || src.includes('gallery-18')) &&
+                                        styles.gallerySlidePortrait,
+                                ]}
+                            >
+                                <img
+                                    src={urlWithBaseUrl(src)}
+                                    alt=""
+                                    loading="lazy"
+                                    class:list={[
+                                        styles.galleryImage,
+                                        src.includes('gallery-02') && styles.galleryImageTop,
+                                    ]}
+                                />
+                            </li>
+                        ))
+                    }
+                </ol>
+            </div>
+        </section>
+
+        <section id="notify" class={styles.notify}>
+            <div class={styles.container}>
+                <div class={styles.notifyInner}>
+                    <div class={styles.sectionHeader}>
+                        <p class={styles.eyebrowAccent}>
+                            <Icon name="mapPin" />
+                            {PAGE_CONTENT.notify.location}
+                        </p>
+                        <h2 class={styles.sectionTitle}>{PAGE_CONTENT.notify.heading}</h2>
+                        <p class={styles.notifyLead}>{PAGE_CONTENT.notify.lead}</p>
+                    </div>
+
+                    <div id="mc_embed_signup">
+                        <form
+                            action="https://ag-grid.us11.list-manage.com/subscribe/post?u=9b44b788c97fa5b498fbbc9b5&id=a95f562d37&f_id=007ad5e3f0"
+                            method="post"
+                            id="mc-embedded-subscribe-form"
+                            name="mc-embedded-subscribe-form"
+                            target="_self"
+                            class={styles.notifyForm}
+                        >
+                            <div class={styles.notifyField}>
+                                <label class={styles.notifyLabel} for="mce-EMAIL">
+                                    Email address <span aria-hidden="true">*</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    name="EMAIL"
+                                    id="mce-EMAIL"
+                                    class={styles.notifyInput}
+                                    placeholder="you@example.com"
+                                    required
+                                />
+                            </div>
+
+                            <div class={styles.notifyGdpr}>
+                                <label class={styles.notifyCheckbox} for="gdpr_47554">
+                                    <input type="checkbox" id="gdpr_47554" name="gdpr[47554]" value="Y" />
+                                    <span>
+                                        Opt in to receive product updates, news, and marketing communications from AG
+                                        Grid and Bryntum. Unsubscribe at any time.
+                                    </span>
+                                </label>
+                                <p class={styles.notifyGdprText}>
+                                    By submitting this form, your information will be processed in accordance with our
+                                    <a href="https://www.ag-grid.com/privacy/" target="_blank" rel="noopener noreferrer"
+                                        >Privacy Policy</a
+                                    >. We will use it to respond to your enquiry and, where applicable, to manage our
+                                    commercial relationship with you.
+                                </p>
+                            </div>
+
+                            {/* Hidden Mailchimp fields: audience tag + anti-bot honeypot (kept from the embed). */}
+                            <div hidden><input type="hidden" name="tags" value="10282800" /></div>
+                            <div aria-hidden="true" style="position: absolute; left: -5000px;">
+                                <input
+                                    type="text"
+                                    name="b_9b44b788c97fa5b498fbbc9b5_a95f562d37"
+                                    tabindex="-1"
+                                    value=""
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                name="subscribe"
+                                id="mc-embedded-subscribe"
+                                class={styles.notifySubmit}
+                            >
+                                Notify me
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class={styles.sessionModal} data-session-modal-root hidden>
+            <button
+                type="button"
+                class={styles.sessionModalBackdrop}
+                data-session-modal-close
+                aria-label="Close recording"></button>
+            <div class={styles.sessionModalDialog} role="dialog" aria-modal="true" aria-label="Session recording">
+                <button
+                    type="button"
+                    class={styles.sessionModalClose}
+                    data-session-modal-close
+                    aria-label="Close recording">×</button
+                >
+                <div class={styles.sessionModalVideo}>
+                    <iframe
+                        data-session-modal-iframe
+                        title="Session recording"
+                        allow="autoplay; encrypted-media; picture-in-picture; web-share"
+                        allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+</Layout>
+
+<script is:inline defer src={urlWithBaseUrl('/scripts/beyond-the-prompt.js')}></script>

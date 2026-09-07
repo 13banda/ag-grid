@@ -1,13 +1,12 @@
 import type { ColDef, ColGroupDef, GridApi, GridOptions } from 'ag-grid-community';
-import {
-    ClientSideRowModelModule,
-    ModuleRegistry,
-    TextFilterModule,
-    ValidationModule,
-    createGrid,
-} from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
     {
@@ -23,12 +22,7 @@ const columnDefs: (ColDef | ColGroupDef)[] = [
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
-    defaultColDef: {
-        filter: true,
-    },
-    // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 // setup the grid after the page has finished loading

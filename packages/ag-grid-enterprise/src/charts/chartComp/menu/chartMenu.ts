@@ -2,12 +2,12 @@ import type {
     BeanCollection,
     ChartToolPanelMenuOptions,
     ChartToolbarMenuItemOptions,
-    Environment,
     IconName,
 } from 'ag-grid-community';
-import { AgPromise, Component, _warn } from 'ag-grid-community';
+import { AgPromise, Component } from 'ag-grid-community';
 
-import { AgPanel } from '../../../widgets/agPanel';
+import { AgPanel } from '../../../agStack/agPanel';
+import type { GridPanel } from '../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartController } from '../chartController';
 import type { ExtraPaddingDirection } from '../chartProxies/chartProxy';
 import type { ChartMenuService } from '../services/chartMenuService';
@@ -26,17 +26,15 @@ type ChartToolbarButtons = {
 export class ChartMenu extends Component {
     private chartMenuSvc: ChartMenuService;
     private chartMenuListFactory: ChartMenuListFactory;
-    private environment: Environment;
 
     public wireBeans(beans: BeanCollection) {
         this.chartMenuSvc = beans.chartMenuSvc as ChartMenuService;
         this.chartMenuListFactory = beans.chartMenuListFactory as ChartMenuListFactory;
-        this.environment = beans.environment;
     }
 
     private readonly chartController: ChartController;
 
-    private buttons: ChartToolbarButtons = {
+    private readonly buttons: ChartToolbarButtons = {
         chartLink: { iconName: 'linked', callback: () => this.chartMenuSvc.toggleLinked(this.chartMenuContext) },
         chartUnlink: {
             iconName: 'unlinked',
@@ -54,7 +52,7 @@ export class ChartMenu extends Component {
 
     private chartToolbar: ChartToolbar;
     private tabbedMenu: TabbedChartMenu;
-    private menuPanel?: AgPanel;
+    private menuPanel?: GridPanel;
     private menuVisible = false;
     private chartToolbarOptions: ChartToolbarMenuItemOptions[];
 
@@ -128,7 +126,7 @@ export class ChartMenu extends Component {
         this.chartToolbar.updateParams({ buttons });
     }
 
-    private createMenuPanel(defaultTab: number): AgPromise<AgPanel> {
+    private createMenuPanel(defaultTab: number): AgPromise<GridPanel> {
         const menuPanel = (this.menuPanel = this.createBean(
             new AgPanel({
                 height: '100%',
@@ -186,7 +184,7 @@ export class ChartMenu extends Component {
             const menuPanel = panel || this.defaultPanel;
             let tab = this.panels.indexOf(menuPanel);
             if (tab < 0) {
-                _warn(143, { panel });
+                this.beans.log.warn(143, { panel });
                 tab = this.panels.indexOf(this.defaultPanel);
             }
 
@@ -220,11 +218,11 @@ export class ChartMenu extends Component {
     public override destroy() {
         super.destroy();
 
-        if (this.menuPanel && this.menuPanel.isAlive()) {
+        if (this.menuPanel?.isAlive()) {
             this.destroyBean(this.menuPanel);
         }
 
-        if (this.tabbedMenu && this.tabbedMenu.isAlive()) {
+        if (this.tabbedMenu?.isAlive()) {
             this.destroyBean(this.tabbedMenu);
         }
     }

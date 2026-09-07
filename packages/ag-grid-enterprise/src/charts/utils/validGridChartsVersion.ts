@@ -4,7 +4,7 @@ const VERSION_CHECKING_FIRST_GRID_MAJOR_VERSION = 28;
 const VERSION_CHECKING_FIRST_CHARTS_MAJOR_VERSION = 6;
 
 function isValidVersion(version: string) {
-    return version && version.match(/\d+\.\d+\.\d+/);
+    return version?.match(/\d+\.\d+\.\d+/);
 }
 
 function isValidMajorVersion({
@@ -24,6 +24,7 @@ function isValidMajorVersion({
     return gridMajorDifference === chartsMajorDifference && isFirstOrAfterVersion;
 }
 
+/** @knipIgnore Used in tests */
 export function gridChartVersion(gridVersion: string):
     | {
           gridMajorMinor: string;
@@ -54,6 +55,7 @@ export function gridChartVersion(gridVersion: string):
     };
 }
 
+/** @knipIgnore Used in tests */
 export function validGridChartsVersionErrorMessage({
     type,
     gridVersion,

@@ -3,13 +3,18 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CustomElements } from './customElements_typescript';
 
-ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule]);
 
 const GRID_CELL_CLASSNAME = 'ag-cell';
 

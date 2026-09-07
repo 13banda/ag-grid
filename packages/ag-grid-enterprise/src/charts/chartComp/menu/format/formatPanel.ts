@@ -1,9 +1,9 @@
 import type { ChartFormatPanel, ChartFormatPanelGroup } from 'ag-grid-community';
-import { Component, _warn } from 'ag-grid-community';
+import { Component } from 'ag-grid-community';
 
-import type { AgGroupComponent } from '../../../../widgets/agGroupComponent';
+import type { GroupComponent } from '../../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartSeriesType } from '../../utils/seriesTypeMapper';
-import { isCartesian, isPolar } from '../../utils/seriesTypeMapper';
+import { isCartesian, isFunnel, isPolar } from '../../utils/seriesTypeMapper';
 import type { ChartMenuContext } from '../chartMenuContext';
 import { ChartPanelFeature } from '../chartPanelFeature';
 import { CartesianAxisPanel } from './axis/cartesianAxisPanel';
@@ -17,13 +17,14 @@ import { TitlesPanel } from './titles/titlesPanel';
 export interface FormatPanelOptions extends ChartMenuContext {
     isExpandedOnInit: boolean;
     seriesType: ChartSeriesType;
-    registerGroupComponent: (groupComponent: AgGroupComponent) => void;
+    registerGroupComponent: (groupComponent: GroupComponent) => void;
 }
 
 const DefaultFormatPanelDef: ChartFormatPanel = {
     groups: [{ type: 'chart' }, { type: 'titles' }, { type: 'legend' }, { type: 'series' }, { type: 'axis' }],
 };
 
+const AXIS_KEYS = ['axis', 'horizontalAxis', 'verticalAxis'];
 export class FormatPanel extends Component {
     private chartPanelFeature: ChartPanelFeature;
     private groupExpansionFeature: GroupExpansionFeature;
@@ -55,12 +56,12 @@ export class FormatPanel extends Component {
 
             if (isExpandedOnInit) {
                 if (panelExpandedOnInit) {
-                    _warn(145, { group });
+                    this.beans.log.warn(145, { group });
                 }
                 panelExpandedOnInit = true;
             }
 
-            const registerGroupComponent = (groupComponent: AgGroupComponent) =>
+            const registerGroupComponent = (groupComponent: GroupComponent) =>
                 this.groupExpansionFeature.addGroupComponent(groupComponent);
 
             const opts: FormatPanelOptions = {
@@ -99,7 +100,7 @@ export class FormatPanel extends Component {
                     this.chartPanelFeature.addComponent(new SeriesPanel(opts));
                     break;
                 default:
-                    _warn(147, { group });
+                    this.beans.log.warn(147, { group });
             }
         });
     }
@@ -110,10 +111,14 @@ export class FormatPanel extends Component {
     }
 
     private isGroupPanelShownInSeries(group: ChartFormatPanelGroup, seriesType: ChartSeriesType): boolean {
-        return (
+        const enable =
             ['chart', 'titles', 'legend', 'series'].includes(group) ||
-            (isCartesian(seriesType) && ['axis', 'horizontalAxis', 'verticalAxis'].includes(group)) ||
-            (isPolar(seriesType) && group === 'axis')
-        );
+            (isCartesian(seriesType) && AXIS_KEYS.includes(group)) ||
+            (isPolar(seriesType) && group === 'axis');
+
+        const disable =
+            (isFunnel(seriesType) && group === 'legend') || (isFunnel(seriesType) && AXIS_KEYS.includes(group));
+
+        return enable && !disable;
     }
 }

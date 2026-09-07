@@ -1,22 +1,28 @@
 import type { CellClassParams, EditableCallbackParams, GridApi, GridOptions } from 'ag-grid-community';
 import {
     CellStyleModule,
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberEditorModule,
     RowApiModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowApiModule,
     NumberEditorModule,
     TextEditorModule,
     CellStyleModule,
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let editableYear = 2012;
@@ -43,7 +49,7 @@ const gridOptions: GridOptions<IOlympicData> = {
             },
             cellStyle: (params: CellClassParams<IOlympicData>) => {
                 if (isCellEditable(params)) {
-                    return { backgroundColor: '#2244CC44' };
+                    return { backgroundColor: '#2244cc44' };
                 }
             },
         },

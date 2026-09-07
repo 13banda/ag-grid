@@ -1,13 +1,13 @@
-import rootESLint from '../../eslint.config.mjs';
+import rootESLint, { sonarjsConfig } from '../../eslint.config.mjs';
 
 export default [
     ...rootESLint,
+    ...sonarjsConfig,
     {
         ignores: ['.angular/'],
     },
     {
         rules: {
-            '@typescript-eslint/ban-types': 'error',
             '@typescript-eslint/no-this-alias': 'off',
             '@typescript-eslint/no-var-requires': 'error',
             '@typescript-eslint/no-unused-vars': 'error',

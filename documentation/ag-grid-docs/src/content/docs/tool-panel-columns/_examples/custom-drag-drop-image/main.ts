@@ -3,8 +3,8 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -18,6 +18,11 @@ import {
 
 import { CustomDragAndDropImage } from './customDragAndDropImage_typescript';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     NumberFilterModule,
     ClientSideRowModelModule,
@@ -28,7 +33,6 @@ ModuleRegistry.registerModules([
     PivotModule,
     SetFilterModule,
     RowGroupingPanelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;

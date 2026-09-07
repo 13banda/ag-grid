@@ -4,11 +4,16 @@ import {
     ClientSideRowModelModule,
     GridApi,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule]);
 
 interface SalesRecord {
     productName: string;

@@ -7,7 +7,7 @@ This section describes how the Set Filter can be controlled programmatically usi
 
 ## Set Filter Model
 
-Get and set the state of the Set Filter by getting and setting the model on the filter instance.
+Get and set the state of the Set Filter by getting and setting the model on the grid API.
 
 ```js
 // get filter model
@@ -24,28 +24,43 @@ The filter model contains an array of string values where each item in the array
 
 {% interfaceDocumentation interfaceName="SetFilterModel" /%}
 
+When values are taken from the grid (the default, with no `filterParams.values` supplied), the model is reconciled against the values currently in the data when it is set. Any selected values that are not present are dropped and not retained: if those values later appear in the data they are not re-selected. Supply `filterParams.values` to keep selections for values that are not currently in the data. See [Refreshing Values](./filter-set-filter-list/#refreshing-values) and the [Excel Mode](./filter-set-excel-mode/) comparison.
+
+{% note %}
+This value-level reconciliation is distinct from `setFilterModel` being applied asynchronously when inferring cell data types. With initially empty row data, the cell data types cannot be resolved, so the whole `setFilterModel` call is deferred until row data is added (set `cellDataType` to `false` or to an explicit value on every column to apply it synchronously). That defers the entire call once; it does not retain individual values that are absent from the data.
+{% /note %}
+
 ## Set Filter API
 
-The Set Filter instance can be retrieved via the `getColumnFilterInstance` API method.
+The Set Filter consists of two parts - the Set Filter UI (the UI component) and the Set Filter Handler (maintains the values and performs the filter logic).
+
+Note that the Set Filter will always use a filter handler, regardless of whether `enableFilterHandlers` is enabled (which controls filter handlers for [Custom Filter Components](./component-filter/)).
+
+The Set Filter values can be updated via the Set Filter Handler:
 
 ```{% frameworkTransform=true %}
-// get filter instance
+// get filter handler
+const countryFilterHandler = api.getColumnFilterHandler('country');
+```
+
+The `SetFilterHandler` interface defines the public API for the Set Filter Handler.
+
+{% interfaceDocumentation interfaceName="SetFilterHandler" /%}
+
+The Mini Filter can be interacted with via the Set Filter UI instance:
+
+```{% frameworkTransform=true %}
+// get filter UI instance
 api.getColumnFilterInstance('country').then(countryFilterComponent => {
-    // use set filter instance
+    // use set filter UI instance
 });
 ```
 
-The `ISetFilter` interface defines the public API for the Set Filter.
+The `SetFilterUi` interface defines the public API for the Set Filter UI component.
 
-{% interfaceDocumentation interfaceName="ISetFilter" overrideSrc="filter-set-api/iSetFilter.json" exclude=["getModelFromUi", "applyModel", "doesFilterPass", "onNewRowsLoaded", "onAnyFilterChanged", "getModelAsString"] /%}
+{% interfaceDocumentation interfaceName="SetFilterUi"  /%}
 
-It is important to note that when updating the Set Filter through the API, it is up to the developer to call `filterInstance.applyModel()` to apply the changes that have been made to the model and then `api.onFilterChanged()` at the end of the interaction with the filter.
-
-If no call is made to `filterInstance.applyModel()` then the filter UI will show any changes, but they won't be reflected in the filter model. This will appear as if the user never hit the Apply Button (regardless of whether the Apply Button is active or not).
-
-If no call to `api.onFilterChanged()` is provided the grid will still show the data relevant to the filter before it was updated through the API.
-
-In the example below, you can see how the filter for the Athlete column is modified through the API and how at the end of the interaction a call to `api.onFilterChanged()` is performed.
+In the example below, you can see how the filter for the Athlete column is modified through the API.
 
 {% gridExampleRunner title="Set Filter API" name="set-filter-api"  exampleHeight=570 /%}
 
@@ -73,18 +88,14 @@ The `caseSensitive` option also affects [Mini-Filter](./filter-set-mini-filter/#
 
 The following example demonstrates the difference in behaviour between `caseSensitive: false` (the default) and `caseSensitive: true`:
 
-* With `caseSensitive: false` (the default):
-  * `setModel()` will perform **case-insensitive** matching against available values to decide what is enabled in the Filter List.
-  * `setFilterValues()` will override the available values and force the case of the presented values in the Filter List to those provided.
-    * Selected values will be maintained based upon **case-insensitive** matching.
-* With `caseSensitive: true`:
-  * `setModel()` will perform **case-sensitive** matching against available values to decide what is enabled in the Filter List.
-  * `setFilterValues()` will override the available values and force the case of the presented values in the Filter List to those provided.
-    * Selected values will be maintained based upon **case-sensitive** matching.
-* In both cases `getModel()` and `getFilterValues()` will return the values with casing that matches those displayed in the Filter List.
+- With `caseSensitive: false` (the default):
+    - `setModel()` will perform **case-insensitive** matching against available values to decide what is enabled in the Filter List.
+    - `setFilterValues()` will override the available values and force the case of the presented values in the Filter List to those provided.
+        - Selected values will be maintained based upon **case-insensitive** matching.
+- With `caseSensitive: true`:
+    - `setModel()` will perform **case-sensitive** matching against available values to decide what is enabled in the Filter List.
+    - `setFilterValues()` will override the available values and force the case of the presented values in the Filter List to those provided.
+        - Selected values will be maintained based upon **case-sensitive** matching.
+- In both cases `getModel()` and `getFilterValues()` will return the values with casing that matches those displayed in the Filter List. This is printed to the developer console.
 
 {% gridExampleRunner title="Set Filter API - Case Sensitivity" name="set-filter-api-case-sensitive"  exampleHeight=570 /%}
-
-## Next Up
-
-Continue to the next section to learn about [Multi Filters](./filter-multi/).

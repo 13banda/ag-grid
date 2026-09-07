@@ -5,8 +5,8 @@ import {
     ModuleRegistry,
     RowApiModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -15,6 +15,11 @@ import {
     FiltersToolPanelModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -26,7 +31,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     TextEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

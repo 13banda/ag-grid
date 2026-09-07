@@ -4,18 +4,18 @@ import {
     DateFilterModule,
     ModuleRegistry,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CustomDateComponent } from './customDateComponent_typescript';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    DateFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, DateFilterModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete' },
@@ -23,6 +23,7 @@ const columnDefs: ColDef[] = [
     {
         field: 'date',
         minWidth: 190,
+        dateComponent: CustomDateComponent,
     },
     { field: 'sport' },
 ];
@@ -38,9 +39,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     columnDefs: columnDefs,
     rowData: null,
-    components: {
-        agDateInput: CustomDateComponent,
-    },
 };
 
 // setup the grid after the page has finished loading

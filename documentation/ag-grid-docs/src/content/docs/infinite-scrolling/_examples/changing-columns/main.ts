@@ -3,11 +3,16 @@ import {
     InfiniteRowModelModule,
     ModuleRegistry,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([TextFilterModule, InfiniteRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, InfiniteRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 

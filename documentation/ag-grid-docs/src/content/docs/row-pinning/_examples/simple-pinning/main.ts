@@ -3,15 +3,18 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     PinnedRowModule,
-    RowClassParams,
-    RowStyle,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
+    themeQuartz,
 } from 'ag-grid-community';
+import { ContextMenuModule } from 'ag-grid-enterprise';
 
-import { CustomPinnedRowRenderer } from './customPinnedRowRenderer_typescript';
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
-ModuleRegistry.registerModules([PinnedRowModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+ModuleRegistry.registerModules([PinnedRowModule, ClientSideRowModelModule, ContextMenuModule]);
 
 const columnDefs: ColDef[] = [{ field: 'athlete' }, { field: 'country' }, { field: 'sport' }];
 
@@ -23,9 +26,12 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     columnDefs: columnDefs,
     rowData: null,
-    // no rows to pin to start with
-    pinnedTopRowData: [{ athlete: 'TOP (athlete)', country: 'TOP (country)', sport: 'TOP (sport)' }],
-    pinnedBottomRowData: [{ athlete: 'BOTTOM (athlete)', country: 'BOTTOM (country)', sport: 'BOTTOM (sport)' }],
+    enableRowPinning: true,
+    theme: themeQuartz.withParams({
+        pinnedRowBorder: {
+            width: 2,
+        },
+    }),
 };
 
 // setup the grid after the page has finished loading
@@ -33,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
     gridApi = createGrid(gridDiv, gridOptions);
 
-    fetch('https://www.ag-grid.com/example-assets/olympic-winners.json')
+    fetch('https://www.ag-grid.com/example-assets/small-olympic-winners.json')
         .then((response) => response.json())
         .then((data: IOlympicData[]) => gridApi!.setGridOption('rowData', data));
 });

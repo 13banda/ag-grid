@@ -6,53 +6,93 @@
   "targets": {
     "build": {
       "executor": "nx:noop",
+      "dependsOn": ["generate-doc-references", "^build", "generate-examples"],
       "inputs": [],
       "outputs": [],
-      "dependsOn": ["generate-doc-references", "^build", "generate-examples"]
+      "configurations": {
+        "staging": {},
+        "archive": {},
+        "production": {}
+      }
     },
     "build:styles": {
       "executor": "nx:noop",
-      "dependsOn": ["^build:styles"]
+      "dependsOn": ["^build:styles"],
+      "inputs": [],
+      "outputs": []
     },
     "lint": {
       "executor": "nx:noop",
-      "inputs": [
-        {
-          "externalDependencies": ["npm:typescript"]
-        }
-      ],
       "dependsOn": ["^lint"],
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
       "configurations": {
         "fix": {}
       }
     },
+    "sync-readmes": {
+      "executor": "nx:run-commands",
+      "inputs": ["{workspaceRoot}/README.md"],
+      "outputs": [
+        "{workspaceRoot}/community-modules/locale/README.md",
+        "{workspaceRoot}/packages/ag-grid-angular/README.md",
+        "{workspaceRoot}/packages/ag-grid-angular/projects/ag-grid-angular/README.md",
+        "{workspaceRoot}/packages/ag-grid-community/README.md",
+        "{workspaceRoot}/packages/ag-grid-react/README.md",
+        "{workspaceRoot}/packages/ag-grid-vue3/README.md"
+      ],
+      "options": {
+        "commands": ["node scripts/readme/sync-readme.js"]
+      },
+      "cache": true
+    },
     "test": {
       "executor": "nx:noop",
-      "inputs": [
-        {
-          "externalDependencies": ["npm:typescript"]
-        }
-      ],
       "dependsOn": ["^test"],
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
       "configurations": {
         "update": {}
       }
     },
+    "test:workspace": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["./behave.sh"],
+        "cwd": "{workspaceRoot}"
+      },
+      "cache": false
+    },
+    "test:e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["nx run-many -t test:e2e --exclude all"]
+      },
+      "cache": false
+    },
     "pack": {
       "executor": "nx:noop",
+      "dependsOn": ["^pack"],
       "inputs": [],
       "outputs": [],
-      "dependsOn": ["^pack"],
+      "cache": false,
       "configurations": {
+        "staging": {},
+        "archive": {},
         "production": {}
       }
     },
     "pack:extract": {
       "executor": "nx:noop",
+      "dependsOn": ["^pack:extract"],
       "inputs": [],
       "outputs": [],
-      "dependsOn": ["^pack:extract"],
+      "cache": false,
       "configurations": {
+        "staging": {},
+        "archive": {},
         "production": {}
       }
     },
@@ -61,9 +101,11 @@
       "inputs": [],
       "outputs": [],
       "dependsOn": ["^pack:verify"],
+      "parallelism": false,
       "configurations": {
-        "production": {},
-        "archive": {}
+        "staging": {},
+        "archive": {},
+        "production": {}
       }
     },
     "build:core:modules": {
@@ -80,16 +122,12 @@
       },
       "cache": true
     },
-    "build:core": {
-      "executor": "nx:noop",
-      "dependsOn": ["build:modules", "build:packages"],
-      "inputs": [],
-      "outputs": []
-    },
     "test:modules": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": ["nx run-many -t test --projects=tag:community,tag:enterprise,tag:test --exclude=tag:framework"]
+        "commands": [
+          "nx run-many -t test --projects=tag:community,tag:enterprise,tag:test --exclude=tag:react,tag:vue3"
+        ]
       },
       "cache": true
     },
@@ -97,42 +135,37 @@
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "nx run-many -t test --projects=tag:community,tag:enterprise,tag:test,tag:module-size --exclude=tag:framework"
+          "nx run-many -t test --projects=tag:community,tag:enterprise,tag:test,tag:module-size --exclude=tag:react,tag:vue3"
         ]
       },
       "cache": true
     },
-    "dev:setup": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "node scripts/buildTime.mjs start",
-          "nx run-many -t build --projects=tag:module --exclude=tag:framework",
-          "nx run all:generate-doc-references",
-          "if (test \"${BUILD_FWS}\" != \"0\") ; then nx run-many -t build -p @ag-grid-community/angular,@ag-grid-community/react,@ag-grid-community/vue3 --parallel=5; fi",
-          "if (test \"${BUILD_PACKAGES}\" != \"0\") ; then nx run-many -t build --projects=tag:package --exclude=tag:framework; fi",
-          "if (test \"${BUILD_PACKAGES}\" != \"0\" && test \"${BUILD_FWS}\" != \"0\") ; then nx run-many -t build --projects=tag:package:framework; fi",
-          "if (test \"${BUILD_BATCH}\" != \"0\") ; then nx generate-examples --batch; fi"
-        ]
-      }
+    "startElapsedBuildTime": {
+      "cache": false,
+      "command": "node scripts/buildTime.mjs start"
     },
     "dev": {
       "executor": "nx:run-commands",
-      "dependsOn": ["dev:setup"],
+      "dependsOn": [
+        "startElapsedBuildTime",
+        "^build:types",
+        "^build:package",
+        "^build:umd",
+        "^build:copy-styles",
+        "generate-doc-references",
+        "generate-examples",
+        "ag-grid-react:build",
+        "ag-grid-angular:build",
+        "ag-grid-vue3:build",
+        "ag-grid-docs:build:copy-styles"
+      ],
       "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "parallelism": false,
       "options": {
         "parallel": true,
         "commands": ["node external/ag-shared/scripts/watch/watch.js grid", "nx run ag-grid-docs:dev"]
-      },
-      "configurations": {
-        "windows": {
-          "commands": [
-            {
-              "command": "nx run ag-charts-website:dev --configuration watch"
-            }
-          ]
-        }
       }
     },
     "dev:quick": {
@@ -141,76 +174,66 @@
         "ag-grid-docs-src_content_docs_sparklines-bar-customisation__examples_bar-sparkline-customisation_main.ts:generate"
       ],
       "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "parallelism": false,
       "options": {
         "parallel": true,
         "commands": ["node external/ag-shared/scripts/watch/watch.js grid", "nx run ag-grid-docs:dev"]
-      },
-      "configurations": {
-        "windows": {
-          "commands": [
-            {
-              "command": "nx run ag-charts-website:dev --configuration watch"
-            }
-          ]
-        }
       }
+    },
+    "format-write": {
+      "command": "nx format:write --all --sort-root-tsconfig-paths=false"
     },
     "format-check": {
       "executor": "nx:run-commands",
       "options": {
         "commands": [
           {
-            "command": "nx format:check --all"
+            "command": "nx format:check --all --sort-root-tsconfig-paths=false"
           }
         ]
       }
     },
     "blt": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build", "lint", "format-check"],
+      "dependsOn": ["^build", "generate-examples", "lint", "format", "test"],
       "options": {
         "commands": ["nx run-many -t test --parallel 1"]
       }
     },
     "clean": {
-      "command": "rimraf dist/ 'packages/*/dist/' 'documentation/*/dist/' 'community-modules/locale/umd/'"
+      "command": "rimraf -g dist/ 'packages/*/dist/' 'plugins/*/dist/' 'testing/*/dist/' 'documentation/*/dist/' 'documentation/ag-grid-docs/node_modules/.vite/' 'documentation/ag-grid-docs/.astro/' 'documentation/ag-grid-docs/.playwright-network-mirror/' 'documentation/ag-grid-docs/.playwright-network-cache/' 'community-modules/locale/umd/' 'packages/ag-grid-community/styles' 'packages/ag-grid-enterprise/styles' 'reports' 'packages/*/coverage/'"
     },
     "generate-examples": {
+      "dependsOn": ["^generate-examples"],
       "executor": "nx:noop",
-      "dependsOn": ["^generate-example"],
-      "inputs": [
-        {
-          "externalDependencies": ["npm:typescript"]
-        }
-      ],
+      "inputs": [],
       "outputs": [],
-      "batch": true,
-      "cache": true,
+      "cache": false,
       "configurations": {
         "staging": {},
+        "archive": {},
         "production": {}
       }
     },
-    "generate-one-example": {
-      "executor": "nx:run-commands",
-      "options": {
-        "commands": [
-          "nx run ag-grid-docs-src_content_docs_{args.page}__examples_{args.example}_main.ts:generate-example --skip-nx-cache --writeFiles=true"
-        ]
+    "generate-docs-example": {
+      "command": "nx run ag-grid-docs-src_content_docs_{args.page}__examples_{args.example}_main.ts:generate-example --skip-nx-cache --writeFiles=true",
+      "configurations": {
+        "production": {
+          "command": "nx run ag-grid-docs-src_content_docs_{args.page}__examples_{args.example}_main.ts:generate-example -c production --skip-nx-cache --writeFiles=true"
+        }
       }
     },
     "generate-doc-references": {
       "executor": "nx:noop",
       "dependsOn": ["^generate-doc-references"],
-      "inputs": [
-        {
-          "externalDependencies": ["npm:typescript"]
-        }
-      ],
+      "inputs": [],
       "outputs": [],
       "cache": false,
       "configurations": {
         "staging": {},
+        "archive": {},
         "production": {}
       }
     },
@@ -219,11 +242,78 @@
     },
     "unlink": {
       "command": "./scripts/removeLocalDeps.sh"
+    },
+    "slack:user-config": {
+      "cache": false,
+      "command": "node --env-file-if-exists=.env.local ./external/ag-shared/scripts/slack/get-slack-user-config-command.mjs",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "security:update": {
+      "cache": false,
+      "command": "npx tsx ./external/ag-shared/scripts/security/update-security-versions.ts",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:test": {
+      "command": "npx snyk test --yarn-workspaces --dev --strict-out-of-sync=false --severity-threshold=high --exclude=.nx,project.json,dist,.claude --remote-repo-url=https://github.com/ag-grid/ag-grid",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:code": {
+      "command": "npx snyk code test",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:ignore": {
+      "command": "node ./external/ag-shared/scripts/snyk/getSnykIgnore.mjs",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:clean": {
+      "cache": false,
+      "command": "node ./external/ag-shared/scripts/snyk/snykClean.mjs",
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:test:json": {
+      "command": "mkdir -p tmp && { npx snyk test --yarn-workspaces --dev --strict-out-of-sync=false --severity-threshold=high --exclude=.nx,project.json,dist,.claude --remote-repo-url=https://github.com/ag-grid/ag-grid --json > tmp/snyk.json; code=$?; [ $code -le 1 ]; }",
+      "cache": true,
+      "inputs": ["{workspaceRoot}/yarn.lock", "{workspaceRoot}/**/.snyk"],
+      "outputs": ["{workspaceRoot}/tmp/snyk.json"],
+      "options": {
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "snyk:view": {
+      "command": "node ./external/ag-shared/scripts/snyk-viewer/index.mjs {args.file} --port {args.port} --name \"{args.name}\"",
+      "dependsOn": ["snyk:test:json"],
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "file": "tmp/snyk.json",
+        "port": 4615,
+        "name": "AG Grid"
+      },
+      "configurations": {
+        "open": {
+          "args": ["--open"]
+        },
+        "watch": {
+          "command": "node --watch-path=./external/ag-shared/scripts/snyk-viewer ./external/ag-shared/scripts/snyk-viewer/index.mjs {args.file} --port {args.port} --name \"{args.name}\""
+        }
+      }
     }
   },
   "implicitDependencies": [
     "community-modules/styles",
     "community-modules/locale",
+    "packages/ag-stack",
     "packages/ag-grid-community",
     "packages/ag-grid-enterprise",
     "packages/ag-grid-react",
@@ -233,7 +323,10 @@
     "external/ag-website-shared",
     "external/ag-shared",
     "testing/behavioural",
-    "ag-grid-generate-example-files"
+    "testing/accessibility",
+    "testing/csp",
+    "ag-grid-generate-example-files",
+    "stylelint-plugin-ag"
   ],
   "tags": []
 }

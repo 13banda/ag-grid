@@ -37,6 +37,9 @@ const CHART_TYPE_TO_SERIES_TYPE: Record<ChartTypeExCombo, string> = {
     treemap: 'treemap',
     heatmap: 'heatmap',
     waterfall: 'waterfall',
+    funnel: 'funnel',
+    coneFunnel: 'cone-funnel',
+    pyramid: 'pyramid',
 } as const;
 
 const COMBO_CHART_TYPES: Set<ComboChartType> = new Set(['columnLineCombo', 'areaColumnCombo', 'customCombo']);
@@ -56,6 +59,7 @@ interface SeriesParams {
     isRadial?: boolean;
     isHierarchical?: boolean;
     isPie?: boolean;
+    isStatistical?: boolean;
     canInvert?: boolean;
     canSwitchDirection?: boolean;
 }
@@ -120,15 +124,18 @@ const SERIES_TYPES: SeriesTypeParams = {
     },
     'range-bar': {
         isCartesian: true,
+        isStatistical: true,
         isEnterprise: true,
         canSwitchDirection: true,
     },
     'range-area': {
         isCartesian: true,
+        isStatistical: true,
         isEnterprise: true,
     },
     'box-plot': {
         isCartesian: true,
+        isStatistical: true,
         isEnterprise: true,
         canSwitchDirection: true,
     },
@@ -145,6 +152,21 @@ const SERIES_TYPES: SeriesTypeParams = {
         isEnterprise: true,
     },
     waterfall: {
+        isCartesian: true,
+        isEnterprise: true,
+        canSwitchDirection: true,
+    },
+    funnel: {
+        isCartesian: true,
+        isEnterprise: true,
+        canSwitchDirection: true,
+    },
+    'cone-funnel': {
+        isCartesian: true,
+        isEnterprise: true,
+        canSwitchDirection: true,
+    },
+    pyramid: {
         isCartesian: true,
         isEnterprise: true,
         canSwitchDirection: true,
@@ -176,6 +198,10 @@ export function isCartesian(seriesType: ChartSeriesType): boolean {
     return doesSeriesHaveProperty(seriesType, 'isCartesian');
 }
 
+export function isFunnel(seriesType: ChartSeriesType): boolean {
+    return seriesType === 'funnel' || seriesType === 'cone-funnel' || seriesType === 'pyramid';
+}
+
 export function isPolar(seriesType: ChartSeriesType): boolean {
     return doesSeriesHaveProperty(seriesType, 'isPolar');
 }
@@ -186,6 +212,10 @@ export function isRadial(seriesType: ChartSeriesType): boolean {
 
 export function isHierarchical(seriesType: ChartSeriesType): boolean {
     return doesSeriesHaveProperty(seriesType, 'isHierarchical');
+}
+
+export function isStatistical(seriesType: ChartSeriesType): boolean {
+    return doesSeriesHaveProperty(seriesType, 'isStatistical');
 }
 
 export function getCanonicalChartType(chartType: ChartType): Exclude<ChartType, 'doughnut'> {
@@ -205,7 +235,14 @@ export function isPieChartSeries(seriesType: ChartSeriesType): boolean {
 }
 
 function canOnlyHaveSingleSeries(chartType: ChartType): boolean {
-    return chartType === 'pie' || chartType === 'waterfall' || chartType === 'histogram';
+    return (
+        chartType === 'pie' ||
+        chartType === 'waterfall' ||
+        chartType === 'histogram' ||
+        chartType === 'funnel' ||
+        chartType === 'coneFunnel' ||
+        chartType === 'pyramid'
+    );
 }
 
 export function getMaxNumCategories(chartType: ChartType): number | undefined {

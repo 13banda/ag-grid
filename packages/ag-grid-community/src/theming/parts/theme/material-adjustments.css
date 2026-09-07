@@ -1,0 +1,100 @@
+.ag-filter-toolpanel-header,
+.ag-filter-toolpanel-search,
+.ag-status-bar,
+.ag-panel-title-bar-title,
+.ag-multi-filter-group-title-bar,
+.ag-dnd-ghost {
+    font-size: calc(var(--ag-font-size) - 1px);
+    font-weight: 600;
+    color: var(--ag-header-text-color);
+}
+
+.ag-column-drop-horizontal {
+    background-color: color-mix(in srgb, var(--ag-background-color), var(--ag-foreground-color) 8%);
+}
+
+:where(.ag-toolbar) .ag-column-drop-horizontal {
+    background-color: transparent;
+}
+
+:where(.ag-toolbar) .ag-toolbar-panel {
+    padding-inline: var(--ag-cell-horizontal-padding) 0;
+}
+
+.ag-cell.ag-cell-inline-editing {
+    padding: var(--ag-spacing);
+    height: calc(var(--ag-row-height) + var(--ag-spacing) * 3);
+    border: var(--ag-input-border) !important;
+    border-width: 1px !important;
+
+    /* use gradient image to overlay input background onto background, so that
+       if the user supplies a semi-transparent background the content of the
+       cell below won't be visible */
+    background-color: var(--ag-background-color);
+    background-image: linear-gradient(0deg, var(--ag-input-background-color), var(--ag-input-background-color));
+
+    :where(.ag-row-last:not(.ag-row-first)) & {
+        bottom: 0;
+    }
+
+    :where(.ag-has-focus) & {
+        border: var(--ag-input-focus-border) !important;
+        border-width: 1px !important;
+    }
+}
+
+.ag-standard-button,
+.ag-advanced-filter-builder-button {
+    text-transform: uppercase;
+}
+
+.ag-status-bar {
+    border: solid var(--ag-border-width) var(--ag-border-color);
+}
+
+.ag-list-item-hovered::after {
+    background-color: var(--ag-primary-color);
+}
+
+.ag-pill-button:hover {
+    color: var(--ag-primary-color);
+}
+
+.ag-filter-add-button,
+.ag-filter-add-button:hover {
+    border-bottom: 2px solid var(--ag-primary-color);
+}
+
+.ag-toolbar-button-wrapper {
+    transition:
+        background-color 0.2s,
+        color 0.2s;
+}
+
+.ag-toolbar-find,
+.ag-toolbar-input {
+    box-shadow: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+}
+
+.ag-toolbar-find:focus-within {
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+}
+
+.ag-toolbar-input-field {
+    border-top: none;
+    border-left: none;
+    border-right: none;
+}
+
+.ag-toolbar-input-field:focus {
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+}

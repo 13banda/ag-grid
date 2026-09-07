@@ -4,8 +4,8 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -14,6 +14,11 @@ import {
     FiltersToolPanelModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberFilterModule,
@@ -24,7 +29,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     RowSelectionModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -43,7 +47,6 @@ const columnDefs: ColDef[] = [
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
-    rowData: null,
     columnDefs: columnDefs,
     defaultColDef: {
         flex: 1,

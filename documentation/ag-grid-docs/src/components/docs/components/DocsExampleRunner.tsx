@@ -1,8 +1,8 @@
-import type { Framework, InternalFramework } from '@ag-grid-types';
+import type { InternalFramework } from '@ag-grid-types';
+import { getLoadingIFrameId } from '@ag-website-shared/components/loading-logo/getElementId';
 import type { GeneratedContents } from '@components/example-generator/types';
 import { ExampleRunner } from '@components/example-runner/components/ExampleRunner';
 import { ExternalLinks } from '@components/example-runner/components/ExternalLinks';
-import { getLoadingIFrameId } from '@components/example-runner/utils/getLoadingLogoId';
 import { useStore } from '@nanostores/react';
 import { $internalFramework, $internalFrameworkState } from '@stores/frameworkStore';
 import { $queryClient, defaultQueryOptions } from '@stores/queryClientStore';
@@ -13,27 +13,30 @@ import {
     type UrlParams,
     getExampleCodeSandboxUrl,
     getExampleContentsUrl,
+    getExampleLinkUrl,
     getExamplePlunkrUrl,
     getExampleRunnerExampleUrl,
-    getExampleUrl,
 } from '../utils/urlPaths';
 
 interface Props {
     name: string;
     title: string;
     exampleHeight?: number;
-    framework: Framework;
     pageName: string;
     isDev: boolean;
     typescriptOnly?: boolean;
     suppressDarkMode?: boolean;
+    hasExampleConsoleLog?: boolean;
+    consoleBufferSize?: number;
+    supportedFrameworks?: InternalFramework[];
 }
 
 const getInternalFramework = (
     docsInternalFramework: InternalFramework,
     supportedFrameworks: InternalFramework[] | undefined
-): InternalFramework => {
+): { internalFramework: InternalFramework; isUsingAlternativeInternalFramework: boolean } => {
     let internalFramework = docsInternalFramework;
+    let isUsingAlternativeInternalFramework = false;
     if (supportedFrameworks && supportedFrameworks.length > 0) {
         if (!supportedFrameworks.includes(docsInternalFramework)) {
             const bestAlternative: Record<InternalFramework, InternalFramework[]> = {
@@ -48,11 +51,12 @@ const getInternalFramework = (
             const alternative = alternatives.find((alternative) => supportedFrameworks.includes(alternative));
             if (alternative) {
                 internalFramework = alternative;
+                isUsingAlternativeInternalFramework = true;
             }
         }
     }
 
-    return internalFramework;
+    return { internalFramework, isUsingAlternativeInternalFramework };
 };
 
 const DocsExampleRunnerInner = ({
@@ -63,18 +67,25 @@ const DocsExampleRunnerInner = ({
     suppressDarkMode,
     pageName,
     isDev,
+    hasExampleConsoleLog,
+    consoleBufferSize,
+    supportedFrameworks: supportedFrameworksProp,
 }: Props) => {
     const exampleName = name;
     const id = `example-${name}`;
     const loadingIFrameId = getLoadingIFrameId({ pageName, exampleName: name });
 
-    const [supportedFrameworks, setSupportedFrameworks] = useState<InternalFramework[] | undefined>(undefined);
+    const [supportedFrameworks, setSupportedFrameworks] = useState<InternalFramework[] | undefined>(
+        supportedFrameworksProp
+    );
 
     const storeInternalFramework = useStore($internalFramework);
     const internalFrameworkState = useStore($internalFrameworkState);
-    const internalFramework = typescriptOnly
-        ? 'typescript'
-        : getInternalFramework(storeInternalFramework, supportedFrameworks);
+    const { internalFramework: computedInternalFramework, isUsingAlternativeInternalFramework } = useMemo(
+        () => getInternalFramework(storeInternalFramework, supportedFrameworks),
+        [storeInternalFramework, supportedFrameworks]
+    );
+    const internalFramework = typescriptOnly ? 'typescript' : computedInternalFramework;
     const urlConfig: UrlParams = useMemo(
         () => ({ internalFramework, pageName, exampleName }),
         [internalFramework, pageName, exampleName]
@@ -108,6 +119,14 @@ const DocsExampleRunnerInner = ({
                         if (internalFramework.startsWith('vue') || internalFramework.startsWith('react')) {
                             delete json.files['index.html'];
                         }
+
+                        // Don't include the example spec files in the example runner for now
+                        Object.keys(json.files)
+                            .filter((file) => file?.includes('.spec.') || file?.includes('.test.'))
+                            .forEach((specFile) => {
+                                delete json.files[specFile];
+                            });
+
                         return json;
                     }),
             ]) as Promise<[GeneratedContents]>;
@@ -117,13 +136,14 @@ const DocsExampleRunnerInner = ({
     });
     const urls = {
         exampleRunnerExampleUrl: getExampleRunnerExampleUrl(urlConfig),
-        exampleUrl: getExampleUrl(urlConfig),
+        exampleUrl: getExampleLinkUrl(urlConfig),
         plunkrHtmlUrl: getExamplePlunkrUrl(urlConfig),
         codeSandboxHtmlUrl: getExampleCodeSandboxUrl(urlConfig),
     };
 
     useEffect(() => {
         if (isError) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- sync state from query result
             setSupportedFrameworks(['typescript']);
         }
 
@@ -140,7 +160,6 @@ const DocsExampleRunnerInner = ({
             title={title}
             internalFramework={internalFramework}
             exampleFiles={contents.files}
-            exampleBoilerPlateFiles={contents.boilerPlateFiles}
             packageJson={contents.packageJson}
             initialSelectedFile={contents.mainFileName}
             plunkrHtmlUrl={urls.plunkrHtmlUrl}
@@ -157,6 +176,7 @@ const DocsExampleRunnerInner = ({
         <ExampleRunner
             id={id}
             title={title}
+            exampleName={exampleName}
             exampleUrl={urls.exampleUrl}
             exampleRunnerExampleUrl={urls.exampleRunnerExampleUrl}
             exampleHeight={exampleHeight}
@@ -166,7 +186,10 @@ const DocsExampleRunnerInner = ({
             externalLinks={externalLinks}
             loadingIFrameId={loadingIFrameId}
             supportedFrameworks={supportedFrameworks}
+            hideInternalFrameworkSelection={isUsingAlternativeInternalFramework}
             suppressDarkMode={suppressDarkMode}
+            hasExampleConsoleLog={hasExampleConsoleLog}
+            consoleBufferSize={consoleBufferSize}
         />
     ) : null;
 };

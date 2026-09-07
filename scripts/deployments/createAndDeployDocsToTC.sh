@@ -15,18 +15,23 @@ cd documentation/ag-grid-docs/dist
 FILENAME=release_"$ZIP_PREFIX"_v"$ZIP_PREFIX".zip
 echo "Creating $FILENAME"
 zip -qr ../../../$FILENAME *
+# The glob above skips dot-prefixed entries, so add them explicitly:
+# - the generated .htaccess (present on staging/production builds)
+# - the .well-known directory (e.g. the MCP discovery card, SE-79)
+if [ -f .htaccess ]; then
+  zip -q ../../../$FILENAME .htaccess
+fi
+if [ -d .well-known ]; then
+  zip -qr ../../../$FILENAME .well-known
+fi
 
 cd ../../../
 
-echo "Backing up branch builds"
-cp -R /var/www/html/branch-builds /var/www/
-
 echo "Cleaning current grid staging"
-rm -rf /var/www/html/*
+# the * glob skips dot-prefixed entries (.htaccess, .well-known), so remove those explicitly too -
+# otherwise unzip below prompts to replace them and exits non-zero when there's no tty to answer
+rm -rf /var/www/html/* /var/www/html/.[!.]* /var/www/html/..?*
 mv $FILENAME /var/www/html/
 
 echo "Unzipping new grid staging"
-unzip -q /var/www/html/$FILENAME -d /var/www/html/
-
-echo "Restoring branch builds"
-cp -R /var/www/branch-builds /var/www/html/
+unzip -qo /var/www/html/$FILENAME -d /var/www/html/

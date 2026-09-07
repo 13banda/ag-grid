@@ -3,13 +3,15 @@ import type { _ModuleWithoutApi } from 'ag-grid-community';
 import { EnterpriseCoreModule } from '../agGridEnterpriseModule';
 import { AggregationModule, SharedAggregationModule } from '../aggregation/aggregationModule';
 import {
-    ClientSideRowModelHierarchyModule,
+    ChangedPathModule,
+    CsrmGroupStagesModule,
+    CsrmHierarchyModule,
     GroupColumnModule,
+    GroupEditModule,
     StickyRowModule,
 } from '../rowHierarchy/rowHierarchyModule';
 import { VERSION } from '../version';
-import { ClientSideChildrenTreeNodeManager } from './clientSideChildrenTreeNodeManager';
-import { ClientSidePathTreeNodeManager } from './clientSidePathTreeNodeManager';
+import { TreeGroupStrategy } from './treeGroupStrategy';
 
 /**
  * @internal
@@ -17,7 +19,7 @@ import { ClientSidePathTreeNodeManager } from './clientSidePathTreeNodeManager';
 export const SharedTreeDataModule: _ModuleWithoutApi = {
     moduleName: 'SharedTreeData',
     version: VERSION,
-    dependsOn: [EnterpriseCoreModule, SharedAggregationModule, GroupColumnModule, StickyRowModule],
+    dependsOn: [EnterpriseCoreModule, SharedAggregationModule, GroupColumnModule, ChangedPathModule, StickyRowModule],
 };
 
 /**
@@ -27,7 +29,7 @@ export const SharedTreeDataModule: _ModuleWithoutApi = {
 export const TreeDataModule: _ModuleWithoutApi = {
     moduleName: 'TreeData',
     version: VERSION,
-    beans: [ClientSidePathTreeNodeManager, ClientSideChildrenTreeNodeManager],
+    dynamicBeans: { treeGroupStrategy: TreeGroupStrategy },
     rowModels: ['clientSide'],
-    dependsOn: [SharedTreeDataModule, AggregationModule, ClientSideRowModelHierarchyModule],
+    dependsOn: [SharedTreeDataModule, AggregationModule, CsrmHierarchyModule, CsrmGroupStagesModule, GroupEditModule],
 };

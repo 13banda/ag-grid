@@ -1,21 +1,32 @@
 @use 'design-system' as *;
+@use '../site-header/breakpoints' as *;
 
+// .customMenu is only ever rendered inside the shared site header (see
+// SiteHeader.astro), so it queries the same "site-header" container as the rest of the
+// header rather than the viewport — see ../site-header/_breakpoints.scss for what
+// $switcher-show and $switcher-popup-at control and why.
+//
+// It must also stay out of the containing-block chain — no `position`, no `transform` —
+// so .customContent anchors to .headerInner and can right-align to the content column.
 .customMenu {
     display: none;
-    padding-right: $spacing-size-2;
-    margin-right: auto;
+    // While the header is a wrapping flex row (below $docs-search-inline) this auto
+    // margin keeps the switcher hard against the nav on the right — logo left, then
+    // switcher + nav as one right-aligned group — so the switcher can never be
+    // stranded mid-row or on a line of its own. Inert once the header becomes a grid
+    // (the switcher's track is content-sized), where grid-area handles placement.
+    margin-left: auto;
     user-select: none;
+    // Direct .headerInner grid child once the header goes fully inline — see
+    // SiteHeader.module.scss's .headerInner grid-template-areas.
+    grid-area: switcher;
 
-    @media screen and (min-width: 440px) {
+    @container site-header (min-width: #{$switcher-show}) {
         display: block;
     }
 
-    @media screen and (max-width: 1180px) {
-        display: none;
-    }
-
-    @media screen and (min-width: $breakpoint-hero-small) {
-        position: relative;
+    @container site-header (min-width: #{$docs-search-inline}) {
+        margin-right: -$spacing-size-5;
     }
 }
 
@@ -23,6 +34,8 @@
     padding: 12px;
     padding-top: $spacing-size-1;
     padding-bottom: $spacing-size-1;
+    // Optical alignment with the nav links; must stay off .customMenu (see its note).
+    transform: translateY(1px);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -34,9 +47,10 @@
     font-size: 17px;
     border: none;
     border-radius: var(--radius-3xl);
+    box-shadow: none;
 
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
         background-color: var(--color-bg-primary);
         border-radius: var(--radius-3xl);
         border: none;
@@ -49,6 +63,14 @@
     background: rgba(255, 255, 255, 0.1);
     border: none;
     border-radius: var(--radius-3xl);
+
+    // In dark mode the trigger sits on --color-bg-primary (see the base rule
+    // above), whose higher specificity would otherwise swallow this hover.
+    // Mirror the light-mode 10% white overlay by lightening that surface.
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+        background-color: color-mix(in srgb, var(--color-bg-primary), var(--color-fg-white) 7.5%);
+    }
 }
 
 .customTrigger.open .arrow {
@@ -72,68 +94,93 @@
     margin-bottom: 2px;
 }
 
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(-0.5rem) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
 .customContent {
     position: absolute;
     top: 52px;
-    width: calc(100% - #{$spacing-size-3 * 2});
+    right: $spacing-size-3;
     left: $spacing-size-3;
-    padding: $spacing-size-2;
+    padding: $spacing-size-3;
     border-radius: var(--radius-md);
     background: var(--color-bg-primary);
     border: 1px solid var(--color-border-primary);
     box-shadow: var(--shadow-sm);
-    opacity: 0;
     z-index: 2;
+    // Closed (resting) state. Opening flips these via the parent `.open`
+    // class — opacity, translate and scale animate. The same transitions
+    // also play in reverse on close, so closing mirrors opening.
+    // `visibility` is delayed until the fade-out finishes so the dropdown
+    // is removed from the accessibility tree without snap-cutting the
+    // visual transition.
+    opacity: 0;
     transform: translateY(10px) scale(0.95);
+    visibility: hidden;
+    pointer-events: none;
     transition:
         opacity 0.15s ease,
-        transform 0.15s ease;
+        transform 0.15s ease,
+        visibility 0s linear 0.15s;
 
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
         background: color-mix(in srgb, var(--color-bg-primary), var(--color-fg-white) 5%);
     }
 
-    @media screen and (min-width: $breakpoint-hero-small) {
-        top: 100%;
-        left: 0;
-        width: 380px;
+    @container site-header (min-width: #{$switcher-popup-at}) {
+        // .headerInner is several rows tall in the wrapped states below
+        // $docs-search-inline, so clear one row — the token .headerLogo sizes it by.
+        top: var(--layout-site-header-height);
+        // Right-aligned to the content column, $spacing-size-2 mirroring .mainNav's
+        // trailing margin: the trigger sits too far right for a popup this wide.
+        left: auto;
+        right: $spacing-size-2;
+        // Fixed width gives each product row enough room for its title and
+        // description without truncation.
+        width: 800px;
+        max-width: calc(100% - #{$spacing-size-2} * 2);
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.columnHeading {
+    padding: $spacing-size-1 $spacing-size-2 $spacing-size-2;
+    font-size: var(--text-fs-sm);
+    font-weight: var(--text-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-fg-tertiary);
+
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+        color: var(--color-fg-secondary);
     }
 }
 
 .customMenu.open .customContent {
-    animation: fadeInUp 0.15s ease-in-out;
     opacity: 1;
     transform: translateY(0) scale(1);
+    visibility: visible;
+    pointer-events: auto;
+    // Override the closed-state visibility delay so the dropdown becomes
+    // interactive immediately on open while keeping the same fade/scale
+    // duration on the way in.
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease,
+        visibility 0s linear 0s;
 }
 
 .productTitle {
     font-weight: var(--text-semibold);
 
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
         color: var(--color-fg-primary);
     }
 }
@@ -147,14 +194,10 @@
 
 .itemsWrapper {
     display: flex;
+    align-items: center;
     padding: 8px;
     border-radius: var(--radius-md);
     transition: 0.5s all;
-}
-
-.itemsWrapper:first-child {
-    display: flex;
-    margin-bottom: $spacing-size-3;
 }
 
 .productsWrapper {
@@ -164,14 +207,90 @@
 }
 
 .placeholderIcon {
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
     background: var(--color-util-brand-100);
-    padding: 12px;
     border-radius: var(--radius-md);
+    // Centre the SVG inside the perfectly-square 48px tile rather than
+    // relying on padding + intrinsic SVG sizing. This keeps the tile a
+    // clean square regardless of how the SVG was authored (24×24, 32×32,
+    // viewBox offsets, etc.) and matches the AG product tiles exactly.
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
+    svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    // Light/dark variants are nested here so `.placeholderIcon .iconLight`
+    // (specificity 0,2,0) beats the per-svg sizing rule above
+    // (`.placeholderIcon svg`, 0,1,1) which would otherwise force both
+    // SVGs to `display: block` and stack the wrong variant on top.
+    .iconLight {
+        display: block;
+
+        #{$selector-darkmode}:has([data-is-homepage='false']) &,
+        #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+            display: none;
+        }
+    }
+
+    .iconDark {
+        display: none;
+
+        #{$selector-darkmode}:has([data-is-homepage='false']) &,
+        #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+            display: block;
+        }
+    }
+
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
         background: color-mix(in srgb, var(--color-fg-white), var(--color-bg-primary) 85%);
         box-shadow: var(--shadow-lg);
+    }
+}
+
+// NOTE: this may get added back in once we decide on a design direction
+// Bryntum product icons already have their own gradient/contrast, so the
+// AG-style square tile around them reads as visual noise. Drop the chrome
+// and let the icon sit directly on the dropdown surface in both schemes.
+// .placeholderIconBryntum {
+//     background: var(--color-util-brand-400);
+//     box-shadow: none;
+
+//     #{$selector-darkmode}:has([data-is-homepage='false']) &,
+//     #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+//         background: var(--color-bg-secondary);
+//         box-shadow: none;
+//     }
+
+//     svg > path {
+//         fill: var(--color-bg-primary);
+//         #{$selector-darkmode}:has([data-is-homepage='false']) &,
+//         #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+//             fill: var(--color-fg-white);
+//         }
+//     }
+// }
+
+// Inline category heading rendered between two items in the same column
+// (e.g. the "Bryntum" divider between AG Studio and Bryntum Gantt). Reuses
+// the columnHeading typography but adds a top spacer so it visually
+// separates the preceding item from the new category, a left padding that
+// matches the 8px itemsWrapper padding plus 12px so the heading lines up
+// under the product titles in the adjacent column, and a slightly lighter
+// foreground so it reads quieter than a top-of-column heading.
+.inlineHeading {
+    margin-top: $spacing-size-2;
+    color: var(--color-fg-quinary);
+
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
+        color: var(--color-fg-quinary);
     }
 }
 
@@ -180,24 +299,8 @@
     cursor: pointer;
     transition: 0.3s all ease-in-out;
 
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
+    #{$selector-darkmode}:has([data-is-homepage='false']) &,
+    #{$selector-darkmode}:has([data-is-homepage='true'] :global(.header-scrolled)) & {
         background: color-mix(in srgb, var(--color-fg-white), var(--color-bg-primary) 85%);
-    }
-}
-
-.iconLight {
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
-        display: none;
-    }
-}
-
-.iconDark {
-    display: none;
-
-    #{$selector-darkmode}:not(:has([data-is-homepage])) &,
-    #{$selector-darkmode}:has([data-is-homepage] :global(.header-scrolled)) & {
-        display: block;
     }
 }

@@ -1,7 +1,12 @@
 import type { ColDef, ColGroupDef, GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 function createNormalColDefs(): (ColDef | ColGroupDef)[] {
     return [
@@ -66,7 +71,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     // debug: true,
     columnDefs: createNormalColDefs(),
-    rowData: null,
 };
 
 // setup the grid after the page has finished loading

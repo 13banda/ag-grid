@@ -4,12 +4,17 @@ import {
     NumberFilterModule,
     PaginationModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule, RowGroupingPanelModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
 import { FakeServer } from './fakeServer';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     PaginationModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     RowGroupingPanelModule,
     TextFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicDataWithId>;

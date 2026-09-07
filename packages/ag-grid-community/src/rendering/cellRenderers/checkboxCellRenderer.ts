@@ -1,32 +1,43 @@
+import { KeyCode, RefPlaceholder, _getActiveDomElement, _getAriaCheckboxStateName, _setAriaLive } from 'ag-stack';
+
+import { AgCheckboxSelector } from '../../agWidgets/agCheckbox';
 import { GROUP_AUTO_COLUMN_ID } from '../../columns/columnUtils';
-import { KeyCode } from '../../constants/keyCode';
-import { _getActiveDomElement } from '../../gridOptionsUtils';
-import { _getAriaCheckboxStateName, _setAriaLive } from '../../utils/aria';
-import { _stopPropagationForAgGrid } from '../../utils/event';
-import type { AgCheckbox } from '../../widgets/agCheckbox';
-import { AgCheckboxSelector } from '../../widgets/agCheckbox';
-import { Component, RefPlaceholder } from '../../widgets/component';
-import { checkboxCellRendererCSS } from './checkboxCellRenderer.css-GENERATED';
+import type { ElementParams } from '../../utils/element';
+import { _stopPropagationForAgGrid } from '../../utils/gridEvent';
+import { Component } from '../../widgets/component';
+import type { GridCheckbox } from '../../widgets/gridWidgetTypes';
+import checkboxCellRendererCSS from './checkboxCellRenderer.css';
 import type { ICellRenderer, ICellRendererParams } from './iCellRenderer';
 
-export interface ICheckboxCellRendererParams<TData = any, TContext = any>
-    extends ICellRendererParams<TData, boolean, TContext> {
+export interface ICheckboxCellRendererParams<TData = any, TContext = any> extends ICellRendererParams<
+    TData,
+    boolean,
+    TContext
+> {
     /** Set to `true` for the input to be disabled. */
     disabled?: boolean;
 }
 
+const CheckboxCellRendererElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-cell-wrapper ag-checkbox-cell',
+    role: 'presentation',
+    children: [
+        {
+            tag: 'ag-checkbox',
+            ref: 'eCheckbox',
+            role: 'presentation',
+        },
+    ],
+};
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class CheckboxCellRenderer extends Component implements ICellRenderer {
-    private readonly eCheckbox: AgCheckbox = RefPlaceholder;
+    private readonly eCheckbox: GridCheckbox = RefPlaceholder;
     private params: ICheckboxCellRendererParams;
 
     constructor() {
-        super(
-            /* html*/ `
-            <div class="ag-cell-wrapper ag-checkbox-cell" role="presentation">
-                <ag-checkbox role="presentation" data-ref="eCheckbox"></ag-checkbox>
-            </div>`,
-            [AgCheckboxSelector]
-        );
+        super(CheckboxCellRendererElement, [AgCheckboxSelector]);
         this.registerCSS(checkboxCellRendererCSS);
     }
 
@@ -86,10 +97,12 @@ export class CheckboxCellRenderer extends Component implements ICellRenderer {
                 if (colId.startsWith(GROUP_AUTO_COLUMN_ID)) {
                     // if we're grouping by this column then the value is a string and we need to parse it
                     isSelected = value == null || (value as any) === '' ? undefined : (value as any) === 'true';
-                } else if (node.aggData && node.aggData[colId] !== undefined) {
-                    isSelected = value ?? undefined;
+                } else if (node.aggData?.[colId] !== undefined) {
+                    isSelected = value ?? undefined; // group with aggregation
+                } else if (node.sourceRowIndex >= 0) {
+                    isSelected = value ?? undefined; // tree group with data
                 } else {
-                    displayed = false;
+                    displayed = false; // group without aggregation or tree filler node without aggregation
                 }
             }
         } else {
@@ -113,34 +126,27 @@ export class CheckboxCellRenderer extends Component implements ICellRenderer {
     }
 
     private onCheckboxChanged(isSelected?: boolean): void {
-        const { eventSvc, params } = this;
-        const { column, node, value } = params;
-        const sharedEventParams = {
-            column: column!,
-            colDef: column!.getColDef(),
-            data: node.data,
-            node,
-            rowIndex: node.rowIndex,
-            rowPinned: node.rowPinned,
-            value,
-        };
-        eventSvc.dispatchEvent({
-            type: 'cellEditingStarted',
-            ...sharedEventParams,
-        });
+        const { params } = this;
+        const { column, node, value: oldValue } = params;
+        const { editSvc } = this.beans;
 
-        const valueChanged = node.setDataValue(column!, isSelected, 'edit');
+        if (!column) {
+            return;
+        }
 
-        eventSvc.dispatchEvent({
-            type: 'cellEditingStopped',
-            ...sharedEventParams,
-            oldValue: value,
+        const position = { rowNode: node, column };
+
+        editSvc?.dispatchCellEvent(position, null, 'cellEditingStarted', { value: oldValue });
+
+        const valueChanged = node.setDataValue(column, isSelected, 'ui');
+
+        editSvc?.dispatchCellEvent(position, null, 'cellEditingStopped', {
+            oldValue,
             newValue: isSelected,
             valueChanged,
         });
 
         if (!valueChanged) {
-            // need to reset to original
             this.updateCheckbox(params);
         }
     }

@@ -1,0 +1,128 @@
+import React, { StrictMode, useCallback, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import type {
+    CellEditingStartedEvent,
+    CellEditingStoppedEvent,
+    CellEditorSelectorResult,
+    ColDef,
+    ICellEditorParams,
+    RowEditingStartedEvent,
+    RowEditingStoppedEvent,
+} from 'ag-grid-community';
+import {
+    ClientSideRowModelModule,
+    NumberEditorModule,
+    TextEditorModule,
+    enableDevValidations,
+} from 'ag-grid-community';
+import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, RichSelectModule } from 'ag-grid-enterprise';
+import { AgGridProvider, AgGridReact } from 'ag-grid-react';
+
+import type { IRow } from './data';
+import { getData } from './data';
+import MoodEditor from './moodEditor';
+import NumericCellEditor from './numericCellEditor';
+import './styles.css';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+const modules = [
+    NumberEditorModule,
+    TextEditorModule,
+    ClientSideRowModelModule,
+    ColumnMenuModule,
+    ContextMenuModule,
+    ColumnsToolPanelModule,
+    RichSelectModule,
+];
+
+const cellEditorSelector: (params: ICellEditorParams<IRow>) => CellEditorSelectorResult | undefined = (
+    params: ICellEditorParams<IRow>
+) => {
+    if (params.data.type === 'age') {
+        return {
+            component: NumericCellEditor,
+        };
+    }
+    if (params.data.type === 'gender') {
+        return {
+            component: 'agRichSelectCellEditor',
+            params: {
+                values: ['Male', 'Female'],
+            },
+        };
+    }
+    if (params.data.type === 'mood') {
+        return {
+            component: MoodEditor,
+            popup: true,
+            popupPosition: 'under',
+        };
+    }
+    return undefined;
+};
+
+const GridExample = () => {
+    const containerStyle = useMemo(() => ({ width: '100%', height: '100%' }), []);
+    const gridStyle = useMemo(() => ({ height: '100%', width: '100%' }), []);
+    const [rowData, setRowData] = useState<IRow[]>(getData());
+    const [columnDefs, setColumnDefs] = useState<ColDef[]>([
+        { field: 'type' },
+        {
+            field: 'value',
+            editable: true,
+            cellEditorSelector: cellEditorSelector,
+        },
+    ]);
+    const defaultColDef = useMemo<ColDef>(() => {
+        return {
+            flex: 1,
+            cellDataType: false,
+        };
+    }, []);
+
+    const onRowEditingStarted = useCallback((event: RowEditingStartedEvent) => {
+        console.log('never called - not doing row editing');
+    }, []);
+
+    const onRowEditingStopped = useCallback((event: RowEditingStoppedEvent) => {
+        console.log('never called - not doing row editing');
+    }, []);
+
+    const onCellEditingStarted = useCallback((event: CellEditingStartedEvent) => {
+        console.log('cellEditingStarted');
+    }, []);
+
+    const onCellEditingStopped = useCallback((event: CellEditingStoppedEvent) => {
+        console.log('cellEditingStopped');
+    }, []);
+
+    return (
+        <AgGridProvider modules={modules}>
+            <div style={containerStyle}>
+                <div style={gridStyle}>
+                    <AgGridReact<IRow>
+                        rowData={rowData}
+                        columnDefs={columnDefs}
+                        defaultColDef={defaultColDef}
+                        onRowEditingStarted={onRowEditingStarted}
+                        onRowEditingStopped={onRowEditingStopped}
+                        onCellEditingStarted={onCellEditingStarted}
+                        onCellEditingStopped={onCellEditingStopped}
+                    />
+                </div>
+            </div>
+        </AgGridProvider>
+    );
+};
+
+const root = createRoot(document.getElementById('root')!);
+root.render(
+    <StrictMode>
+        <GridExample />
+    </StrictMode>
+);

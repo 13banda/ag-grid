@@ -1,11 +1,20 @@
 import type { BaseColDefParams } from '../../../entities/colDef';
+import type { IAutoCompleteComponentParams } from '../../../interfaces/iAutoComplete';
 import type { IFilterParams } from '../../../interfaces/iFilter';
 import type { IFloatingFilterParams } from '../../floating/floatingFilter';
-import type { ISimpleFilterModel, ISimpleFilterParams } from '../iSimpleFilter';
+import type {
+    CustomFilterOptionKey,
+    IFilterOptionDef,
+    ISimpleFilterModel,
+    ISimpleFilterParams,
+    TextFilterOptionKey,
+} from '../iSimpleFilter';
 import type { NumberFilter } from '../number/numberFilter';
 import type { TextFilter } from './textFilter';
 
 export interface TextFilterModel extends ISimpleFilterModel {
+    /** One of the Text Filter's options, or a Custom Filter Option's `displayKey`. */
+    type?: TextFilterOptionKey | CustomFilterOptionKey | null;
     /** Filter type is always `'text'` */
     filterType?: 'text';
     /**
@@ -44,24 +53,24 @@ export interface TextMatcherParams extends BaseColDefParams {
     textFormatter?: TextFormatter;
 }
 
-export interface TextMatcher {
-    (params: TextMatcherParams): boolean;
-}
+export type TextMatcher = (params: TextMatcherParams) => boolean;
 
-export interface TextFormatter {
-    (from?: string | null): string | null;
-}
+export type TextFormatter = (from?: string | null) => string | null;
+
 /**
  * Parameters provided by the grid to the `init` method of a `TextFilter`.
  * Do not use in `colDef.filterParams` - see `ITextFilterParams` instead.
  */
-
 export type TextFilterParams<TData = any> = ITextFilterParams & IFilterParams<TData>;
 /**
  * Parameters used in `colDef.filterParams` to configure a  Text Filter (`agTextColumnFilter`).
  */
 
 export interface ITextFilterParams extends ISimpleFilterParams {
+    /** Array of filter options to present to the user, and the options the Advanced Filter offers for the column. */
+    filterOptions?: (IFilterOptionDef | TextFilterOptionKey)[];
+    /** The default filter option to be selected. Must be one of the offered options. */
+    defaultOption?: TextFilterOptionKey | CustomFilterOptionKey;
     /**
      * Used to override how to filter based on the user input.
      * Returns `true` if the value passes the filter, otherwise `false`.
@@ -86,17 +95,7 @@ export interface ITextFilterParams extends ISimpleFilterParams {
     trimInput?: boolean;
 }
 
-export interface ITextInputFloatingFilterParams extends IFloatingFilterParams<TextFilter | NumberFilter> {
-    /**
-     * Overrides the browser's autocomplete/autofill behaviour by updating the autocomplete attribute on the input field used in the floating filter input.
-     * Possible values are:
-     * - `true` to allow the **default** browser autocomplete/autofill behaviour.
-     * - `false` to disable the browser autocomplete/autofill behavior by setting the `autocomplete` attribute to `off`.
-     * - A **string** to be used as the [autocomplete](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/autocomplete) attribute value.
-     * Some browsers do not respect setting the HTML attribute `autocomplete="off"` and display the auto-fill prompts anyway.
-     * @default false
-     */
-    browserAutoComplete?: boolean | string;
-}
+export interface ITextInputFloatingFilterParams
+    extends IFloatingFilterParams<TextFilter | NumberFilter>, IAutoCompleteComponentParams {}
 
 export interface ITextFloatingFilterParams extends ITextInputFloatingFilterParams {}

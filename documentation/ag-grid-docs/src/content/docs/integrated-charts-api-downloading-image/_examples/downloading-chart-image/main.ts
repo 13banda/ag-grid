@@ -13,25 +13,31 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberEditorModule,
+    NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, IntegratedChartsModule, RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     TextEditorModule,
     TextFilterModule,
     NumberEditorModule,
+    NumberFilterModule,
     ClientSideRowModelModule,
     IntegratedChartsModule.with(AgChartsEnterpriseModule),
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

@@ -1,0 +1,48 @@
+name: snyk-code-scan
+
+inputs:
+    snyk_token:
+        description: 'Snyk token to use.'
+        required: true
+    severity_threshold:
+        description: 'Severity threshold of the snyk scan'
+        default: 'high'
+    report_file:
+        description: 'Path to the output file in CTRF format'
+        default: 'report.json'
+    output_dir:
+        description: 'Output folder'
+        default: 'test-results/'
+    snyk_file:
+        description: 'Snyk output json file'
+        default: 'snyk.json'
+
+runs:
+    using: 'composite'
+    steps:
+        - name: Create output directory if required
+          uses: actions/github-script@v9
+          env:
+              OUTPUT_DIR: ${{ inputs.output_dir }}
+          with:
+              script: |
+                  const fs = require('fs');
+                  fs.mkdirSync('${{ env.OUTPUT_DIR }}', { recursive: true });
+        - name: Run Snyk SAST security code scan
+          uses: snyk/actions/node@master
+          continue-on-error: true # To make sure that results are uploaded
+          env:
+              SNYK_TOKEN: ${{ inputs.snyk_token }}
+          with:
+              command: code test
+              args: --severity-threshold=${{ inputs.severity_threshold }} --json > ${{ inputs.output_dir }}${{ inputs.snyk_file }}
+
+        - name: Convert snyk report to CTRF report and Github summary
+          shell: bash
+          if: ${{ inputs.report_file != '' }}
+          env:
+              SNYK_FILE: ${{ inputs.snyk_file }}
+              REPORT_FILE: ${{ inputs.report_file }}
+              OUTPUT_DIR: ${{ inputs.output_dir }}
+          run: |
+              node ./external/ag-shared/scripts/snyk/snyk-code-to-ctrf-github-summary-command.mjs

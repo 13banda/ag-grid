@@ -5,8 +5,8 @@ import {
     NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -20,6 +20,11 @@ import {
     SetFilterModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     NumberEditorModule,
     TextEditorModule,
@@ -31,7 +36,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     PivotModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -51,7 +55,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     theme: 'legacy',
-    rowData: null,
     columnDefs: columnDefs,
     defaultColDef: {
         editable: true,

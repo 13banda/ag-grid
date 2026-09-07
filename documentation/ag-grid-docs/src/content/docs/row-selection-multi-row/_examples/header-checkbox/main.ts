@@ -5,17 +5,16 @@ import {
     PaginationModule,
     QuickFilterModule,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    PaginationModule,
-    RowSelectionModule,
-    QuickFilterModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([PaginationModule, RowSelectionModule, QuickFilterModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 

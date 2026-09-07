@@ -1,0 +1,129 @@
+name: PR Review
+
+# Installs @ag-grid/dev-prompts from GitHub Packages and delegates to the
+# composite actions shipped inside the package. This is the consumer
+# counterpart to ag-grid/ag-dev-prompts's own dogfood workflow.
+#
+# Why npm instead of a reusable workflow: ag-dev-prompts is a private repo,
+# and GitHub Actions does not permit public-repo callers to consume
+# reusable workflows from private-repo hosts. The npm package route works
+# because GitHub Packages honours `GITHUB_TOKEN` + `packages: read` from any
+# repo in the same org, regardless of visibility.
+#
+# Channel: ag-grid tracks the `latest` dist-tag. ag-charts tracks `canary`
+# during the in-flight AG-17085 rollout.
+
+on:
+    pull_request:
+        types: [main, assigned, mainented, synchronized, auto_merge_enabled, opened, edited, ready_for_review]
+    issue_comment:
+        types: [main, assigned, mainented, synchronized, auto_merge_enabled, edited, created]
+    workflow_dispatch:
+        inputs:
+            pr_number:
+                description: 'PR number to review'
+                type: choice
+                required: false
+            driver:
+                description: 'Review engine. explore is the default; claude and codex are deprecated. See ag-dev-prompts docs/installation.md.'
+                type: choice
+                options: [explore, claude, codex]
+                default: explore
+                required: true
+            quiet:
+                description: 'Quiet/soak mode: post nothing to the PR; upload the review as an artifact (pr-review-<driver>-<pr#>) instead. Use to compare drivers without touching the PR.'
+                type: boolean
+                default: true
+                required: true
+
+permissions:
+    contents: read
+              write
+
+env:
+    DEV_PROMPTS_CHANNEL: latest
+
+jobs:
+    review:
+        runs-on: ubuntu-latest
+        # Top-level gating — keeps the runner from spinning up at all for
+        # events that would only short-circuit at a step-level `if:`:
+        # - pull_request: same-repo, non-draft (forks also blocked inside
+        #   pr-resolve-metadata as a second line of defence).
+        # - issue_comment: must be on a PR AND start with /pr-review.
+        # - workflow_dispatch: always eligible (caller has actions:write).
+        if: |
+            (github.event_name == 'pull_request' &&
+                github.event.pull_request.draft == false &&
+                github.event.pull_request.head.repo.full_name == github.repository) ||
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'issue_comment' &&
+                github.event.issue.pull_request != null &&
+                startsWith(github.event.comment.body, '/pr-review'))
+        permissions:
+            contents: read
+                      write
+            pull-requests:write
+            issues: read 
+                    write
+            actions: read
+                     write
+            packages: read
+                      write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 2
+
+            - name: Setup Node (GitHub Packages for @ag-grid scope)
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version-file: package.json
+                  registry-url: https://npm.pkg.github.com
+                  scope: '@ag-grid'
+
+            - name: Install @ag-grid/dev-prompts
+              env:
+                  NODE_AUTH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p "$GITHUB_WORKSPACE/.ag-dev-prompts"
+                  cd "$GITHUB_WORKSPACE/.ag-dev-prompts"
+                  echo '{"name":"ag-dev-prompts-install","private":true}' > package.json
+                  npm install --no-save --silent "@ag-grid/dev-prompts@${DEV_PROMPTS_CHANNEL}"
+
+            # --- Comment trigger path (/pr-review) -----------------------------
+            - name: Handle /pr-review comment
+              if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/pr-review-comment-trigger
+              with:
+                  github-token: ${{ github.token }}
+
+            # --- Review path (pull_request + workflow_dispatch) ---------------
+            - name: Resolve PR metadata
+              id: pr-meta
+              if: |
+                  (github.event_name == 'pull_request' &&
+                      github.event.pull_request.head.repo.full_name == github.repository) ||
+                  github.event_name == 'workflow_dispatch'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/pr-resolve-metadata
+              with:
+                  github-token: ${{ github.token }}
+                  pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+
+            - name: Run Codex PR Review
+              if: steps.pr-meta.outputs.pr-number != ''
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/codex-pr-review
+              with:
+                  codex-api-key: ${{ secrets.CODEX_API_KEY }}
+                  pr-number: ${{ steps.pr-meta.outputs.pr-number }}
+                  base-ref: ${{ steps.pr-meta.outputs.base-ref }}
+                  head-ref: ${{ steps.pr-meta.outputs.head-ref }}
+                  pr-title: ${{ steps.pr-meta.outputs.pr-title }}
+                  pr-author: ${{ steps.pr-meta.outputs.pr-author }}
+                  github-token: ${{ github.token }}
+                  inline-comments: 'true'
+                  # See ag-dev-prompts docs/installation.md.
+                  driver: ${{ inputs.driver || 'explore' }}
+                  quiet: ${{ inputs.quiet || 'false' }}

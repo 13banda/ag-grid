@@ -1,13 +1,12 @@
 import ts from 'typescript';
 
-import { writeJSONFile } from '../src/executors-utils';
-import { _ALL_GRID_OPTIONS } from '../src/executors/generate/generator/_copiedFromCore/propertyKeys';
+import { _GET_ALL_GRID_OPTIONS } from '../src/executors/generate/generator/_copiedFromCore/propertyKeys';
 
 function getTypes(node: ts.Node) {
     let typesToInclude: string[] = [];
     if (ts.isIdentifier(node)) {
         const typeName = node.getText();
-        if (!['HTMLElement', 'Function', 'Partial', 'TData', 'TContext', 'TValue'].includes(typeName)) {
+        if (!['HTMLElement', 'Function', 'Partial', 'TData', 'TContext', 'TValue', 'Iterable'].includes(typeName)) {
             typesToInclude.push(typeName);
         }
     }
@@ -23,7 +22,6 @@ function getTypes(node: ts.Node) {
 }
 
 function getTypeLookupFunc(fileName) {
-    console.log('Generating gridOptions types');
     const program = ts.createProgram([fileName], {});
     program.getTypeChecker(); // does something important to make types work below
 
@@ -46,14 +44,20 @@ function getTypeLookupFunc(fileName) {
         };
 
         const fullLookup = {};
-        _ALL_GRID_OPTIONS.forEach((prop) => {
+        _GET_ALL_GRID_OPTIONS().forEach((prop) => {
             fullLookup[prop] = lookupType(prop as string);
         });
-        console.log('Writing gridOptions types to file');
-        writeJSONFile('./gridOptionsTypes/_gridOptions_Types.json', fullLookup);
-    } else {
-        console.error('No gridOptions file found');
+        return fullLookup;
     }
+    throw new Error('No gridOptions file found');
 }
 
-getTypeLookupFunc('./gridOptionsTypes/baseGridOptions.ts');
+export function getGridOptionsType(): Record<
+    string,
+    {
+        typeName: string;
+        typesToInclude: string[];
+    }
+> {
+    return getTypeLookupFunc('./plugins/ag-grid-generate-example-files/gridOptionsTypes/baseGridOptions.ts');
+}

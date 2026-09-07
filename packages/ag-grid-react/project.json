@@ -22,7 +22,7 @@
     },
     "build:types": {
       "executor": "@nx/js:tsc",
-      "dependsOn": ["ag-grid-community:build"],
+      "dependsOn": ["ag-grid-community:build:types"],
       "inputs": [
         "{projectRoot}/package.json",
         "{projectRoot}/src/**/*",
@@ -48,7 +48,7 @@
     },
     "build:package": {
       "executor": "@nx/esbuild:esbuild",
-      "dependsOn": ["ag-grid-community:build"],
+      "dependsOn": ["ag-grid-community:build:types", "ag-grid-community:build:package"],
       "inputs": [
         "{projectRoot}/package.json",
         "{projectRoot}/src/**/*",
@@ -82,9 +82,9 @@
       "dependsOn": ["build:package"],
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "packages/ag-grid-react/dist/umd",
+        "outputPath": "{projectRoot}/dist/umd",
         "outputFileName": "ag-grid-react",
-        "main": "packages/ag-grid-react/dist/package/index.esm.mjs",
+        "main": "{projectRoot}/dist/package/index.cjs.js",
         "tsConfig": "packages/ag-grid-react/tsconfig.lib.json",
         "esbuildConfig": "esbuild.config.cjs",
         "platform": "browser",
@@ -97,17 +97,13 @@
         "sourcemap": true
       },
       "configurations": {
+        "staging": {
+          "sourcemap": false
+        },
         "production": {
           "sourcemap": false
         },
         "sizing": { "metafile": false }
-      }
-    },
-    "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
-      "options": {
-        "jestConfig": "packages/ag-grid-react/jest.config.ts"
       }
     },
     "pack": {

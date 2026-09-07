@@ -7,64 +7,7 @@ import chartsFeaturesData from '../../content/license-features/chartsFeaturesMat
 import gridFeaturesData from '../../content/license-features/gridFeaturesMatrix.json';
 import styles from './Licenses.module.scss';
 import { ComparisonTable } from './comparison-table/ComparisonTable';
-
-type LicenseData = {
-    className: string;
-    id: string;
-    subHeading: string;
-    priceFullDollars: string;
-    buyLink: string;
-    description: string;
-    tabGroup: string;
-};
-
-const DEV_LICENSE_DATA: LicenseData[] = [
-    {
-        className: styles.gridLicense,
-        id: 'community',
-        subHeading: 'AG Grid Community',
-        description: '',
-        priceFullDollars: '0',
-        buyLink: '/javascript-data-grid/getting-started/',
-        tabGroup: 'grid',
-    },
-    {
-        className: styles.gridLicense,
-        id: 'enterprise-grid',
-        subHeading: 'AG Grid Enterprise',
-        description: '',
-        priceFullDollars: '999',
-        buyLink: 'https://www.ag-grid.com/ecommerce/#/ecommerce/?licenseType=single&productType=aggrid',
-        tabGroup: 'grid',
-    },
-    {
-        className: styles.gridLicense,
-        id: 'community',
-        subHeading: 'AG Charts Community',
-        description: '',
-        priceFullDollars: '0',
-        buyLink: 'https://ag-grid.com/charts/javascript/quick-start/',
-        tabGroup: 'charts',
-    },
-    {
-        className: styles.gridLicense,
-        id: 'enterprise-charts',
-        subHeading: 'AG Charts Enterprise',
-        description: '',
-        priceFullDollars: '499',
-        buyLink: 'https://www.ag-grid.com/ecommerce/#/ecommerce/?licenseType=single&productType=agcharts',
-        tabGroup: 'charts',
-    },
-    {
-        className: styles.chartsLicense,
-        id: 'together',
-        subHeading: 'Enterprise Bundle',
-        description: 'AG Grid Enterprise &<br />AG Charts Enterprise',
-        priceFullDollars: '1498',
-        buyLink: 'https://www.ag-grid.com/ecommerce/#/ecommerce/?licenseType=single&productType=both',
-        tabGroup: 'both',
-    },
-];
+import { DEV_LICENSE_DATA, type LicenseData } from './licenseData';
 
 const Price: FunctionComponent<{ priceFullDollars: string }> = ({ priceFullDollars }) => {
     const hasCost = priceFullDollars !== '0';
@@ -75,6 +18,7 @@ const Price: FunctionComponent<{ priceFullDollars: string }> = ({ priceFullDolla
 
             <p className={classnames(styles.priceFullDollars, !hasCost ? styles.freePrice : '')}>
                 <span className={styles.priceCost}>{hasCost ? `$${priceFullDollars}` : 'Free'}</span>
+                <span className={styles.dollar}>{hasCost ? `USD` : ''}</span>
             </p>
             {hasCost && <p className={styles.developerText}>per developer</p>}
         </div>
@@ -83,6 +27,7 @@ const Price: FunctionComponent<{ priceFullDollars: string }> = ({ priceFullDolla
 
 const License: FunctionComponent<LicenseData> = (props: LicenseData) => {
     const { id, description, subHeading, priceFullDollars, buyLink } = props;
+    const ctaId = id === 'community' ? 'get-started' : id.includes('enterprise') ? 'buy-now' : 'bundle-buy-now';
 
     return (
         <>
@@ -93,8 +38,10 @@ const License: FunctionComponent<LicenseData> = (props: LicenseData) => {
                 </div>
 
                 <Price priceFullDollars={priceFullDollars} />
+
                 <div className={styles.licenseActions}>
                     <a
+                        id={ctaId}
                         className={`${id === 'community' ? 'button-tertiary' : 'button'} ${styles.pricing}`}
                         href={buyLink}
                         target="_blank"
@@ -112,6 +59,12 @@ const License: FunctionComponent<LicenseData> = (props: LicenseData) => {
         </>
     );
 };
+
+// Only styled below the pricing breakpoint, where the columns stack and the column gradient stops.
+function tierEmphasisClass(id: string) {
+    if (id === 'together') return styles.bundleTier;
+    return id.includes('enterprise') ? styles.enterpriseTier : undefined;
+}
 
 export const Licenses: FunctionComponent<{ isChecked: boolean }> = ({ isChecked }) => {
     const filteredData = DEV_LICENSE_DATA.filter(
@@ -155,7 +108,7 @@ export const Licenses: FunctionComponent<{ isChecked: boolean }> = ({ isChecked 
                 };
 
                 return (
-                    <div key={data.id} id={data.id} className={classnames(styles.license, data.className)}>
+                    <div key={data.id} id={data.id} className={classnames(styles.license, tierEmphasisClass(data.id))}>
                         <License {...data} />
 
                         <span className={styles.toggleFeatureBreakdownButton} onClick={toggleFeatureBreakdown}>

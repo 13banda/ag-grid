@@ -1,13 +1,16 @@
+import type { ITabGuard } from 'ag-stack';
+import { TabGuardClassNames } from 'ag-stack';
 import type { ForwardRefRenderFunction } from 'react';
 import React, { forwardRef, memo, useCallback, useContext, useImperativeHandle, useRef } from 'react';
 
-import type { GridCtrl, ITabGuard } from 'ag-grid-community';
-import { TabGuardClassNames, TabGuardCtrl } from 'ag-grid-community';
+import type { GridCtrl } from 'ag-grid-community';
+import { TabGuardCtrl } from 'ag-grid-community';
 
 import { BeansContext } from './beansContext';
 
 export interface TabGuardCompCallback {
     forceFocusOutOfContainer(up?: boolean): void;
+    focusNextElementOutsideContainer(up: boolean, excludeElements: HTMLElement[]): boolean;
 }
 
 interface TabGuardProps {
@@ -16,13 +19,14 @@ interface TabGuardProps {
     forceFocusOutWhenTabGuardsAreEmpty?: boolean;
     gridCtrl: GridCtrl;
     onTabKeyDown: (e: KeyboardEvent) => void;
+    isEmpty?: () => boolean;
 }
 
 const TabGuardCompRef: ForwardRefRenderFunction<TabGuardCompCallback, TabGuardProps> = (
     props: any,
     forwardRef: any
 ) => {
-    const { children, eFocusableElement, onTabKeyDown, gridCtrl, forceFocusOutWhenTabGuardsAreEmpty } = props;
+    const { children, eFocusableElement, onTabKeyDown, gridCtrl, forceFocusOutWhenTabGuardsAreEmpty, isEmpty } = props;
     const { context } = useContext(BeansContext);
 
     const topTabGuardRef = useRef<HTMLDivElement | null>(null);
@@ -32,26 +36,29 @@ const TabGuardCompRef: ForwardRefRenderFunction<TabGuardCompCallback, TabGuardPr
     const setTabIndex = (value?: string | null) => {
         const processedValue = value == null ? undefined : parseInt(value, 10).toString();
 
-        [topTabGuardRef, bottomTabGuardRef].forEach((tabGuard) => {
+        for (const tabGuard of [topTabGuardRef, bottomTabGuardRef]) {
             if (processedValue === undefined) {
                 tabGuard.current?.removeAttribute('tabindex');
             } else {
                 tabGuard.current?.setAttribute('tabindex', processedValue);
             }
-        });
+        }
     };
 
     useImperativeHandle(forwardRef, () => ({
         forceFocusOutOfContainer(up?: boolean) {
             tabGuardCtrlRef.current?.forceFocusOutOfContainer(up);
         },
+        focusNextElementOutsideContainer(up: boolean, excludeElements: HTMLElement[]) {
+            return tabGuardCtrlRef.current?.focusNextElementOutsideContainer(up, excludeElements) ?? false;
+        },
     }));
 
     const setupCtrl = useCallback(() => {
         const topTabGuard = topTabGuardRef.current;
         const bottomTabGuard = bottomTabGuardRef.current;
-        if (!topTabGuard && !bottomTabGuard) {
-            // Clean up after both refs have been removed
+        if ((!topTabGuard && !bottomTabGuard) || context.isDestroyed()) {
+            // Clean up after both refs have been removed or the context is destroyed
             tabGuardCtrlRef.current = context.destroyBean(tabGuardCtrlRef.current);
             return;
         }
@@ -70,6 +77,7 @@ const TabGuardCompRef: ForwardRefRenderFunction<TabGuardCompCallback, TabGuardPr
                     onTabKeyDown: onTabKeyDown,
                     forceFocusOutWhenTabGuardsAreEmpty: forceFocusOutWhenTabGuardsAreEmpty,
                     focusInnerElement: (fromBottom: any) => gridCtrl.focusInnerElement(fromBottom),
+                    isEmpty,
                 })
             );
         }

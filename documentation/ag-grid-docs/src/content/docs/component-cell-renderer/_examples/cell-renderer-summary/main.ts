@@ -1,10 +1,10 @@
-import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
+import type { GridApi, GridOptions } from 'ag-grid-community';
 import {
     CellStyleModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CompanyLogoRenderer } from './companyLogoRenderer_typescript';
@@ -13,7 +13,12 @@ import { CustomButtonComponent } from './customButtonComponent_typescript';
 import { MissionResultRenderer } from './missionResultRenderer_typescript';
 import { PriceRenderer } from './priceRenderer_typescript';
 
-ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule]);
 
 // Grid API: Access to Grid API methods
 let gridApi: GridApi;
@@ -21,17 +26,15 @@ let gridApi: GridApi;
 // Row Data Interface
 interface IRow {
     company: string;
-    location: string;
-    price: number;
-    successful: boolean;
+    website: string;
+    revenue: number;
+    hardware: boolean;
 }
 
-const gridOptions: GridOptions = {
+const gridOptions: GridOptions<IRow> = {
     defaultColDef: {
         flex: 10,
     },
-    // Data to be displayed
-    rowData: [] as IRow[],
     // Columns to be displayed (Should match rowData properties)
     columnDefs: [
         {
@@ -52,18 +55,20 @@ const gridOptions: GridOptions = {
         {
             field: 'revenue',
             cellRenderer: PriceRenderer,
+            flex: 8,
         },
         {
             field: 'hardware',
-            headerName: 'Hardware',
             cellRenderer: MissionResultRenderer,
+            flex: 8,
         },
         {
-            field: 'actions',
+            colId: 'actions',
             headerName: 'Actions',
             cellRenderer: CustomButtonComponent,
+            minWidth: 160,
         },
-    ] as ColDef[],
+    ],
 };
 
 // setup the grid after the page has finished loading

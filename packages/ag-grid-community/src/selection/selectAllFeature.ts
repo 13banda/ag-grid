@@ -1,10 +1,14 @@
+import { _getActiveDomElement, _getAriaCheckboxStateName, _setAriaRole } from 'ag-stack';
+
+import { AgCheckbox } from '../agWidgets/agCheckbox';
 import { isColumnGroupAutoCol, isColumnSelectionCol } from '../columns/columnUtils';
 import { BeanStub } from '../context/beanStub';
+import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
-import type { SelectAllMode } from '../entities/gridOptions';
-import type { SelectionEventSourceType } from '../events';
+import type { GridOptions, SelectAllMode } from '../entities/gridOptions';
+import type { DisplayedColumnsChangedEvent, SelectionEventSourceType } from '../events';
 import {
-    _getActiveDomElement,
+    _addGridCommonParams,
     _getCheckboxLocation,
     _getHeaderCheckbox,
     _getSelectAll,
@@ -13,16 +17,14 @@ import {
     _isServerSideRowModel,
 } from '../gridOptionsUtils';
 import type { HeaderCellCtrl } from '../headerRendering/cells/column/headerCellCtrl';
-import { _setAriaRole } from '../utils/aria';
-import { _warn } from '../validation/logging';
-import { AgCheckbox } from '../widgets/agCheckbox';
+import type { GridCheckbox } from '../widgets/gridWidgetTypes';
 
 export class SelectAllFeature extends BeanStub {
     private cbSelectAllVisible = false;
     private processingEventFromCheckbox = false;
     private headerCellCtrl: HeaderCellCtrl;
 
-    private cbSelectAll: AgCheckbox;
+    private cbSelectAll: GridCheckbox;
 
     constructor(private readonly column: AgColumn) {
         super();
@@ -43,18 +45,31 @@ export class SelectAllFeature extends BeanStub {
 
     public setComp(ctrl: HeaderCellCtrl): void {
         this.headerCellCtrl = ctrl;
-        const cbSelectAll = this.createManagedBean(new AgCheckbox());
+        const cbSelectAll = this.createManagedBean<GridCheckbox>(new AgCheckbox());
         this.cbSelectAll = cbSelectAll;
-        cbSelectAll.addCssClass('ag-header-select-all');
+        cbSelectAll.addCss('ag-header-select-all');
         _setAriaRole(cbSelectAll.getGui(), 'presentation');
         this.showOrHideSelectAll();
 
+        const updateStateOfCheckbox = this.updateStateOfCheckbox.bind(this);
+
         this.addManagedEventListeners({
-            newColumnsLoaded: this.showOrHideSelectAll.bind(this),
+            newColumnsLoaded: () => this.showOrHideSelectAll(),
             displayedColumnsChanged: this.onDisplayedColumnsChanged.bind(this),
-            selectionChanged: this.onSelectionChanged.bind(this),
-            paginationChanged: this.onSelectionChanged.bind(this),
-            modelUpdated: this.onModelChanged.bind(this),
+            selectionChanged: updateStateOfCheckbox,
+            paginationChanged: updateStateOfCheckbox,
+            modelUpdated: updateStateOfCheckbox,
+        });
+
+        this.addManagedPropertyListener('rowSelection', ({ currentValue, previousValue }) => {
+            const getSelectAll = (rowSelection: GridOptions['rowSelection']) =>
+                typeof rowSelection === 'string' || !rowSelection || rowSelection.mode === 'singleRow'
+                    ? undefined
+                    : rowSelection.selectAll;
+            if (getSelectAll(currentValue) !== getSelectAll(previousValue)) {
+                this.showOrHideSelectAll();
+            }
+            this.updateStateOfCheckbox();
         });
 
         this.addManagedListeners(cbSelectAll, { fieldValueChanged: this.onCbSelectAll.bind(this) });
@@ -62,14 +77,14 @@ export class SelectAllFeature extends BeanStub {
         this.refreshSelectAllLabel();
     }
 
-    private onDisplayedColumnsChanged(): void {
+    private onDisplayedColumnsChanged(e: DisplayedColumnsChangedEvent): void {
         if (!this.isAlive()) {
             return;
         }
-        this.showOrHideSelectAll();
+        this.showOrHideSelectAll(e.source === 'uiColumnMoved');
     }
 
-    private showOrHideSelectAll(): void {
+    private showOrHideSelectAll(fromColumnMoved: boolean = false): void {
         const cbSelectAllVisible = this.isCheckboxSelection();
         this.cbSelectAllVisible = cbSelectAllVisible;
         this.cbSelectAll.setDisplayed(cbSelectAllVisible);
@@ -81,32 +96,17 @@ export class SelectAllFeature extends BeanStub {
             // make sure checkbox is showing the right state
             this.updateStateOfCheckbox();
         }
-        this.refreshSelectAllLabel();
-    }
-
-    private onModelChanged(): void {
-        if (!this.cbSelectAllVisible) {
-            return;
-        }
-        this.updateStateOfCheckbox();
-    }
-
-    private onSelectionChanged(): void {
-        if (!this.cbSelectAllVisible) {
-            return;
-        }
-        this.updateStateOfCheckbox();
+        this.refreshSelectAllLabel(fromColumnMoved);
     }
 
     private updateStateOfCheckbox(): void {
-        if (this.processingEventFromCheckbox) {
+        if (!this.cbSelectAllVisible || this.processingEventFromCheckbox) {
             return;
         }
 
         this.processingEventFromCheckbox = true;
 
         const selectAllMode = this.getSelectAllMode();
-
         const selectionSvc = this.beans.selectionSvc!;
         const cbSelectAll = this.cbSelectAll;
 
@@ -121,11 +121,11 @@ export class SelectAllFeature extends BeanStub {
         this.processingEventFromCheckbox = false;
     }
 
-    private refreshSelectAllLabel(): void {
+    private refreshSelectAllLabel(fromColumnMoved: boolean = false): void {
         const translate = this.getLocaleTextFunc();
         const { headerCellCtrl, cbSelectAll, cbSelectAllVisible } = this;
         const checked = cbSelectAll.getValue();
-        const ariaStatus = checked ? translate('ariaChecked', 'checked') : translate('ariaUnchecked', 'unchecked');
+        const ariaStatus = _getAriaCheckboxStateName(translate, checked);
         const ariaLabel = translate('ariaRowSelectAll', 'Press Space to toggle all rows selection');
 
         headerCellCtrl.setAriaDescriptionProperty(
@@ -134,14 +134,18 @@ export class SelectAllFeature extends BeanStub {
         );
 
         cbSelectAll.setInputAriaLabel(translate('ariaHeaderSelection', 'Column with Header Selection'));
-        headerCellCtrl.announceAriaDescription();
+
+        // skip repetitive announcements during column move
+        if (!fromColumnMoved) {
+            headerCellCtrl.announceAriaDescription();
+        }
     }
 
     private checkSelectionType(feature: string): boolean {
         const isMultiSelect = _isMultiRowSelection(this.gos);
 
         if (!isMultiSelect) {
-            _warn(128, { feature });
+            this.warn(128, { feature });
             return false;
         }
         return true;
@@ -152,7 +156,7 @@ export class SelectAllFeature extends BeanStub {
         const rowModelMatches = _isClientSideRowModel(gos) || _isServerSideRowModel(gos);
 
         if (!rowModelMatches) {
-            _warn(129, { feature, rowModel: rowModel.getType() });
+            this.warn(129, { feature, rowModel: rowModel.getType() });
             return false;
         }
         return true;
@@ -192,35 +196,14 @@ export class SelectAllFeature extends BeanStub {
     private isCheckboxSelection(): boolean {
         const { column, gos, beans } = this;
         const rowSelection = gos.get('rowSelection');
-        const colDef = column.getColDef();
-        const { headerCheckboxSelection } = colDef;
-
-        let result = false;
         const newHeaderCheckbox = typeof rowSelection === 'object';
-        if (newHeaderCheckbox) {
-            // new selection config
-            const isSelectionCol = isColumnSelectionCol(column);
-            const isAutoCol = isColumnGroupAutoCol(column);
-            // default to displaying header checkbox in the selection column
-            const location = _getCheckboxLocation(rowSelection);
-            if (
-                (location === 'autoGroupColumn' && isAutoCol) ||
-                (isSelectionCol && beans.selectionColSvc?.isSelectionColumnEnabled())
-            ) {
-                result = _getHeaderCheckbox(rowSelection);
-            }
-        } else {
-            // legacy selection config
-            if (typeof headerCheckboxSelection === 'function') {
-                result = headerCheckboxSelection(gos.addGridCommonParams({ column, colDef }));
-            } else {
-                result = !!headerCheckboxSelection;
-            }
-        }
-
         const featureName = newHeaderCheckbox ? 'headerCheckbox' : 'headerCheckboxSelection';
 
-        return result && this.checkRightRowModelType(featureName) && this.checkSelectionType(featureName);
+        return (
+            isCheckboxSelection(beans, column) &&
+            this.checkRightRowModelType(featureName) &&
+            this.checkSelectionType(featureName)
+        );
     }
 
     private getSelectAllMode(): SelectAllMode {
@@ -228,7 +211,7 @@ export class SelectAllFeature extends BeanStub {
         if (selectAll) {
             return selectAll;
         }
-        const { headerCheckboxSelectionCurrentPageOnly, headerCheckboxSelectionFilteredOnly } = this.column.getColDef();
+        const { headerCheckboxSelectionCurrentPageOnly, headerCheckboxSelectionFilteredOnly } = this.column.colDef;
         if (headerCheckboxSelectionCurrentPageOnly) {
             return 'currentPage';
         }
@@ -237,4 +220,37 @@ export class SelectAllFeature extends BeanStub {
         }
         return 'all';
     }
+
+    public override destroy(): void {
+        super.destroy();
+        (this.cbSelectAll as any) = undefined;
+        (this.headerCellCtrl as any) = undefined;
+    }
+}
+
+export function isCheckboxSelection({ gos, selectionColSvc }: BeanCollection, column: AgColumn): boolean {
+    const rowSelection = gos.get('rowSelection');
+    const colDef = column.colDef;
+    const { headerCheckboxSelection } = colDef;
+
+    let result = false;
+    const newHeaderCheckbox = typeof rowSelection === 'object';
+    if (newHeaderCheckbox) {
+        // new selection config
+        const isSelectionCol = isColumnSelectionCol(column);
+        const isAutoCol = isColumnGroupAutoCol(column);
+        // default to displaying header checkbox in the selection column
+        const location = _getCheckboxLocation(rowSelection);
+        if ((location === 'autoGroupColumn' && isAutoCol) || (isSelectionCol && selectionColSvc?.isEnabled())) {
+            result = _getHeaderCheckbox(rowSelection);
+        }
+    }
+    // legacy selection config
+    else if (typeof headerCheckboxSelection === 'function') {
+        result = headerCheckboxSelection(_addGridCommonParams(gos, { column, colDef }));
+    } else {
+        result = !!headerCheckboxSelection;
+    }
+
+    return result;
 }

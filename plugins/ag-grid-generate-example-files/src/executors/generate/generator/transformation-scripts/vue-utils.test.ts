@@ -1,3 +1,4 @@
+import type { EventHandler, Property } from '../types';
 import {
     convertTemplate,
     getImport,
@@ -12,7 +13,7 @@ import {
 describe('toInput', () => {
     it('returns input definition', () => {
         const property = { name: 'foo' };
-        const inputDefinition = toInput(property);
+        const inputDefinition = toInput(property as Property);
 
         expect(inputDefinition).toBe(':foo="foo"');
     });
@@ -21,7 +22,7 @@ describe('toInput', () => {
 describe('toConst', () => {
     it('returns const definition', () => {
         const property = { name: 'foo', value: 'bar' };
-        const constDefinition = toConst(property);
+        const constDefinition = toConst(property as Property);
 
         expect(constDefinition).toBe(':foo="bar"');
     });
@@ -30,7 +31,7 @@ describe('toConst', () => {
 describe('toOutput', () => {
     it('returns output definition', () => {
         const event = { name: 'onClick', handlerName: 'onClickHandler' };
-        const outputDefinition = toOutput(event);
+        const outputDefinition = toOutput(event as EventHandler);
 
         expect(outputDefinition).toBe('@on-click="onClickHandler"');
     });
@@ -39,7 +40,7 @@ describe('toOutput', () => {
 describe('toMember', () => {
     it('returns member definition', () => {
         const event = { name: 'foo' };
-        const memberDefinition = toMember(event);
+        const memberDefinition = toMember(event as Property);
 
         expect(memberDefinition).toBe('foo: null');
     });
@@ -48,16 +49,16 @@ describe('toMember', () => {
 describe('toAssignment', () => {
     it('returns assignment definition', () => {
         const event = { name: 'foo', value: '123' };
-        const assignmentDefinition = toAssignment(event);
+        const assignmentDefinition = toAssignment(event as Property, []);
 
-        expect(assignmentDefinition).toBe('this.foo = 123');
+        expect(assignmentDefinition).toBe('foo.value = 123');
     });
 
     it('converts functions', () => {
         const event = { name: 'foo', value: 'function(bar) { return true; }' };
-        const assignmentDefinition = toAssignment(event);
+        const assignmentDefinition = toAssignment(event as Property, []);
 
-        expect(assignmentDefinition).toBe('this.foo = (bar) => { return true; }');
+        expect(assignmentDefinition).toBe('foo.value = (bar) => { return true; }');
     });
 });
 
@@ -80,9 +81,10 @@ describe('convertTemplate', () => {
 });
 
 describe('indentTemplate', () => {
-    expect(
-        indentTemplate(
-            `
+    it('indents correctly', () =>
+        expect(
+            indentTemplate(
+                `
                 <div style="display: flex; flex-direction: column">
                     <div style="flex: none; display: flex; flex-direction: row; justify-content: center; gap: 0.5em">
                         <button v-on:click="changeSeriesBar()">Bar</button>
@@ -96,11 +98,11 @@ describe('indentTemplate', () => {
                     />
                 </div>
             `.trim(),
-            4,
-            3
-        )
-    ).toBe(
-        `
+                4,
+                3
+            )
+        ).toBe(
+            `
             <div style="display: flex; flex-direction: column">
                 <div style="flex: none; display: flex; flex-direction: row; justify-content: center; gap: 0.5em">
                     <button v-on:click="changeSeriesBar()">Bar</button>
@@ -114,5 +116,5 @@ describe('indentTemplate', () => {
                 />
             </div>
         `.slice(1, -9)
-    );
+        ));
 });

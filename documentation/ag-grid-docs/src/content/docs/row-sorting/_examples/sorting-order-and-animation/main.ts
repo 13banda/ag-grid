@@ -1,7 +1,12 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', sortingOrder: ['asc', 'desc'] },
@@ -24,7 +29,6 @@ const gridOptions: GridOptions<IOlympicData> = {
         sortingOrder: ['desc', 'asc', null],
     },
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 // setup the grid after the page has finished loading

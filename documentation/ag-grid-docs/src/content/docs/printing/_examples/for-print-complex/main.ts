@@ -1,21 +1,21 @@
-import type { ColDef, FirstDataRenderedEvent, GridApi, GridOptions } from 'ag-grid-community';
+import type { ColDef, FirstDataRenderedEvent, GridApi, GridOptions, ValueFormatterParams } from 'ag-grid-community';
 import {
     ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    ClientSideRowModelApiModule,
-    RowGroupingModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, ClientSideRowModelApiModule, RowGroupingModule]);
 
 let gridApi: GridApi;
 const columnDefs: ColDef[] = [
@@ -25,7 +25,8 @@ const columnDefs: ColDef[] = [
     { field: 'color', width: 100 },
     {
         field: 'price',
-        valueFormatter: "'$' + value.toLocaleString()",
+        valueFormatter: ({ value }: ValueFormatterParams) =>
+            typeof value === 'number' && !Number.isNaN(value) ? `$${value.toLocaleString()}` : '',
         width: 100,
     },
     { field: 'year', width: 100 },

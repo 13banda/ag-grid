@@ -1,57 +1,70 @@
+import { _areEqual, _symmetricDiff } from 'ag-stack';
+
 import { doesMovePassMarryChildren, placeLockedColumns } from '../columnMove/columnMoveUtils';
 import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
-import type { IAggFunc } from '../entities/colDef';
-import type { EventService } from '../eventService';
-import type { ColumnEvent, ColumnEventType } from '../events';
-import type { GridOptionsService } from '../gridOptionsService';
-import type { ColumnPinnedType } from '../interfaces/iColumn';
-import type { WithoutGridCommon } from '../interfaces/iCommon';
-import { _areEqual, _removeFromArray } from '../utils/array';
-import { _exists, _missing } from '../utils/generic';
-import { _warn } from '../validation/logging';
 import {
-    dispatchColumnChangedEvent,
+    _defaultPivotSort,
+    _normalizeSortType,
+    _resolvePivotSortFromColDef,
+    getSortDefFromInput,
+    isSortDirectionValid,
+    isSortTypeValid,
+    normalizeSortDirection,
+} from '../entities/agColumn';
+import type { AgProvidedColumnGroup } from '../entities/agProvidedColumnGroup';
+import type { ColAggFunc, IAggFunc } from '../entities/colDef';
+import type { ShowValuesAsStateValue } from '../entities/colDef-showValuesAs';
+import type { ColumnEventType, ColumnsResetEvent } from '../events';
+import { _addGridCommonParams } from '../gridOptionsUtils';
+import type { ColumnPinnedType } from '../interfaces/iColumn';
+import type { SortDef, SortDirection, SortType } from '../interfaces/iSort';
+import {
+    _dispatchColumnChangedEvent,
     dispatchColumnPinnedEvent,
     dispatchColumnResizedEvent,
     dispatchColumnVisibleEvent,
 } from './columnEventUtils';
-import { updateSomeColumnState } from './columnFactoryUtils';
-import type { ColumnCollections, ColumnModel } from './columnModel';
-import { GROUP_AUTO_COLUMN_ID, _getColumnsFromTree, getValueFactory, isColumnSelectionCol } from './columnUtils';
-
-export interface ModifyColumnsNoEventsCallbacks {
-    addGroupCol(col: AgColumn): void;
-    removeGroupCol(col: AgColumn): void;
-    addPivotCol(col: AgColumn): void;
-    removePivotCol(col: AgColumn): void;
-    addValueCol(col: AgColumn): void;
-    removeValueCol(col: AgColumn): void;
-}
+import { GROUP_AUTO_COLUMN_ID, SELECTION_COLUMN_ID } from './columnUtils';
 
 export interface ColumnStateParams {
     /** True if the column is hidden */
     hide?: boolean | null;
     /** Width of the column in pixels */
-    width?: number;
+    width?: number | null;
     /** Column's flex if flex is set */
     flex?: number | null;
-    /** Sort applied to the column */
-    sort?: 'asc' | 'desc' | null;
+    /** The sort direction of the column */
+    sort?: SortDirection;
+    /** The type of sort applied to the column */
+    sortType?: SortType | null;
     /** The order of the sort, if sorting by many columns */
     sortIndex?: number | null;
     /** The aggregation function applied */
     aggFunc?: string | IAggFunc | null;
+    /**
+     * The position of this column in the order of value columns when aggregating in pivot mode.
+     * When aggregating by a single column, any number can be used. When aggregating by multiple
+     * columns, this determines the order (e.g. `0` for first, `1` for second).
+     */
+    valueIndex?: number | null;
     /** True if pivot active */
     pivot?: boolean | null;
     /** The order of the pivot, if pivoting by many columns */
     pivotIndex?: number | null;
+    /** The sort direction applied to this column's pivot result columns. Isolated from `sort`. */
+    pivotSort?: SortDirection;
     /** Set if column is pinned */
     pinned?: ColumnPinnedType;
     /** True if row group active */
     rowGroup?: boolean | null;
     /** The order of the row group, if grouping by many columns */
     rowGroupIndex?: number | null;
+    /** The active "Show Values As" selection: the mode name, or the object form (with `params` / `precision`)
+     *  for modes that take input. `null` clears it. */
+    showValuesAs?: ShowValuesAsStateValue;
+    /** User-edited header name overriding `colDef.headerName`. `null` reverts to the colDef value. */
+    headerName?: string | null;
 }
 
 export interface ColumnState extends ColumnStateParams {
@@ -68,641 +81,851 @@ export interface ApplyColumnStateParams {
     defaultState?: ColumnStateParams;
 }
 
+/** Pre-mutation snapshot; `dispatchColStateChanges` diffs against it to fire the right column events. */
+interface ColumnStateChanges {
+    /** Pre-mutation snapshot (`sortColumns` mutates `.columns` in place); `undefined` when empty/absent. */
+    rowGroupColumns: AgColumn[] | undefined;
+    pivotColumns: AgColumn[] | undefined;
+    /** Per-column scalar snapshot keyed by colId; insertion order = capture order. */
+    before: Map<string, ColumnStateBefore>;
+    /** Pre-mutation `colsList` ref. Unchanged ref ⇒ order untouched (only ever reassigned) ⇒ skip the O(n) diff. */
+    colsList: AgColumn[];
+}
+
+/** Minimal pre-apply snapshot: only the fields `dispatchColumnFieldChanges` diffs. */
+interface ColumnStateBefore {
+    width: number;
+    hide: boolean;
+    pinned: ColumnPinnedType;
+    sort: SortDirection;
+    sortType: SortType | undefined;
+    sortIndex: number | null;
+    aggFunc: ColAggFunc;
+    pivotSort: SortDirection | undefined;
+}
+
+/** Updates hide/sort/sortIndex/pinned/flex. Per field: `null`/empty clears, only `undefined` is skipped. */
+export const updateSomeColumnState = (
+    beans: BeanCollection,
+    column: AgColumn,
+    hide: boolean | null | undefined,
+    sort: SortDirection | SortDef | undefined,
+    sortIndex: number | null | undefined,
+    pinned: boolean | 'left' | 'right' | null | undefined,
+    flex: number | null | undefined,
+    source: ColumnEventType
+): void => {
+    const { sortSvc, pinnedCols, colFlex } = beans;
+    if (hide !== undefined) {
+        column.setVisible(!hide, source);
+    }
+    if (sortSvc) {
+        sortSvc.updateColSort(column, sort, source);
+        if (sortIndex !== undefined) {
+            sortSvc.setColSortIndex(column, sortIndex);
+        }
+    }
+    if (pinned !== undefined) {
+        pinnedCols?.setColPinned(column, pinned);
+    }
+    if (flex !== undefined) {
+        colFlex?.setColFlex(column, flex);
+    }
+};
+
+/** Show/hide columns — skips the full `_applyColumnState` rebuild (visibility can't change colsList membership/order).
+ *  `filterLockedColumns` (UI paths) skips `lockVisible` cols; the API path passes `false`.
+ *  @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _setColsVisible(
+    beans: BeanCollection,
+    keys: (string | AgColumn)[],
+    visible = false,
+    source: ColumnEventType,
+    filterLockedColumns = false
+): void {
+    const colModel = beans.colModel;
+    const newVisible = visible === true;
+    let changed: AgColumn[] | null = null;
+    for (let i = 0, len = keys.length; i < len; ++i) {
+        const key = keys[i];
+        const col = typeof key === 'string' ? colModel.getCol(key) : key;
+        if (col === undefined || (filterLockedColumns && col.colDef.lockVisible)) {
+            continue;
+        }
+        if (col.visible !== newVisible) {
+            col.setVisible(newVisible, source);
+            changed ??= [];
+            changed.push(col);
+        }
+    }
+    if (changed) {
+        const { colAnimation, eventSvc } = beans;
+        colAnimation?.start();
+        try {
+            colModel.refreshColsDerivedState();
+            beans.visibleCols.refresh(source, false);
+            eventSvc.dispatchEvent({ type: 'columnEverythingChanged', source });
+            dispatchColumnVisibleEvent(eventSvc, changed, source);
+        } finally {
+            colAnimation?.finish();
+        }
+    }
+}
+
+/** Apply `ColumnState` across two passes, then — once for the whole operation — re-order, refresh the
+ *  visible cols and dispatch the resulting events. Returns `true` if every provided state matched a column.
+ *  @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _applyColumnState(
     beans: BeanCollection,
     params: ApplyColumnStateParams,
     source: ColumnEventType
 ): boolean {
-    const {
-        colModel,
-        rowGroupColsSvc,
-        pivotColsSvc,
-        autoColSvc,
-        selectionColSvc,
-        colAnimation,
-        visibleCols,
-        pivotResultCols,
-        environment,
-        valueColsSvc,
-        eventSvc,
-        gos,
-    } = beans;
-
-    const providedCols = colModel.getColDefCols() || [];
-    if (!providedCols?.length) {
+    const { colModel, colAnimation, calculatedColsSvc } = beans;
+    const state = params.state;
+    if (state && !Array.isArray(state)) {
+        beans.log.warn(32); // state is not an array
         return false;
     }
 
-    if (params?.state && !params.state.forEach) {
-        // state is not an array
-        _warn(32);
+    // Re-add calc cols this state names that a prior reset parked — via the calc svc, so the rebuild
+    // suppresses calc lifecycle/validation events (a state op, not a user calc-col change).
+    if (state && calculatedColsSvc?.restoreDynamicColumnDefs(state)) {
+        calculatedColsSvc.refreshDynamicColumns(source);
+    }
+
+    const providedCols = colModel.colDefList;
+    const selectionCol = beans.selectionColSvc?.column;
+    if (!providedCols.length && !selectionCol) {
         return false;
     }
 
-    const syncColumnWithStateItem = (
-        column: AgColumn | null,
-        stateItem: ColumnState | null,
-        rowGroupIndexes: { [key: string]: number } | null,
-        pivotIndexes: { [key: string]: number } | null,
-        autoCol: boolean
-    ) => {
-        if (!column) {
-            return;
+    colAnimation?.start();
+    try {
+        // Capture once, before any mutation: the single dispatch below diffs the whole operation.
+        const stateChanges = captureColumnStateChanges(beans);
+
+        // Pass 1 — primary cols. Structural: `refreshCols` (re)creates auto/pivot-result/service cols.
+        let unmatched = applyStateToCols(beans, state ?? null, providedCols, params, source, true);
+
+        // Pass 2 — leftover states/defaults land on pass 1's pivot-result cols. Non-structural, no `refreshCols`.
+        if (unmatched !== null || params.defaultState) {
+            const pivotResultColsList = beans.pivotResultCols?.pivotCols;
+            unmatched = applyStateToCols(beans, unmatched, pivotResultColsList, params, source, false);
         }
 
-        const getValue = getValueFactory(stateItem, params.defaultState);
+        // Finalize once: re-order, single visible-cols refresh, single everything-changed + dispatch.
+        finalizeChange(beans, params, source, stateChanges);
 
-        const flex = getValue('flex').value1;
+        return unmatched === null; // true ⇒ every provided state matched a column
+    } finally {
+        colAnimation?.finish();
+    }
+}
 
-        updateSomeColumnState(
-            beans,
-            column,
-            getValue('hide').value1,
-            getValue('sort').value1,
-            getValue('sortIndex').value1,
-            getValue('pinned').value1,
-            flex,
-            source
-        );
+/** Apply `states` to `existingColumns` (by colId); the primary pass also runs the structural changes.
+ *  Ordering/refresh/dispatch happen once in the caller. Returns the unmatched states (`null` if all matched). */
+function applyStateToCols(
+    beans: BeanCollection,
+    states: ColumnState[] | null,
+    existingColumns: AgColumn[] | null | undefined,
+    params: ApplyColumnStateParams,
+    source: ColumnEventType,
+    primaryPass: boolean
+): ColumnState[] | null {
+    const colModel = beans.colModel;
+    const defaultState = params.defaultState;
+    let autoColStates: ColumnState[] | null = null;
+    let selectionColStates: ColumnState[] | null = null;
+    let unmatchedStates: ColumnState[] | null = null;
+    const matched: Set<AgColumn> | null = defaultState ? new Set() : null;
 
-        // if flex is null or undefined, fall back to setting width
-        if (flex == null) {
-            // if no flex, then use width if it's there
-            const width = getValue('width').value1;
-            if (width != null) {
-                // if width provided and valid, use it, otherwise stick with the old width
-                const minColWidth = column.getColDef().minWidth ?? environment.getDefaultColumnMinWidth();
-                if (minColWidth != null && width >= minColWidth) {
-                    column.setActualWidth(width, source);
+    if (states) {
+        for (let i = 0, len = states.length; i < len; ++i) {
+            const state = states[i];
+            const colId = state.colId;
+            let column: AgColumn | null | undefined;
+
+            if (colId != null) {
+                // Service cols are (re)created by the refresh, so collect their states for `syncServiceColumnsWithState`
+                // — not into `unmatchedStates` (that would wrongly force the pivot pass).
+                if (colId.startsWith(GROUP_AUTO_COLUMN_ID)) {
+                    autoColStates ??= [];
+                    autoColStates.push(state);
+                    continue;
+                }
+                if (colId.startsWith(SELECTION_COLUMN_ID)) {
+                    selectionColStates ??= [];
+                    selectionColStates.push(state);
+                    continue;
+                }
+                if (primaryPass) {
+                    column = colModel.getNonPivotColById(colId);
+                } else {
+                    // Pivot-result pass: only match generated pivot cols (those carrying pivotKeys).
+                    const col = colModel.getCol(colId);
+                    column = col?.colDef.pivotKeys == null ? null : col;
+                }
+            }
+
+            if (!column) {
+                unmatchedStates ??= [];
+                unmatchedStates.push(state);
+            } else {
+                applyFieldState(beans, column, state, defaultState, source);
+                matched?.add(column);
+            }
+        }
+    }
+
+    // Cols not named in `state` get `defaultState` (loop skipped when none supplied or no cols).
+    if (matched !== null && existingColumns) {
+        for (let i = 0, len = existingColumns.length; i < len; ++i) {
+            const col = existingColumns[i];
+            if (!matched.has(col)) {
+                applyFieldState(beans, col, null, defaultState, source);
+            }
+        }
+    }
+
+    // Only the primary pass is structural (rowGroup/pivot membership, service cols, sort/refresh/sync).
+    if (primaryPass) {
+        applyStructuralStateChanges(beans, autoColStates, selectionColStates, defaultState, source);
+    }
+
+    return unmatchedStates;
+}
+
+/** Primary-pass tail: order row-group/pivot cols, rebuild cols, then sync the (re)created service cols. */
+function applyStructuralStateChanges(
+    beans: BeanCollection,
+    autoColStates: ColumnState[] | null,
+    selectionColStates: ColumnState[] | null,
+    defaultState: ColumnStateParams | undefined,
+    source: ColumnEventType
+): void {
+    const { autoColSvc, selectionColSvc, rowGroupColsSvc, pivotColsSvc, valueColsSvc } = beans;
+
+    // Must run before refreshCols, which reads `service.columns` as-is to build auto cols + colsList
+    // (value-col order drives pivot result column order).
+    rowGroupColsSvc?.sortByPendingState();
+    pivotColsSvc?.sortByPendingState();
+    valueColsSvc?.sortByPendingState();
+
+    beans.colModel.refreshCols(false, source);
+
+    const selectionCol = selectionColSvc?.column;
+    syncServiceColumnsWithState(beans, autoColStates, autoColSvc?.columns ?? [], defaultState, source);
+    syncServiceColumnsWithState(beans, selectionColStates, selectionCol ? [selectionCol] : [], defaultState, source);
+}
+
+/** Sync service cols (auto/selection) post-refresh: apply each state to its matching `serviceCols` entry,
+ *  and `defaultState` to the rest. `serviceCols` is read-only. */
+function syncServiceColumnsWithState(
+    beans: BeanCollection,
+    colStates: ColumnState[] | null,
+    serviceCols: readonly AgColumn[],
+    defaultState: ColumnStateParams | undefined,
+    source: ColumnEventType
+): void {
+    let matched: Set<AgColumn> | null = null;
+    if (colStates !== null) {
+        matched = new Set<AgColumn>();
+        for (let s = 0, sLen = colStates.length; s < sLen; ++s) {
+            const stateItem = colStates[s];
+            const stateColId = stateItem.colId;
+            for (let i = 0, len = serviceCols.length; i < len; ++i) {
+                const sc = serviceCols[i];
+                if (sc.colId === stateColId) {
+                    matched.add(sc);
+                    applyFieldState(beans, sc, stateItem, defaultState, source);
+                    break;
                 }
             }
         }
-
-        // we do not do aggFunc, rowGroup or pivot for auto cols or secondary cols
-        if (autoCol || !column.isPrimary()) {
-            return;
-        }
-
-        valueColsSvc?.syncColumnWithState(column, source, getValue);
-        rowGroupColsSvc?.syncColumnWithState(column, source, getValue, rowGroupIndexes);
-        pivotColsSvc?.syncColumnWithState(column, source, getValue, pivotIndexes);
-    };
-
-    const applyStates = (
-        states: ColumnState[],
-        existingColumns: AgColumn[],
-        getById: (id: string) => AgColumn | null
-    ) => {
-        const dispatchEventsFunc = _compareColumnStatesAndDispatchEvents(beans, source);
-
-        // at the end below, this list will have all columns we got no state for
-        const columnsWithNoState = existingColumns.slice();
-
-        const rowGroupIndexes: { [key: string]: number } = {};
-        const pivotIndexes: { [key: string]: number } = {};
-        const autoColStates: ColumnState[] = [];
-        const selectionColStates: ColumnState[] = [];
-        // If pivoting is modified, these are the states we try to reapply after
-        // the pivot result cols are re-generated
-        const unmatchedAndAutoStates: ColumnState[] = [];
-        let unmatchedCount = 0;
-
-        const previousRowGroupCols = rowGroupColsSvc?.columns.slice() ?? [];
-        const previousPivotCols = pivotColsSvc?.columns.slice() ?? [];
-
-        states.forEach((state) => {
-            const colId = state.colId;
-
-            // auto group columns are re-created so deferring syncing with ColumnState
-            const isAutoGroupColumn = colId.startsWith(GROUP_AUTO_COLUMN_ID);
-            if (isAutoGroupColumn) {
-                autoColStates.push(state);
-                unmatchedAndAutoStates.push(state);
-                return;
-            }
-
-            if (isColumnSelectionCol(colId)) {
-                selectionColStates.push(state);
-                unmatchedAndAutoStates.push(state);
-                return;
-            }
-
-            const column = getById(colId);
-
-            if (!column) {
-                unmatchedAndAutoStates.push(state);
-                unmatchedCount += 1;
-            } else {
-                syncColumnWithStateItem(column, state, rowGroupIndexes, pivotIndexes, false);
-                _removeFromArray(columnsWithNoState, column);
-            }
-        });
-
-        // anything left over, we got no data for, so add in the column as non-value, non-rowGroup and hidden
-        const applyDefaultsFunc = (col: AgColumn) =>
-            syncColumnWithStateItem(col, null, rowGroupIndexes, pivotIndexes, false);
-
-        columnsWithNoState.forEach(applyDefaultsFunc);
-
-        rowGroupColsSvc?.sortColumns(comparatorByIndex.bind(rowGroupColsSvc, rowGroupIndexes, previousRowGroupCols));
-        pivotColsSvc?.sortColumns(comparatorByIndex.bind(pivotColsSvc, pivotIndexes, previousPivotCols));
-
-        colModel.refreshCols(false);
-
-        const syncColStates = (
-            getCol: (colId: string) => AgColumn | null,
-            colStates: ColumnState[],
-            columns: AgColumn[] = []
-        ) => {
-            colStates.forEach((stateItem) => {
-                const col = getCol(stateItem.colId);
-                _removeFromArray(columns, col);
-                syncColumnWithStateItem(col, stateItem, null, null, true);
-            });
-            columns.forEach(applyDefaultsFunc);
-        };
-
-        // sync newly created auto group columns with ColumnState
-        syncColStates(
-            (colId: string) => autoColSvc?.getAutoCol(colId) ?? null,
-            autoColStates,
-            autoColSvc?.getAutoCols()?.slice()
-        );
-
-        // sync selection columns with ColumnState
-        syncColStates(
-            (colId: string) => selectionColSvc?.getSelectionCol(colId) ?? null,
-            selectionColStates,
-            selectionColSvc?.getSelectionCols()?.slice()
-        );
-
-        orderLiveColsLikeState(params, colModel, gos);
-        visibleCols.refresh(source);
-        eventSvc.dispatchEvent({
-            type: 'columnEverythingChanged',
-            source,
-        });
-
-        dispatchEventsFunc(); // Will trigger pivot result col changes if pivoting modified
-        return { unmatchedAndAutoStates, unmatchedCount };
-    };
-
-    colAnimation?.start();
-
-    let { unmatchedAndAutoStates, unmatchedCount } = applyStates(params.state || [], providedCols, (id) =>
-        colModel.getColDefCol(id)
-    );
-
-    // If there are still states left over, see if we can apply them to newly generated
-    // pivot result cols or auto cols. Also if defaults exist, ensure they are applied to pivot resul cols
-    if (unmatchedAndAutoStates.length > 0 || _exists(params.defaultState)) {
-        const pivotResultColsList = pivotResultCols?.getPivotResultCols()?.list ?? [];
-        unmatchedCount = applyStates(
-            unmatchedAndAutoStates,
-            pivotResultColsList,
-            (id) => pivotResultCols?.getPivotResultCol(id) ?? null
-        ).unmatchedCount;
     }
-    colAnimation?.finish();
-
-    return unmatchedCount === 0; // Successful if no states unaccounted for
+    // Service cols with no matching state get `defaultState`; skipped entirely when none supplied.
+    if (defaultState) {
+        for (let i = 0, len = serviceCols.length; i < len; ++i) {
+            const c = serviceCols[i];
+            if (!matched?.has(c)) {
+                applyFieldState(beans, c, null, defaultState, source);
+            }
+        }
+    }
 }
 
-export function _resetColumnState(beans: BeanCollection, source: ColumnEventType): void {
-    const { colModel, autoColSvc } = beans;
-    const primaryCols = colModel.getColDefCols();
-    if (!primaryCols?.length) {
+/** Apply one `ColumnState`/`defaultState` to a column: field state always; membership only for primary cols. */
+function applyFieldState(
+    beans: BeanCollection,
+    column: AgColumn,
+    stateItem: ColumnState | null,
+    defaultState: ColumnStateParams | undefined,
+    source: ColumnEventType
+): void {
+    // `orDefault` falls back only on `undefined` — an explicit `null` is kept, so state can clear a property.
+    const flex = orDefault(stateItem?.flex, defaultState?.flex);
+    const maybeSortDir = orDefault(stateItem?.sort, defaultState?.sort);
+    const maybeSortType = orDefault(stateItem?.sortType, defaultState?.sortType);
+    const isSortUpdate = isSortDirectionValid(maybeSortDir) || isSortTypeValid(maybeSortType);
+    // Direction alone → default sort type; both must be provided to preserve a specific sort type.
+    const newSortDef = isSortUpdate
+        ? { type: _normalizeSortType(maybeSortType), direction: normalizeSortDirection(maybeSortDir) }
+        : undefined;
+
+    updateSomeColumnState(
+        beans,
+        column,
+        orDefault(stateItem?.hide, defaultState?.hide),
+        newSortDef,
+        orDefault(stateItem?.sortIndex, defaultState?.sortIndex),
+        orDefault(stateItem?.pinned, defaultState?.pinned),
+        flex,
+        source
+    );
+
+    const headerName = orDefault(stateItem?.headerName, defaultState?.headerName);
+    if (headerName !== undefined) {
+        column.setHeaderNameOverride(headerName);
+    }
+
+    // No flex → fall back to width.
+    if (flex == null) {
+        const width = orDefault(stateItem?.width, defaultState?.width);
+        if (width != null) {
+            // Apply width only if valid (>= min), else keep the old width.
+            const minColWidth = column.colDef.minWidth ?? beans.environment.getDefaultColumnMinWidth();
+            if (minColWidth != null && width >= minColWidth) {
+                // an explicit valid width is intent, so it takes ownership; an omitted or `null`
+                // width leaves ownership as it was
+                column.setUserSized(true);
+                column.setActualWidth(width, source);
+            }
+        }
+    }
+
+    // Membership is for primary user cols only — never auto-group (primary, but generated) or non-primary cols.
+    if (column.colKind === 'auto-group' || !column.primary) {
         return;
     }
 
-    // NOTE = there is one bug here that no customer has noticed - if a column has colDef.lockPosition,
-    // this is ignored  below when ordering the cols. to work, we should always put lockPosition cols first.
-    // As a work around, developers should just put lockPosition columns first in their colDef list.
+    beans.valueColsSvc?.syncColState(column, stateItem, defaultState, source);
+    beans.rowGroupColsSvc?.syncColState(column, stateItem, defaultState, source);
+    beans.pivotColsSvc?.syncColState(column, stateItem, defaultState, source);
+    beans.showValuesAsSvc?.syncColState(column, stateItem, defaultState, source);
 
-    // we can't use 'allColumns' as the order might of messed up, so get the primary ordered list
-    const primaryColumnTree = colModel.getColDefColTree();
-    const primaryColumns = _getColumnsFromTree(primaryColumnTree);
-    const columnStates: ColumnState[] = [];
-
-    // we start at 1000, so if user has mix of rowGroup and group specified, it will work with both.
-    // eg IF user has ColA.rowGroupIndex=0, ColB.rowGroupIndex=1, ColC.rowGroup=true,
-    // THEN result will be ColA.rowGroupIndex=0, ColB.rowGroupIndex=1, ColC.rowGroup=1000
-    let letRowGroupIndex = 1000;
-    let letPivotIndex = 1000;
-
-    let colsToProcess: AgColumn[] = [];
-    const groupAutoCols = autoColSvc?.getAutoCols();
-    if (groupAutoCols) {
-        colsToProcess = colsToProcess.concat(groupAutoCols);
+    // Pivot sort is isolated from `sort` - applied directly, never routed through the sort service.
+    const maybePivotSort = orDefault(stateItem?.pivotSort, defaultState?.pivotSort);
+    if (maybePivotSort !== undefined) {
+        column.pivotSort = normalizeSortDirection(maybePivotSort);
     }
-
-    if (primaryColumns) {
-        colsToProcess = colsToProcess.concat(primaryColumns);
-    }
-
-    colsToProcess.forEach((column) => {
-        const stateItem = getColumnStateFromColDef(column);
-
-        if (_missing(stateItem.rowGroupIndex) && stateItem.rowGroup) {
-            stateItem.rowGroupIndex = letRowGroupIndex++;
-        }
-
-        if (_missing(stateItem.pivotIndex) && stateItem.pivot) {
-            stateItem.pivotIndex = letPivotIndex++;
-        }
-
-        columnStates.push(stateItem);
-    });
-
-    _applyColumnState(beans, { state: columnStates, applyOrder: true }, source);
 }
 
-/**
- * calculates what events to fire between column state changes. gets used when:
- * a) apply column state
- * b) apply new column definitions (so changes from old cols)
- */
-export function _compareColumnStatesAndDispatchEvents(beans: BeanCollection, source: ColumnEventType): () => void {
-    const { rowGroupColsSvc, pivotColsSvc, valueColsSvc, colModel, sortSvc, eventSvc } = beans;
-    const startState = {
-        rowGroupColumns: rowGroupColsSvc?.columns.slice() ?? [],
-        pivotColumns: pivotColsSvc?.columns.slice() ?? [],
-        valueColumns: valueColsSvc?.columns.slice() ?? [],
+/** Reset all columns to the state declared in their colDefs (`initial*`/explicit), re-apply the colDef
+ *  order, and fire `columnsReset`.
+ *  @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _resetColumnState(beans: BeanCollection, source: ColumnEventType): void {
+    const { colModel, autoColSvc, selectionColSvc, eventSvc, gos, colAnimation, calculatedColsSvc } = beans;
+
+    // Park API/dialog-added calc cols and revert edits/removals of declared ones, so the reset below runs
+    // against the original set — via the calc svc, so the rebuild emits no calc lifecycle/validation events.
+    const userColumnsCleared = beans.userColumnSvc?.clear() ?? false;
+    if (calculatedColsSvc) {
+        const dynamicColsReset = calculatedColsSvc.resetDynamicColumnDefs(true);
+        if (dynamicColsReset || userColumnsCleared) {
+            calculatedColsSvc.refreshDynamicColumns(source);
+        }
+    } else if (userColumnsCleared) {
+        colModel.rebuildCols(source);
+    }
+
+    if (!colModel.colDefList.length) {
+        return;
+    }
+
+    // Reset state per colDef, tracking max explicit rowGroup/pivot index so boolean-only cols get fallback
+    // indexes after them. `colDefList` is `colDefTree`'s flat leaf set (same count), sizing the array exactly.
+    const selectionCol = selectionColSvc?.column ?? null;
+    const initialAutoCols = autoColSvc?.columns;
+    const initialAutoLen = initialAutoCols?.length ?? 0;
+    const columnStates: ColumnState[] = new Array(initialAutoLen + (selectionCol ? 1 : 0) + colModel.colDefList.length);
+    let stateIdx = 0;
+    let maxRowGroupIndex = -1;
+    let maxPivotIndex = -1;
+    const addColState = (col: AgColumn) => {
+        const stateItem = getColumnStateFromColDef(beans, col);
+        const { rowGroupIndex, pivotIndex } = stateItem;
+        if (rowGroupIndex != null && rowGroupIndex > maxRowGroupIndex) {
+            maxRowGroupIndex = rowGroupIndex;
+        }
+        if (pivotIndex != null && pivotIndex > maxPivotIndex) {
+            maxPivotIndex = pivotIndex;
+        }
+        columnStates[stateIdx++] = stateItem;
     };
 
-    const columnStateBefore = _getColumnState(beans);
-    const columnStateBeforeMap: { [colId: string]: ColumnState } = {};
+    if (initialAutoCols) {
+        for (let i = 0; i < initialAutoLen; ++i) {
+            addColState(initialAutoCols[i]);
+        }
+    }
+    if (selectionCol) {
+        addColState(selectionCol);
+    }
+    // Leaves in colDef declaration order (stable; colDefList can be permuted by a tool-panel reorder).
+    forEachColTreeLeaf(colModel.colDefTree, addColState);
 
-    columnStateBefore.forEach((col) => {
-        columnStateBeforeMap[col.colId!] = col;
-    });
+    // Second pass: assign fallback indexes to boolean-only group/pivot cols (after the max above).
+    for (let i = 0, len = columnStates.length; i < len; ++i) {
+        const stateItem = columnStates[i];
+        if (stateItem.rowGroup && stateItem.rowGroupIndex == null) {
+            stateItem.rowGroupIndex = ++maxRowGroupIndex;
+        }
+        if (stateItem.pivot && stateItem.pivotIndex == null) {
+            stateItem.pivotIndex = ++maxPivotIndex;
+        }
+    }
 
-    return () => {
-        const colsForState = colModel.getAllCols();
+    colAnimation?.start();
+    try {
+        // Single capture before any mutation — the lone finalize dispatch diffs the whole reset.
+        const stateChanges = captureColumnStateChanges(beans);
 
-        // dispatches generic ColumnEvents where all columns are returned rather than what has changed
-        const dispatchWhenListsDifferent = (
-            eventType: 'columnPivotChanged' | 'columnRowGroupChanged',
-            colsBefore: AgColumn[],
-            colsAfter: AgColumn[],
-            idMapper: (column: AgColumn) => string
-        ) => {
-            const beforeList = colsBefore.map(idMapper);
-            const afterList = colsAfter.map(idMapper);
-            const unchanged = _areEqual(beforeList, afterList);
+        // Apply field state; the structural pass (re)creates auto/service cols. No dispatch yet.
+        applyStateToCols(beans, columnStates, colModel.colDefList, {}, source, true);
 
-            if (unchanged) {
-                return;
-            }
+        // Force `pivotSort` back to its colDef default: `applyFieldState` skips an `undefined` target (so an
+        // omitted `pivotSort` in `applyColumnState` leaves it alone), but a reset must clear a user-applied sort.
+        const primaryCols = colModel.colDefList;
+        for (let i = 0, len = primaryCols.length; i < len; ++i) {
+            const col = primaryCols[i];
+            col.pivotSort = _resolvePivotSortFromColDef(col.colDef);
+            // the state above carries the colDef width, which `applyFieldState` would otherwise read as a
+            // deliberate resize
+            col.resetWidthOwnership();
+        }
 
-            const changes = new Set(colsBefore);
-            colsAfter.forEach((id) => {
-                // if the first list had it, delete it, as it's unchanged.
-                if (!changes.delete(id)) {
-                    // if the second list has it, and first doesn't, add it.
-                    changes.add(id);
-                }
-            });
+        // Order from the now-current service cols: auto cols may have been recreated above (their colIds change
+        // with the row-group set), so use the post-apply instances, not the pre-apply ids in `columnStates`.
+        const autoCols = autoColSvc?.columns;
+        const autoColsLen = autoCols?.length ?? 0;
+        const orderState = new Array<ColumnState>((selectionCol ? 1 : 0) + autoColsLen + colModel.colDefList.length);
+        let orderIdx = 0;
+        if (selectionCol) {
+            orderState[orderIdx++] = { colId: selectionCol.colId };
+        }
+        for (let i = 0; i < autoColsLen; ++i) {
+            orderState[orderIdx++] = { colId: autoCols![i].colId };
+        }
+        forEachColTreeLeaf(colModel.colDefTree, (col) => {
+            orderState[orderIdx++] = { colId: col.colId };
+        });
 
-            const changesArr = [...changes];
-
+        // Group header names live outside column state, so clear their overrides here too.
+        const groupOverrides = colModel.groupHeaderNameOverrides;
+        if (groupOverrides.size) {
+            groupOverrides.clear();
             eventSvc.dispatchEvent({
-                type: eventType,
-                columns: changesArr,
-                column: changesArr.length === 1 ? changesArr[0] : null,
-                source: source,
-            } as WithoutGridCommon<ColumnEvent>);
-        };
-
-        // determines which columns have changed according to supplied predicate
-        const getChangedColumns = (changedPredicate: (cs: ColumnState, c: AgColumn) => boolean): AgColumn[] => {
-            const changedColumns: AgColumn[] = [];
-
-            colsForState.forEach((column) => {
-                const colStateBefore = columnStateBeforeMap[column.getColId()];
-                if (colStateBefore && changedPredicate(colStateBefore, column)) {
-                    changedColumns.push(column);
-                }
+                type: 'columnHeaderNameChanged',
+                column: null,
+                columns: null,
+                columnGroup: null,
+                source,
             });
-
-            return changedColumns;
-        };
-
-        const columnIdMapper = (c: AgColumn) => c.getColId();
-
-        dispatchWhenListsDifferent(
-            'columnRowGroupChanged',
-            startState.rowGroupColumns,
-            rowGroupColsSvc?.columns ?? [],
-            columnIdMapper
-        );
-
-        dispatchWhenListsDifferent(
-            'columnPivotChanged',
-            startState.pivotColumns,
-            pivotColsSvc?.columns ?? [],
-            columnIdMapper
-        );
-
-        const valueChangePredicate = (cs: ColumnState, c: AgColumn) => {
-            const oldActive = cs.aggFunc != null;
-
-            const activeChanged = oldActive != c.isValueActive();
-            // we only check aggFunc if the agg is active
-            const aggFuncChanged = oldActive && cs.aggFunc != c.getAggFunc();
-
-            return activeChanged || aggFuncChanged;
-        };
-        const changedValues = getChangedColumns(valueChangePredicate);
-        if (changedValues.length > 0) {
-            dispatchColumnChangedEvent(eventSvc, 'columnValueChanged', changedValues, source);
         }
 
-        const resizeChangePredicate = (cs: ColumnState, c: AgColumn) => cs.width != c.getActualWidth();
-        dispatchColumnResizedEvent(eventSvc, getChangedColumns(resizeChangePredicate), true, source);
+        // Re-order + refresh + dispatch once, over the final (ordered) structure.
+        finalizeChange(beans, { state: orderState, applyOrder: true }, source, stateChanges);
+    } finally {
+        colAnimation?.finish();
+    }
 
-        const pinnedChangePredicate = (cs: ColumnState, c: AgColumn) => cs.pinned != c.getPinned();
-        dispatchColumnPinnedEvent(eventSvc, getChangedColumns(pinnedChangePredicate), source);
+    eventSvc.dispatchEvent(_addGridCommonParams<ColumnsResetEvent>(gos, { type: 'columnsReset', source }));
+}
 
-        const visibilityChangePredicate = (cs: ColumnState, c: AgColumn) => cs.hide == c.isVisible();
-        dispatchColumnVisibleEvent(eventSvc, getChangedColumns(visibilityChangePredicate), source);
+/** Shared tail of a state change: apply order, refresh visible cols once, dispatch the diffed events.
+ *  Separate so {@link _resetColumnState} can build its order from the post-apply (recreated) service cols. */
+function finalizeChange(
+    beans: BeanCollection,
+    params: ApplyColumnStateParams,
+    source: ColumnEventType,
+    changes: ColumnStateChanges
+): void {
+    orderLiveColsLikeState(beans, params);
+    beans.visibleCols.refresh(source, false);
+    beans.eventSvc.dispatchEvent({ type: 'columnEverythingChanged', source });
+    dispatchColStateChanges(beans, source, changes);
+}
 
-        const sortChangePredicate = (cs: ColumnState, c: AgColumn) =>
-            cs.sort != c.getSort() || cs.sortIndex != c.getSortIndex();
-        const changedColumns = getChangedColumns(sortChangePredicate);
-        if (changedColumns.length > 0) {
-            sortSvc?.dispatchSortChangedEvents(source, changedColumns);
+/** Reorder `colsList`: state-ordered cols first, rest after (auto-group at front), locked cols at the edges.
+ *  Runs post-rebuild, so `col.inColsList` is the live-membership source (`false` for parked pivot primaries). */
+function orderLiveColsLikeState(beans: BeanCollection, params: ApplyColumnStateParams): void {
+    const colModel = beans.colModel;
+    const state = params.state;
+    if (!params.applyOrder || !state || !colModel.ready) {
+        return;
+    }
+
+    const colsById = colModel.colsById;
+    const currentList = colModel.colsList;
+    const consumed = new Set<AgColumn>();
+    const newOrder: AgColumn[] = [];
+
+    // Pass 1: state-ordered cols that are currently displayed (deduped via `consumed`).
+    for (let i = 0, len = state.length; i < len; ++i) {
+        const colId = state[i].colId;
+        if (colId == null) {
+            continue;
         }
+        const col = colsById[colId];
+        if (col != null && col.inColsList && !consumed.has(col)) {
+            newOrder.push(col);
+            consumed.add(col);
+        }
+    }
 
-        const colStateAfter = _getColumnState(beans);
-        // special handling for moved column events
-        normaliseColumnMovedEventForColumnState(columnStateBefore, colStateAfter, source, colModel, eventSvc);
+    // Pass 2: remaining displayed cols in `colsList` order; auto-group cols collect separately to re-seat below.
+    let autoGroupMissed: AgColumn[] | null = null;
+    for (let i = 0, len = currentList.length; i < len; ++i) {
+        const col = currentList[i];
+        if (consumed.has(col)) {
+            continue;
+        }
+        if (col.colKind === 'auto-group') {
+            autoGroupMissed ??= [];
+            autoGroupMissed.push(col);
+        } else {
+            newOrder.push(col);
+        }
+    }
+
+    if (autoGroupMissed !== null) {
+        insertMissedAutoGroupCols(newOrder, autoGroupMissed);
+    }
+
+    // The reorder above ignored lockPosition, so re-place locked cols here.
+    const finalOrder = placeLockedColumns(newOrder, beans.gos);
+    if (_areEqual(finalOrder, currentList)) {
+        return;
+    }
+    if (colModel.hasMarryChildren && !doesMovePassMarryChildren(finalOrder, colModel.colsTree)) {
+        beans.log.warn(39);
+        return;
+    }
+    colModel.colsList = finalOrder;
+    colModel.markColsListIndexDirty();
+}
+
+/** In place: seat the missed auto-group cols right after `newOrder`'s last auto-group col (at the head
+ *  when it has none), shifting the tail right — no new array. */
+function insertMissedAutoGroupCols(newOrder: AgColumn[], autoGroupMissed: AgColumn[]): void {
+    let insertAt = 0; // head when no auto-group col is present
+    for (let i = 0, len = newOrder.length; i < len; ++i) {
+        if (newOrder[i].colKind === 'auto-group') {
+            insertAt = i + 1;
+        }
+    }
+    const missedLen = autoGroupMissed.length;
+    for (let i = newOrder.length - 1; i >= insertAt; --i) {
+        newOrder[i + missedLen] = newOrder[i];
+    }
+    for (let i = 0; i < missedLen; ++i) {
+        newOrder[insertAt + i] = autoGroupMissed[i];
+    }
+}
+
+/** Snapshot column state before a mutation. Pair with {@link dispatchColStateChanges} after the
+ *  mutation to fire the resulting events. Used by both apply-column-state and apply-new-column-defs. */
+export function captureColumnStateChanges(beans: BeanCollection): ColumnStateChanges {
+    const { rowGroupColsSvc, pivotColsSvc, colModel } = beans;
+    const rowGroupCols = rowGroupColsSvc?.columns;
+    const pivotCols = pivotColsSvc?.columns;
+    const cols = colModel.getColsInStateOrder();
+    const before = new Map<string, ColumnStateBefore>();
+    for (let i = 0, len = cols.length; i < len; ++i) {
+        const column = cols[i];
+        const sortDef = column.sortDef;
+        const direction = sortDef.direction;
+        before.set(column.colId, {
+            width: column.actualWidth,
+            hide: !column.visible,
+            pinned: column.pinned,
+            sort: direction,
+            sortType: direction ? sortDef.type : undefined,
+            sortIndex: column.sortIndex ?? null,
+            aggFunc: column.aggregationActive ? column.aggFunc : null,
+            pivotSort: column.pivotSort,
+        });
+    }
+    return {
+        rowGroupColumns: rowGroupCols?.length ? rowGroupCols.slice() : undefined,
+        pivotColumns: pivotCols?.length ? pivotCols.slice() : undefined,
+        before,
+        colsList: colModel.colsList,
     };
 }
 
-export function _getColumnState(beans: BeanCollection): ColumnState[] {
-    const { colModel, rowGroupColsSvc, pivotColsSvc } = beans;
-    const primaryCols = colModel.getColDefCols();
+/** Diff current column state against a {@link captureColumnStateChanges} snapshot and dispatch the changed
+ *  column events (value/resize/pin/visible/sort/rowGroup/pivot/moved). */
+export function dispatchColStateChanges(
+    beans: BeanCollection,
+    source: ColumnEventType,
+    changes: ColumnStateChanges
+): void {
+    const rowGroupCols = beans.rowGroupColsSvc?.columns;
+    const pivotCols = beans.pivotColsSvc?.columns;
+    dispatchColumnListChanged(beans, source, 'columnRowGroupChanged', changes.rowGroupColumns, rowGroupCols);
+    dispatchColumnListChanged(beans, source, 'columnPivotChanged', changes.pivotColumns, pivotCols);
+    dispatchColumnFieldChanges(beans, source, changes.before);
+    dispatchColumnMoved(beans, source, changes);
+}
 
-    if (_missing(primaryCols) || !colModel.isAlive()) {
+/** Fire `columnRowGroupChanged`/`columnPivotChanged` when the col list changed in membership OR order. Payload
+ *  is the symmetric diff (added/removed); a pure reorder fires with empty `columns`. No event when identical. */
+function dispatchColumnListChanged(
+    beans: BeanCollection,
+    source: ColumnEventType,
+    eventType: 'columnPivotChanged' | 'columnRowGroupChanged',
+    before: AgColumn[] | undefined,
+    after: AgColumn[] | undefined
+): void {
+    if (!areSameColIds(before, after)) {
+        _dispatchColumnChangedEvent(beans.eventSvc, eventType, _symmetricDiff(before, after), source);
+    }
+}
+
+/** Single pass over all cols, bucketing per-field changes against the before-snapshot, then firing one
+ *  event per non-empty bucket (value/resize/pin/visible/sort). */
+function dispatchColumnFieldChanges(
+    beans: BeanCollection,
+    source: ColumnEventType,
+    before: Map<string, ColumnStateBefore>
+): void {
+    const { eventSvc, sortSvc } = beans;
+    const allCols = beans.colModel.getAllCols();
+    let changedValues: AgColumn[] | null = null;
+    let changedResizes: AgColumn[] | null = null;
+    let changedPinned: AgColumn[] | null = null;
+    let changedVisible: AgColumn[] | null = null;
+    let changedSort: AgColumn[] | null = null;
+    let changedPivotSort: AgColumn[] | null = null;
+    for (let i = 0, len = allCols.length; i < len; ++i) {
+        const col = allCols[i];
+        const cs = before.get(col.colId);
+        if (!cs) {
+            continue;
+        }
+        if (cs.width != col.actualWidth) {
+            changedResizes ??= [];
+            changedResizes.push(col);
+        }
+        if (cs.pinned != col.pinned) {
+            changedPinned ??= [];
+            changedPinned.push(col);
+        }
+        if (cs.hide == col.visible) {
+            changedVisible ??= [];
+            changedVisible.push(col);
+        }
+        if (isAggChanged(col, cs)) {
+            changedValues ??= [];
+            changedValues.push(col);
+        }
+        if (sortSvc && isSortChanged(col, cs)) {
+            changedSort ??= [];
+            changedSort.push(col);
+        }
+        if (cs.pivotSort !== col.pivotSort) {
+            changedPivotSort ??= [];
+            changedPivotSort.push(col);
+        }
+    }
+    if (changedValues) {
+        _dispatchColumnChangedEvent(eventSvc, 'columnValueChanged', changedValues, source);
+    }
+    if (changedResizes) {
+        dispatchColumnResizedEvent(eventSvc, changedResizes, true, source);
+    }
+    if (changedPinned) {
+        dispatchColumnPinnedEvent(eventSvc, changedPinned, source);
+    }
+    if (changedVisible) {
+        dispatchColumnVisibleEvent(eventSvc, changedVisible, source);
+    }
+    if (changedSort) {
+        sortSvc?.dispatchSortChangedEvents(source, changedSort);
+    }
+    // Pivot sort is isolated from sort - a pivotSort change fires columnPivotChanged to rebuild pivot columns.
+    if (changedPivotSort) {
+        _dispatchColumnChangedEvent(eventSvc, 'columnPivotChanged', changedPivotSort, source);
+    }
+}
+
+/** Fire `columnMoved` for cols whose position changed vs others in both snapshots: compares before-order
+ *  (Map insertion order) against current order position-by-position; a slot mismatch means that col moved. */
+function dispatchColumnMoved(beans: BeanCollection, source: ColumnEventType, changes: ColumnStateChanges): void {
+    const colModel = beans.colModel;
+    const after = colModel.colsList;
+    if (after === changes.colsList) {
+        return; // Same array ref => order untouched (colsList never mutated in place)
+    }
+    const before = changes.before;
+    const colsById = colModel.colsById;
+
+    // Intersection in before-order (Map insertion order = capture order).
+    let beforeCommon: AgColumn[] | undefined;
+    for (const colId of before.keys()) {
+        const col = colsById[colId];
+        if (col?.inColsList) {
+            beforeCommon ??= [];
+            beforeCommon.push(col);
+        }
+    }
+    if (!beforeCommon) {
+        return;
+    }
+
+    let commonIdx = 0;
+    let movedColumns: AgColumn[] | undefined;
+    const commonLen = beforeCommon.length;
+    for (let i = 0, len = after.length; i < len && commonIdx < commonLen; ++i) {
+        const col = after[i];
+        if (before.has(col.colId)) {
+            // Same intersection slot in before-order vs after-order — a ref mismatch means it moved.
+            const beforeCol = beforeCommon[commonIdx++];
+            if (beforeCol !== col) {
+                movedColumns ??= [];
+                movedColumns.push(beforeCol);
+            }
+        }
+    }
+
+    if (movedColumns) {
+        beans.eventSvc.dispatchEvent({
+            type: 'columnMoved',
+            columns: movedColumns,
+            column: movedColumns.length === 1 ? movedColumns[0] : null,
+            finished: true,
+            source,
+        });
+    }
+}
+
+export const _getColumnState = (beans: BeanCollection): ColumnState[] => {
+    const colModel = beans.colModel;
+    if (!colModel.isAlive()) {
         return [];
     }
-
-    const colsForState = colModel.getAllCols();
-    const rowGroupColumns = rowGroupColsSvc?.columns;
-    const pivotColumns = pivotColsSvc?.columns;
-
-    const createStateItemFromColumn = (column: AgColumn) => {
-        const rowGroupIndex = column.isRowGroupActive() && rowGroupColumns ? rowGroupColumns.indexOf(column) : null;
-        const pivotIndex = column.isPivotActive() && pivotColumns ? pivotColumns.indexOf(column) : null;
-
-        const aggFunc = column.isValueActive() ? column.getAggFunc() : null;
-        const sort = column.getSort() != null ? column.getSort() : null;
-        const sortIndex = column.getSortIndex() != null ? column.getSortIndex() : null;
-
-        const res: ColumnState = {
-            colId: column.getColId(),
-            width: column.getActualWidth(),
-            hide: !column.isVisible(),
-            pinned: column.getPinned(),
-            sort,
-            sortIndex,
-            aggFunc,
-            rowGroup: column.isRowGroupActive(),
-            rowGroupIndex,
-            pivot: column.isPivotActive(),
-            pivotIndex: pivotIndex,
-            flex: column.getFlex() ?? null,
+    const cols = colModel.getColsInStateOrder();
+    const defaultPivotSort = _defaultPivotSort(beans);
+    const res = new Array<ColumnState>(cols.length);
+    for (let i = 0, len = cols.length; i < len; ++i) {
+        const column = cols[i];
+        const rowGroupActive = column.rowGroupActive;
+        const pivotActive = column.pivotActive;
+        const sortDef = column.sortDef;
+        const direction = sortDef.direction;
+        res[i] = {
+            colId: column.colId,
+            width: column.actualWidth,
+            hide: !column.visible,
+            pinned: column.pinned,
+            sort: direction,
+            sortType: direction ? (sortDef.type ?? null) : null,
+            sortIndex: column.sortIndex ?? null,
+            aggFunc: column.aggregationActive ? column.aggFunc : null,
+            valueIndex: column.aggregationActive ? column.aggregationActiveIndex : null,
+            rowGroup: rowGroupActive,
+            rowGroupIndex: rowGroupActive ? column.rowGroupActiveIndex : null,
+            pivot: pivotActive,
+            pivotIndex: pivotActive ? column.pivotActiveIndex : null,
+            pivotSort: column.pivotSort === undefined ? defaultPivotSort : column.pivotSort,
+            flex: column.flex ?? null,
+            showValuesAs: beans.showValuesAsSvc?.toColState(column) ?? null,
+            headerName: column.headerNameOverride,
         };
-
-        return res;
-    };
-
-    const res = colsForState.map((col) => createStateItemFromColumn(col));
-
-    // for fast looking, store the index of each column
-    const colIdToGridIndexMap = new Map<string, number>(
-        colModel.getCols().map((col, index) => [col.getColId(), index])
-    );
-
-    res.sort((itemA: any, itemB: any) => {
-        const posA = colIdToGridIndexMap.has(itemA.colId) ? colIdToGridIndexMap.get(itemA.colId) : -1;
-        const posB = colIdToGridIndexMap.has(itemB.colId) ? colIdToGridIndexMap.get(itemB.colId) : -1;
-        return posA! - posB!;
-    });
-
+    }
     return res;
-}
+};
 
-export function getColumnStateFromColDef(column: AgColumn): ColumnState {
-    const getValueOrNull = (a: any, b: any) => (a != null ? a : b != null ? b : null);
-
-    const colDef = column.getColDef();
-    const sort = getValueOrNull(colDef.sort, colDef.initialSort);
-    const sortIndex = getValueOrNull(colDef.sortIndex, colDef.initialSortIndex);
-    const hide = getValueOrNull(colDef.hide, colDef.initialHide);
-    const pinned = getValueOrNull(colDef.pinned, colDef.initialPinned);
-
-    const width = getValueOrNull(colDef.width, colDef.initialWidth);
-    const flex = getValueOrNull(colDef.flex, colDef.initialFlex);
-
-    let rowGroupIndex: number | null | undefined = getValueOrNull(colDef.rowGroupIndex, colDef.initialRowGroupIndex);
-    let rowGroup: boolean | null | undefined = getValueOrNull(colDef.rowGroup, colDef.initialRowGroup);
-
-    if (rowGroupIndex == null && (rowGroup == null || rowGroup == false)) {
-        rowGroupIndex = null;
-        rowGroup = null;
+export function getColumnStateFromColDef(beans: BeanCollection, column: AgColumn): ColumnState {
+    const colDef = column.colDef;
+    const sortDef = getSortDefFromInput(colDef.sort ?? colDef.initialSort ?? null);
+    const rowGroupIndex: number | null = colDef.rowGroupIndex ?? colDef.initialRowGroupIndex ?? null;
+    let rowGroup: boolean | null = colDef.rowGroup ?? colDef.initialRowGroup ?? null;
+    if (rowGroupIndex == null && rowGroup === false) {
+        rowGroup = null; // normalise: no index + not grouped → null
     }
-
-    let pivotIndex: number | null | undefined = getValueOrNull(colDef.pivotIndex, colDef.initialPivotIndex);
-    let pivot: boolean | null | undefined = getValueOrNull(colDef.pivot, colDef.initialPivot);
-
-    if (pivotIndex == null && (pivot == null || pivot == false)) {
-        pivotIndex = null;
-        pivot = null;
+    const pivotIndex: number | null = colDef.pivotIndex ?? colDef.initialPivotIndex ?? null;
+    let pivot: boolean | null = colDef.pivot ?? colDef.initialPivot ?? null;
+    if (pivotIndex == null && pivot === false) {
+        pivot = null; // normalise: no index + not pivoted → null
     }
-
-    const aggFunc = getValueOrNull(colDef.aggFunc, colDef.initialAggFunc);
-
     return {
-        colId: column.getColId(),
-        sort,
-        sortIndex,
-        hide,
-        pinned,
-        width,
-        flex,
+        colId: column.colId,
+        sort: sortDef.direction,
+        sortType: sortDef.type,
+        sortIndex: colDef.sortIndex ?? colDef.initialSortIndex ?? null,
+        hide: colDef.hide ?? colDef.initialHide ?? null,
+        pinned: colDef.pinned ?? colDef.initialPinned ?? null,
+        width: colDef.width ?? colDef.initialWidth ?? null,
+        flex: colDef.flex ?? colDef.initialFlex ?? null,
         rowGroup,
         rowGroupIndex,
         pivot,
         pivotIndex,
-        aggFunc,
+        pivotSort: _resolvePivotSortFromColDef(colDef),
+        aggFunc: colDef.aggFunc ?? colDef.initialAggFunc ?? null,
+        showValuesAs: beans.showValuesAsSvc?.colDefSelection(colDef) ?? null,
+        headerName: null,
     };
 }
 
-function orderLiveColsLikeState(params: ApplyColumnStateParams, colModel: ColumnModel, gos: GridOptionsService): void {
-    if (!params.applyOrder || !params.state) {
-        return;
-    }
-    const colIds: string[] = [];
-    params.state.forEach((item) => {
-        if (item.colId != null) {
-            colIds.push(item.colId);
-        }
-    });
-    sortColsLikeKeys(colModel.cols, colIds, colModel, gos);
-}
+const orDefault = <T>(stateValue: T | undefined, defaultValue: T | undefined): T | undefined =>
+    stateValue !== undefined ? stateValue : defaultValue;
 
-function sortColsLikeKeys(
-    cols: ColumnCollections | undefined,
-    colIds: string[],
-    colModel: ColumnModel,
-    gos: GridOptionsService
-): void {
-    if (cols == null) {
-        return;
-    }
-
-    let newOrder: AgColumn[] = [];
-    const processedColIds: { [id: string]: boolean } = {};
-
-    colIds.forEach((colId) => {
-        if (processedColIds[colId]) {
-            return;
-        }
-        const col = cols.map[colId];
-        if (col) {
-            newOrder.push(col);
-            processedColIds[colId] = true;
-        }
-    });
-
-    // add in all other columns
-    let autoGroupInsertIndex = 0;
-    cols.list.forEach((col) => {
-        const colId = col.getColId();
-        const alreadyProcessed = processedColIds[colId] != null;
-        if (alreadyProcessed) {
-            return;
-        }
-
-        const isAutoGroupCol = colId.startsWith(GROUP_AUTO_COLUMN_ID);
-        if (isAutoGroupCol) {
-            // auto group columns, if missing from state list, are added to the start.
-            // it's common to have autoGroup missing, as grouping could be on by default
-            // on a column, but the user could of since removed the grouping via the UI.
-            // if we don't inc the insert index, autoGroups will be inserted in reverse order
-            newOrder.splice(autoGroupInsertIndex++, 0, col);
+/** Invoke `cb` for each leaf column of a built col tree, in declaration order. */
+const forEachColTreeLeaf = (nodes: (AgColumn | AgProvidedColumnGroup)[], cb: (col: AgColumn) => void): void => {
+    for (let i = 0, len = nodes.length; i < len; ++i) {
+        const node = nodes[i];
+        const children = (node as Partial<AgProvidedColumnGroup>).children;
+        if (children) {
+            forEachColTreeLeaf(children, cb);
         } else {
-            // normal columns, if missing from state list, are added at the end
-            newOrder.push(col);
+            cb(node as AgColumn);
         }
-    });
-
-    // this is already done in updateCols, however we changed the order above (to match the order of the state
-    // columns) so we need to do it again. we could of put logic into the order above to take into account fixed
-    // columns, however if we did then we would have logic for updating fixed columns twice. reusing the logic here
-    // is less sexy for the code here, but it keeps consistency.
-    newOrder = placeLockedColumns(newOrder, gos);
-
-    if (!doesMovePassMarryChildren(newOrder, colModel.getColTree())) {
-        _warn(39);
-        return;
     }
+};
 
-    cols.list = newOrder;
-}
+const isAggChanged = (col: AgColumn, before: ColumnStateBefore): boolean => {
+    const oldAggFunc = before.aggFunc;
+    const wasActive = oldAggFunc != null;
+    return wasActive !== col.aggregationActive || (wasActive && oldAggFunc != col.aggFunc);
+};
 
-function normaliseColumnMovedEventForColumnState(
-    colStateBefore: ColumnState[],
-    colStateAfter: ColumnState[],
-    source: ColumnEventType,
-    colModel: ColumnModel,
-    eventSvc: EventService
-) {
-    // we are only interested in columns that were both present and visible before and after
+const isSortChanged = (col: AgColumn, before: ColumnStateBefore): boolean => {
+    if (before.sortIndex != col.sortIndex) {
+        return true;
+    }
+    const sortDef = col.getSortDef();
+    const beforeType = before.sortType ?? 'default';
+    return sortDef ? sortDef.direction !== before.sort || sortDef.type !== beforeType : before.sort !== null;
+};
 
-    const colStateAfterMapped: { [id: string]: ColumnState } = {};
-    colStateAfter.forEach((s) => (colStateAfterMapped[s.colId!] = s));
-
-    // get id's of cols in both before and after lists
-    const colsIntersectIds: { [id: string]: boolean } = {};
-    colStateBefore.forEach((s) => {
-        if (colStateAfterMapped[s.colId!]) {
-            colsIntersectIds[s.colId!] = true;
+const areSameColIds = (a: AgColumn[] | undefined, b: AgColumn[] | undefined): boolean => {
+    if (a === b) {
+        return true;
+    }
+    const len = a?.length ?? 0;
+    if (len !== (b?.length ?? 0)) {
+        return false;
+    }
+    for (let i = 0; i < len; ++i) {
+        const colA = a![i];
+        const colB = b![i];
+        // Same instance ⇒ same colId; only string-compare when they differ.
+        if (colA !== colB && colA.colId !== colB.colId) {
+            return false;
         }
-    });
-
-    // filter state lists, so we only have cols that were present before and after
-    const beforeFiltered = colStateBefore.filter((c) => colsIntersectIds[c.colId!]);
-    const afterFiltered = colStateAfter.filter((c) => colsIntersectIds[c.colId!]);
-
-    // see if any cols are in a different location
-    const movedColumns: AgColumn[] = [];
-
-    afterFiltered!.forEach((csAfter: ColumnState, index: number) => {
-        const csBefore = beforeFiltered && beforeFiltered[index];
-        if (csBefore && csBefore.colId !== csAfter.colId) {
-            const gridCol = colModel.getCol(csBefore.colId!);
-            if (gridCol) {
-                movedColumns.push(gridCol);
-            }
-        }
-    });
-
-    if (!movedColumns.length) {
-        return;
     }
-
-    eventSvc.dispatchEvent({
-        type: 'columnMoved',
-        columns: movedColumns,
-        column: movedColumns.length === 1 ? movedColumns[0] : null,
-        finished: true,
-        source,
-    });
-}
-
-// sort the lists according to the indexes that were provided
-const comparatorByIndex = (indexes: { [key: string]: number }, oldList: AgColumn[], colA: AgColumn, colB: AgColumn) => {
-    const indexA = indexes[colA.getId()];
-    const indexB = indexes[colB.getId()];
-
-    const aHasIndex = indexA != null;
-    const bHasIndex = indexB != null;
-
-    if (aHasIndex && bHasIndex) {
-        // both a and b are new cols with index, so sort on index
-        return indexA - indexB;
-    }
-
-    if (aHasIndex) {
-        // a has an index, so it should be before a
-        return -1;
-    }
-
-    if (bHasIndex) {
-        // b has an index, so it should be before a
-        return 1;
-    }
-
-    const oldIndexA = oldList.indexOf(colA);
-    const oldIndexB = oldList.indexOf(colB);
-
-    const aHasOldIndex = oldIndexA >= 0;
-    const bHasOldIndex = oldIndexB >= 0;
-
-    if (aHasOldIndex && bHasOldIndex) {
-        // both a and b are old cols, so sort based on last order
-        return oldIndexA - oldIndexB;
-    }
-
-    if (aHasOldIndex) {
-        // a is old, b is new, so b is first
-        return -1;
-    }
-
-    // this bit does matter, means both are new cols
-    // but without index or that b is old and a is new
-    return 1;
+    return true;
 };

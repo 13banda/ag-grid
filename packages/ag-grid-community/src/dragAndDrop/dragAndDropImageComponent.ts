@@ -1,31 +1,36 @@
+import type { IComponent, IDragAndDropImage } from 'ag-stack';
+import { RefPlaceholder, _clearElement } from 'ag-stack';
+
 import type { AgGridCommon } from '../interfaces/iCommon';
-import type { IComponent } from '../interfaces/iComponent';
-import { _clearElement } from '../utils/dom';
+import type { ElementParams } from '../utils/element';
 import type { IconName } from '../utils/icon';
 import { _createIcon } from '../utils/icon';
-import { _escapeString } from '../utils/string';
-import { Component, RefPlaceholder } from '../widgets/component';
-import { dragAndDropImageComponentCSS } from './dragAndDropImageComponent.css-GENERATED';
-import type { DragAndDropIcon, DragSource } from './dragAndDropService';
+import { Component } from '../widgets/component';
+import dragAndDropImageComponentCSS from './dragAndDropImageComponent.css';
+import type { DragAndDropIcon, GridDragSource } from './dragAndDropService';
+import type { DragSource } from './rowDragTypes';
 
 export interface IDragAndDropImageParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
     dragSource: DragSource;
-}
-
-export interface IDragAndDropImage {
-    setIcon(iconName: string | null, shake: boolean): void;
-    setLabel(label: string): void;
 }
 
 export interface IDragAndDropImageComponent<
     TData = any,
     TContext = any,
     TParams extends Readonly<IDragAndDropImageParams<TData, TContext>> = IDragAndDropImageParams<TData, TContext>,
-> extends IComponent<TParams>,
-        IDragAndDropImage {}
+>
+    extends IComponent<TParams>, IDragAndDropImage {}
 
+const DragAndDropElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-dnd-ghost ag-unselectable',
+    children: [
+        { tag: 'span', ref: 'eIcon', cls: 'ag-dnd-ghost-icon ag-shake-left-to-right' },
+        { tag: 'div', ref: 'eLabel', cls: 'ag-dnd-ghost-label' },
+    ],
+};
 export class DragAndDropImageComponent extends Component implements IDragAndDropImageComponent<any, any> {
-    private dragSource: DragSource | null = null;
+    private dragSource: GridDragSource | null = null;
 
     private readonly eIcon: HTMLElement = RefPlaceholder;
     private readonly eLabel: HTMLElement = RefPlaceholder;
@@ -54,14 +59,7 @@ export class DragAndDropImageComponent extends Component implements IDragAndDrop
 
     public init(params: IDragAndDropImageParams): void {
         this.dragSource = params.dragSource;
-
-        this.setTemplate(
-            /* html */
-            `<div class="ag-dnd-ghost ag-unselectable">
-                <span data-ref="eIcon" class="ag-dnd-ghost-icon ag-shake-left-to-right"></span>
-                <div data-ref="eLabel" class="ag-dnd-ghost-label"></div>
-            </div>`
-        );
+        this.setTemplate(DragAndDropElement);
     }
 
     public override destroy(): void {
@@ -71,16 +69,16 @@ export class DragAndDropImageComponent extends Component implements IDragAndDrop
 
     public setIcon(iconName: DragAndDropIcon | null, shake: boolean): void {
         const { eIcon, dragSource, dropIconMap, gos } = this;
+        const eGhost = this.getGui();
 
         _clearElement(eIcon);
-
-        let eIconChild: Element | null = null;
 
         if (!iconName) {
             iconName = dragSource?.getDefaultIconName ? dragSource.getDefaultIconName() : 'notAllowed';
         }
-        eIconChild = dropIconMap[iconName];
+        const eIconChild = dropIconMap[iconName];
 
+        eGhost.classList.toggle('ag-dnd-ghost-not-allowed', iconName === 'notAllowed');
         eIcon.classList.toggle('ag-shake-left-to-right', shake);
 
         if (eIconChild === dropIconMap['hide'] && gos.get('suppressDragLeaveHidesColumns')) {
@@ -92,6 +90,6 @@ export class DragAndDropImageComponent extends Component implements IDragAndDrop
     }
 
     public setLabel(label: string): void {
-        this.eLabel.textContent = _escapeString(label);
+        this.eLabel.textContent = label;
     }
 }

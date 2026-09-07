@@ -1,27 +1,18 @@
 ---
-import styles from '@pages-styles/example.module.scss';
 import DemosLayout from '@components/demos/DemosLayout.astro';
-import DemoTabs from '@components/demos/DemosTabs.astro';
-import { Icon } from '@ag-website-shared/components/icon/Icon';
+import DemosPageHeader from '@components/demos/DemosPageHeader.astro';
 import { Inventory } from '@components/demos/examples/inventory';
 import LogoMark from '@components/logo/LogoMark';
+import styles from '@pages-styles/example.module.scss';
+import { demoContent } from '@components/demos/demoContent';
+
+// Copy is shared with the /example-inventory.md twin so the two cannot drift.
+const content = demoContent('inventory');
 ---
 
-<DemosLayout title="Demo - Inventory Management" description="Inventory data example to view and manage products.">
-    <div class={styles.topHeader}>
-        <div>
-            <div class={styles.headerTitle}>
-                <h1 class={styles.headerHeading}>Inventory</h1>
-                <a class="button-secondary" href="https://github.com/ag-grid/ag-grid-demos/tree/main/inventory">
-                    <Icon name="github" svgClasses={styles.githubIcon} />
-                    <span>See on Github</span>
-                </a>
-            </div>
-            <p>Inventory data example to view and manage products.</p>
-        </div>
+<DemosLayout title={content.seoTitle} description={content.seoDescription}>
+    <DemosPageHeader content={content} />
 
-        <DemoTabs activeTab="inventory" />
-    </div>
     <div class={styles.layout}>
         <div class={styles.layoutWrapper}>
             <div class={styles.loadingLogoContainer}>

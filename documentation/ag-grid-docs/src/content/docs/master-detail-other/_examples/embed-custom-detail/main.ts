@@ -3,19 +3,19 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { MasterDetailModule } from 'ag-grid-enterprise';
 
 import { DetailCellRenderer } from './detailCellRenderer_typescript';
 
-ModuleRegistry.registerModules([
-    RowApiModule,
-    ClientSideRowModelModule,
-    MasterDetailModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, ClientSideRowModelModule, MasterDetailModule]);
 
 let gridApi: GridApi<IAccount>;
 

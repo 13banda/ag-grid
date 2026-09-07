@@ -1,4 +1,7 @@
+import { _doOnce, _missing } from 'ag-stack';
+
 import type { GridApi } from './api/gridApi';
+import type { BeanStub } from './context/beanStub';
 import type { BeanCollection } from './context/context';
 import type {
     CheckboxLocation,
@@ -8,6 +11,7 @@ import type {
     GridOptions,
     GroupSelectionMode,
     IsRowSelectable,
+    MasterSelectionMode,
     MultiRowSelectionOptions,
     RowSelectionMode,
     RowSelectionOptions,
@@ -15,7 +19,10 @@ import type {
     SingleRowSelectionOptions,
 } from './entities/gridOptions';
 import type { RowNode } from './entities/rowNode';
-import type { ComponentStateChangedEvent, GridOptionsChangedEvent } from './events';
+import type { ComponentStateChangedEvent, GridOptionsChangedEvent, StylesChangedEvent } from './events';
+import { _getGlobalGridOption } from './globalGridOptions';
+import type { GridOptionOrDefault } from './gridOptionsDefault';
+import { GRID_OPTION_DEFAULTS } from './gridOptionsDefault';
 import type {
     ExtractParamsFromCallback,
     ExtractReturnTypeFromCallback,
@@ -27,34 +34,60 @@ import type {
     RowHeightParams,
 } from './interfaces/iCallbackParams';
 import type { IClientSideRowModel } from './interfaces/iClientSideRowModel';
-import type { WithoutGridCommon } from './interfaces/iCommon';
+import type { AgGridCommon, WithoutGridCommon } from './interfaces/iCommon';
 import type { IRowModel, RowModelType } from './interfaces/iRowModel';
 import type { IRowNode } from './interfaces/iRowNode';
 import type { IServerSideRowModel } from './interfaces/iServerSideRowModel';
-import { _getElementRectWithOffset } from './utils/dom';
-import { _exists, _missing } from './utils/generic';
-import { _warn } from './validation/logging';
+import { _isFiniteNumber } from './utils/number';
 
 function isRowModelType(gos: GridOptionsService, rowModelType: RowModelType): boolean {
     return gos.get('rowModelType') === rowModelType;
 }
 
-export function _isClientSideRowModel(gos: GridOptionsService, rowModel?: IRowModel): rowModel is IClientSideRowModel {
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isClientSideRowModel(
+    gos: GridOptionsService,
+    _rowModel?: IRowModel
+): _rowModel is IClientSideRowModel {
     return isRowModelType(gos, 'clientSide');
 }
 
-export function _isServerSideRowModel(gos: GridOptionsService, rowModel?: IRowModel): rowModel is IServerSideRowModel {
+export function _isClientSideLoadingRows(gos: GridOptionsService): boolean {
+    const loading = gos.get('loading');
+    return _isClientSideRowModel(gos) && typeof loading === 'object' && loading.type === 'rows';
+}
+
+export function _isClientSideLoadingRow(gos: GridOptionsService, rowNode: IRowNode): boolean {
+    return !!rowNode.stub && _isClientSideRowModel(gos);
+}
+
+export function _getClientSideLoadingRowCount(gos: GridOptionsService): number {
+    const loading = gos.get('loading');
+    if (typeof loading !== 'object' || loading.rowCount == null) {
+        return 10;
+    }
+    return Number.isInteger(loading.rowCount) && loading.rowCount > 0 ? loading.rowCount : 10;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isServerSideRowModel(
+    gos: GridOptionsService,
+    _rowModel?: IRowModel
+): _rowModel is IServerSideRowModel {
     return isRowModelType(gos, 'serverSide');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isDomLayout(gos: GridOptionsService, domLayout: DomLayoutType) {
     return gos.get('domLayout') === domLayout;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isRowSelection(gos: GridOptionsService): boolean {
     return _getRowSelectionMode(gos) !== undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isGetRowHeightFunction(gos: GridOptionsService): boolean {
     return typeof gos.get('getRowHeight') === 'function';
 }
@@ -66,6 +99,13 @@ export function _shouldMaintainColumnOrder(gos: GridOptionsService, isPivotColum
     return gos.get('maintainColumnOrder');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isRowNumbers({ gos, formula }: BeanCollection) {
+    const rowNumbers = gos.get('rowNumbers');
+    return rowNumbers || (!!formula?.active && rowNumbers !== false);
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getRowHeightForNode(
     beans: BeanCollection,
     rowNode: IRowNode,
@@ -93,9 +133,9 @@ export function _getRowHeightForNode(
 
         const height = gos.getCallback('getRowHeight')!(params);
 
-        if (isNumeric(height)) {
+        if (_isFiniteNumber(height)) {
             if (height === 0) {
-                _warn(23);
+                beans.log.warn(23);
             }
             return { height: Math.max(1, height), estimated: false };
         }
@@ -107,7 +147,8 @@ export function _getRowHeightForNode(
 
     const gridOptionsRowHeight = gos.get('rowHeight');
 
-    const rowHeight = gridOptionsRowHeight && isNumeric(gridOptionsRowHeight) ? gridOptionsRowHeight : defaultRowHeight;
+    const rowHeight =
+        gridOptionsRowHeight && _isFiniteNumber(gridOptionsRowHeight) ? gridOptionsRowHeight : defaultRowHeight;
 
     return { height: rowHeight, estimated: false };
 }
@@ -122,14 +163,30 @@ function getMasterDetailRowHeight(gos: GridOptionsService): { height: number; es
 
     const defaultRowHeight = gos.get('detailRowHeight');
 
-    if (isNumeric(defaultRowHeight)) {
+    if (_isFiniteNumber(defaultRowHeight)) {
         return { height: defaultRowHeight, estimated: false };
     }
 
     return { height: 300, estimated: false };
 }
 
+/**
+ * Calls `onChange` when the grid styles change the uniform row height, e.g. a theme row-height parameter.
+ * Shared so that each row model registers the one listener it needs rather than restating the predicate.
+ */
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _addRowHeightChangedListener(bean: BeanStub, onChange: () => void): void {
+    bean.addManagedEventListeners({
+        stylesChanged: (e: StylesChangedEvent) => {
+            if (e.rowHeightChanged) {
+                onChange();
+            }
+        },
+    });
+}
+
 // we don't allow dynamic row height for virtual paging
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getRowHeightAsNumber(beans: BeanCollection): number {
     const { environment, gos } = beans;
     const gridOptionsRowHeight = gos.get('rowHeight');
@@ -143,12 +200,8 @@ export function _getRowHeightAsNumber(beans: BeanCollection): number {
         return rowHeight;
     }
 
-    _warn(24);
+    beans.log.warn(24);
     return environment.getDefaultRowHeight();
-}
-
-function isNumeric(value: any): value is number {
-    return !isNaN(value) && typeof value === 'number' && isFinite(value);
 }
 
 // returns the dom data, or undefined if not found
@@ -169,133 +222,7 @@ export function _setDomData(gos: GridOptionsService, element: Element, key: stri
     domData[key] = value;
 }
 
-export function _getDocument(beans: BeanCollection): Document {
-    // if user is providing document, we use the users one,
-    // otherwise we use the document on the global namespace.
-    const { gos, eGridDiv } = beans;
-    let result: Document | null = null;
-    const gridOptionsGetDocument = gos.get('getDocument');
-    if (gridOptionsGetDocument && _exists(gridOptionsGetDocument)) {
-        result = gridOptionsGetDocument();
-    } else if (eGridDiv) {
-        result = eGridDiv.ownerDocument;
-    }
-
-    if (result && _exists(result)) {
-        return result;
-    }
-
-    return document;
-}
-
-export function _getWindow(beans: BeanCollection) {
-    const eDocument = _getDocument(beans);
-    return eDocument.defaultView || window;
-}
-
-export function _getRootNode(beans: BeanCollection): Document | ShadowRoot {
-    return beans.eGridDiv.getRootNode() as Document | ShadowRoot;
-}
-
-export function _getActiveDomElement(beans: BeanCollection): Element | null {
-    return _getRootNode(beans).activeElement;
-}
-
-export function _getPageBody(beans: BeanCollection): HTMLElement | ShadowRoot {
-    let rootNode: Document | ShadowRoot | HTMLElement | null = null;
-    let targetEl: HTMLElement | ShadowRoot | null = null;
-
-    try {
-        rootNode = _getDocument(beans).fullscreenElement as HTMLElement;
-    } catch (e) {
-        // some environments like SalesForce will throw errors
-        // simply by trying to read the fullscreenElement property
-    } finally {
-        if (!rootNode) {
-            rootNode = _getRootNode(beans);
-        }
-        const body = rootNode.querySelector('body');
-        if (body) {
-            targetEl = body;
-        } else if (rootNode instanceof ShadowRoot) {
-            targetEl = rootNode;
-        } else if (rootNode instanceof Document) {
-            targetEl = rootNode?.documentElement;
-        } else {
-            targetEl = rootNode;
-        }
-    }
-
-    return targetEl;
-}
-
-function _getBodyWidth(beans: BeanCollection): number {
-    const body = _getPageBody(beans) as HTMLElement;
-    return body?.clientWidth ?? (window.innerHeight || -1);
-}
-
-function _getBodyHeight(beans: BeanCollection): number {
-    const body = _getPageBody(beans) as HTMLElement;
-    return body?.clientHeight ?? (window.innerHeight || -1);
-}
-
-export function _anchorElementToMouseMoveEvent(
-    element: HTMLElement,
-    mouseMoveEvent: MouseEvent | Touch,
-    beans: BeanCollection
-): void {
-    const eRect = element.getBoundingClientRect();
-    const height = eRect.height;
-
-    const browserWidth = _getBodyWidth(beans) - 2; // 2px for 1px borderLeft and 1px borderRight
-    const browserHeight = _getBodyHeight(beans) - 2; // 2px for 1px borderTop and 1px borderBottom
-
-    const offsetParent = element.offsetParent;
-
-    if (!offsetParent) {
-        return;
-    }
-
-    const offsetParentSize = _getElementRectWithOffset(element.offsetParent as HTMLElement);
-
-    const { clientY, clientX } = mouseMoveEvent;
-
-    let top = clientY - offsetParentSize.top - height / 2;
-    let left = clientX - offsetParentSize.left - 10;
-
-    const eDocument = _getDocument(beans);
-    const win = eDocument.defaultView || window;
-    const windowScrollY = win.pageYOffset || eDocument.documentElement.scrollTop;
-    const windowScrollX = win.pageXOffset || eDocument.documentElement.scrollLeft;
-
-    // check if the drag and drop image component is not positioned outside of the browser
-    if (browserWidth > 0 && left + element.clientWidth > browserWidth + windowScrollX) {
-        left = browserWidth + windowScrollX - element.clientWidth;
-    }
-
-    if (left < 0) {
-        left = 0;
-    }
-
-    if (browserHeight > 0 && top + element.clientHeight > browserHeight + windowScrollY) {
-        top = browserHeight + windowScrollY - element.clientHeight;
-    }
-
-    if (top < 0) {
-        top = 0;
-    }
-
-    element.style.left = `${left}px`;
-    element.style.top = `${top}px`;
-}
-
-export function _isNothingFocused(beans: BeanCollection): boolean {
-    const eDocument = _getDocument(beans);
-    const activeEl = _getActiveDomElement(beans);
-
-    return activeEl === null || activeEl === eDocument.body;
-}
-
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isAnimateRows(gos: GridOptionsService) {
     // never allow animating if enforcing the row order
     if (gos.get('ensureDomOrder')) {
@@ -305,19 +232,18 @@ export function _isAnimateRows(gos: GridOptionsService) {
     return gos.get('animateRows');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isGroupRowsSticky(gos: GridOptionsService): boolean {
-    if (gos.get('paginateChildRows') || gos.get('groupHideOpenParents') || _isDomLayout(gos, 'print')) {
-        return false;
-    }
-
-    return true;
+    return !(gos.get('paginateChildRows') || gos.get('groupHideOpenParents') || _isDomLayout(gos, 'print'));
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isColumnsSortingCoupledToGroup(gos: GridOptionsService): boolean {
     const autoGroupColumnDef = gos.get('autoGroupColumnDef');
     return !autoGroupColumnDef?.comparator && !gos.get('treeData');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getGroupAggFiltering(
     gos: GridOptionsService
 ): ((params: WithoutGridCommon<GetGroupAggFilteringParams>) => boolean) | undefined {
@@ -334,10 +260,28 @@ export function _getGroupAggFiltering(
     return undefined;
 }
 
-export function _getGrandTotalRow(gos: GridOptionsService): 'top' | 'bottom' | undefined {
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _getGrandTotalRow(gos: GridOptionsService): GridOptions['grandTotalRow'] {
     return gos.get('grandTotalRow');
 }
 
+/**
+ * Maps a `grandTotalRow` option to the floating side the grand total should be pinned to,
+ * or `null` when it should render inline (or is disabled).
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
+export function _getGrandTotalPinnedFloat(grandTotalRow: GridOptions['grandTotalRow']): 'top' | 'bottom' | null {
+    switch (grandTotalRow) {
+        case 'pinnedTop':
+            return 'top';
+        case 'pinnedBottom':
+            return 'bottom';
+        default:
+            return null;
+    }
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getGroupTotalRowCallback(
     gos: GridOptionsService
 ): (params: WithoutGridCommon<GetGroupIncludeFooterParams>) => 'top' | 'bottom' | undefined {
@@ -350,14 +294,21 @@ export function _getGroupTotalRowCallback(
     return () => userValue ?? undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isGroupMultiAutoColumn(gos: GridOptionsService) {
-    if (gos.exists('groupDisplayType')) {
-        return gos.get('groupDisplayType') === 'multipleColumns';
+    const isHideOpenParents = !!gos.get('groupHideOpenParents');
+    if (isHideOpenParents) {
+        return true;
     }
-    // if we are doing hideOpenParents we also show multiple columns, otherwise hideOpenParents would not work
-    return gos.get('groupHideOpenParents');
+    return gos.get('groupDisplayType') === 'multipleColumns';
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isGroupHideColumnsUntilExpanded(gos: GridOptionsService) {
+    return _isGroupMultiAutoColumn(gos) && gos.get('groupHideColumnsUntilExpanded') && _isClientSideRowModel(gos);
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isGroupUseEntireRow(gos: GridOptionsService, pivotMode: boolean): boolean {
     // we never allow groupDisplayType = 'groupRows' if in pivot mode, otherwise we won't see the pivot values.
     if (pivotMode) {
@@ -367,15 +318,21 @@ export function _isGroupUseEntireRow(gos: GridOptionsService, pivotMode: boolean
     return gos.get('groupDisplayType') === 'groupRows';
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isFullWidthGroupRow(gos: GridOptionsService, node: RowNode, pivotMode: boolean): boolean {
+    return !!node.group && !node.footer && _isGroupUseEntireRow(gos, pivotMode);
+}
+
 // AG-9259 Can't use `WrappedCallback<'getRowId', ...>` here because of a strange typescript bug
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getRowIdCallback<TData = any>(
-    gos: GridOptionsService
+    beans: BeanCollection
 ):
     | ((
           params: WithoutGridCommon<ExtractParamsFromCallback<GetRowIdFunc<TData>>>
       ) => ExtractReturnTypeFromCallback<GetRowIdFunc<TData>>)
     | undefined {
-    const getRowId = gos.getCallback('getRowId');
+    const getRowId = beans.gos.getCallback('getRowId');
 
     if (getRowId === undefined) {
         return getRowId;
@@ -385,7 +342,9 @@ export function _getRowIdCallback<TData = any>(
         let id = getRowId(params);
 
         if (typeof id !== 'string') {
-            _warn(25, { id });
+            // Throttle to once per grid: avoids logging for every row (could be thousands), while still
+            // letting each grid surface its own occurrence so the diagnostic attributes per grid.
+            _doOnce(() => beans.log.warn(25, { id }), `getRowIdString:${beans.context.getId()}`);
             id = String(id);
         }
 
@@ -393,6 +352,7 @@ export function _getRowIdCallback<TData = any>(
     };
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _canSkipShowingRowGroup(gos: GridOptionsService, node: RowNode): boolean {
     const isSkippingGroups = gos.get('groupHideParentOfSingleChild');
     if (isSkippingGroups === true) {
@@ -411,13 +371,23 @@ export function _canSkipShowingRowGroup(gos: GridOptionsService, node: RowNode):
     return false;
 }
 
+/**
+ * Returns true when a single-child group row is hidden from the UI (and from exports)
+ * due to `groupHideParentOfSingleChild` (or its deprecated equivalents).
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
+export function _isHiddenSingleChildGroup(gos: GridOptionsService, node: RowNode): boolean {
+    return node.allChildrenCount === 1 && node.childrenAfterGroup?.length === 1 && _canSkipShowingRowGroup(gos, node);
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getMaxConcurrentDatasourceRequests(gos: GridOptionsService): number | undefined {
     const res = gos.get('maxConcurrentDatasourceRequests');
     // negative number, eg -1, means no max restriction
     return res > 0 ? res : undefined;
 }
 
-/** Get the selection checkbox configuration. Defaults to enabled. */
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _shouldUpdateColVisibilityAfterGroup(gos: GridOptionsService, isGrouped: boolean): boolean {
     const preventVisibilityChanges = gos.get('suppressGroupChangesColumnVisibility');
     if (preventVisibilityChanges === true) {
@@ -443,18 +413,25 @@ export function _shouldUpdateColVisibilityAfterGroup(gos: GridOptionsService, is
     return true;
 }
 
-/** Get the selection checkbox configuration. Defaults to enabled. */
+/**
+ * Get the selection checkbox configuration. Defaults to enabled.
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
 export function _getCheckboxes(
     selection: RowSelectionOptions
 ): NonNullable<SingleRowSelectionOptions['checkboxes']> | NonNullable<MultiRowSelectionOptions['checkboxes']> {
     return selection?.checkboxes ?? true;
 }
 
-/** Get the header checkbox configuration. Defaults to enabled in `multiRow`, otherwise disabled. */
+/**
+ * Get the header checkbox configuration. Defaults to enabled in `multiRow`, otherwise disabled.
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
 export function _getHeaderCheckbox(selection: RowSelectionOptions): boolean {
     return selection?.mode === 'multiRow' && (selection.headerCheckbox ?? true);
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getCheckboxLocation(rowSelection: GridOptions['rowSelection']): CheckboxLocation | undefined {
     if (typeof rowSelection !== 'object') {
         return undefined;
@@ -467,15 +444,18 @@ export function _getHideDisabledCheckboxes(selection: RowSelectionOptions): bool
     return selection?.hideDisabledCheckboxes ?? false;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isUsingNewRowSelectionAPI(gos: GridOptionsService): boolean {
     const rowSelection = gos.get('rowSelection');
     return typeof rowSelection !== 'string';
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isUsingNewCellSelectionAPI(gos: GridOptionsService): boolean {
     return gos.get('cellSelection') !== undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getSuppressMultiRanges(gos: GridOptionsService): boolean {
     const selection = gos.get('cellSelection');
     const useNewAPI = selection !== undefined;
@@ -484,9 +464,10 @@ export function _getSuppressMultiRanges(gos: GridOptionsService): boolean {
         return gos.get('suppressMultiRangeSelection');
     }
 
-    return typeof selection !== 'boolean' ? selection?.suppressMultiRanges ?? false : false;
+    return typeof selection !== 'boolean' ? (selection?.suppressMultiRanges ?? false) : false;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isCellSelectionEnabled(gos: GridOptionsService): boolean {
     const selection = gos.get('cellSelection');
     const useNewAPI = selection !== undefined;
@@ -494,6 +475,7 @@ export function _isCellSelectionEnabled(gos: GridOptionsService): boolean {
     return useNewAPI ? !!selection : gos.get('enableRangeSelection');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getFillHandle(gos: GridOptionsService): FillHandleOptions | undefined {
     const selection = gos.get('cellSelection');
     const useNewAPI = selection !== undefined;
@@ -508,6 +490,12 @@ export function _getFillHandle(gos: GridOptionsService): FillHandleOptions | und
     }
 
     return typeof selection !== 'boolean' && selection.handle?.mode === 'fill' ? selection.handle : undefined;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _getEnableColumnSelection(gos: GridOptionsService): boolean {
+    const cellSelection = gos.get('cellSelection') ?? false;
+    return (typeof cellSelection === 'object' && cellSelection.enableColumnSelection) ?? false;
 }
 
 function _getEnableClickSelection(gos: GridOptionsService): NonNullable<RowSelectionOptions['enableClickSelection']> {
@@ -529,7 +517,7 @@ function _getEnableClickSelection(gos: GridOptionsService): NonNullable<RowSelec
     }
 
     return selection.mode === 'singleRow' || selection.mode === 'multiRow'
-        ? selection.enableClickSelection ?? false
+        ? (selection.enableClickSelection ?? false)
         : false;
 }
 
@@ -543,6 +531,7 @@ export function _getEnableDeselection(gos: GridOptionsService): boolean {
     return enableClickSelection === true || enableClickSelection === 'enableDeselection';
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getIsRowSelectable(gos: GridOptionsService): IsRowSelectable | undefined {
     const selection = gos.get('rowSelection');
 
@@ -553,8 +542,14 @@ export function _getIsRowSelectable(gos: GridOptionsService): IsRowSelectable | 
     return selection?.isRowSelectable;
 }
 
-export function _getRowSelectionMode(gos: GridOptionsService): RowSelectionMode | undefined {
-    const selection = gos.get('rowSelection');
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _getRowSelectionMode(gridOptions: GridOptions): RowSelectionMode | undefined;
+export function _getRowSelectionMode(gos: GridOptionsService): RowSelectionMode | undefined;
+export function _getRowSelectionMode(arg: object): RowSelectionMode | undefined {
+    const selection =
+        'beanName' in arg && arg.beanName === 'gos'
+            ? (arg as GridOptionsService).get('rowSelection')
+            : (arg as GridOptions).rowSelection;
 
     if (typeof selection === 'string') {
         switch (selection) {
@@ -577,8 +572,11 @@ export function _getRowSelectionMode(gos: GridOptionsService): RowSelectionMode 
     }
 }
 
-export function _isMultiRowSelection(gos: GridOptionsService): boolean {
-    const mode = _getRowSelectionMode(gos);
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _isMultiRowSelection(gridOptions: GridOptions): boolean;
+export function _isMultiRowSelection(gos: GridOptionsService): boolean;
+export function _isMultiRowSelection(arg: object): boolean {
+    const mode = _getRowSelectionMode(arg as GridOptionsService);
     return mode === 'multiRow';
 }
 
@@ -592,6 +590,7 @@ export function _getEnableSelectionWithoutKeys(gos: GridOptionsService): boolean
     return selection?.enableSelectionWithoutKeys ?? false;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getGroupSelection(gos: GridOptionsService): GroupSelectionMode | undefined {
     const selection = gos.get('rowSelection');
 
@@ -621,27 +620,41 @@ export function _getSelectAll(gos: GridOptionsService, defaultValue = true): Sel
     return rowSelection.mode === 'multiRow' ? rowSelection.selectAll : 'all';
 }
 
+export function _getCtrlASelectsRows(gos: GridOptionsService): boolean {
+    const rowSelection = gos.get('rowSelection');
+    if (typeof rowSelection === 'string') {
+        return false;
+    }
+    return rowSelection?.mode === 'multiRow' ? (rowSelection.ctrlASelectsRows ?? false) : false;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getGroupSelectsDescendants(gos: GridOptionsService): boolean {
     const groupSelection = _getGroupSelection(gos);
     return groupSelection === 'descendants' || groupSelection === 'filteredDescendants';
 }
 
+export function _getMasterSelects(gos: GridOptionsService): MasterSelectionMode {
+    const rowSelection = gos.get('rowSelection');
+    return (typeof rowSelection === 'object' && rowSelection.masterSelects) || 'self';
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isSetFilterByDefault(gos: GridOptionsService): boolean {
     return gos.isModuleRegistered('SetFilter') && !gos.get('suppressSetFilterByDefault');
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isLegacyMenuEnabled(gos: GridOptionsService): boolean {
     return gos.get('columnMenu') === 'legacy';
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _isColumnMenuAnchoringEnabled(gos: GridOptionsService): boolean {
     return !_isLegacyMenuEnabled(gos);
 }
 
-export function _areAdditionalColumnMenuItemsEnabled(gos: GridOptionsService): boolean {
-    return gos.get('columnMenu') === 'new';
-}
-
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _getCallbackForEvent(eventName: string): string {
     if (!eventName || eventName.length < 2) {
         return eventName;
@@ -649,7 +662,10 @@ export function _getCallbackForEvent(eventName: string): string {
     return 'on' + eventName[0].toUpperCase() + eventName.substring(1);
 }
 
-/** Combines component props / attributes with the provided gridOptions returning a new combined gridOptions object */
+/**
+ * Combines component props / attributes with the provided gridOptions returning a new combined gridOptions object
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
 export function _combineAttributesAndGridOptions(
     gridOptions: GridOptions | undefined,
     component: any,
@@ -662,15 +678,16 @@ export function _combineAttributesAndGridOptions(
     // shallow copy (so we don't change the provided object)
     const mergedOptions = { ...gridOptions } as any;
     // Loop through component props, if they are not undefined and a valid gridOption copy to gridOptions
-    gridOptionsKeys.forEach((key) => {
+    for (const key of gridOptionsKeys) {
         const value = component[key];
         if (typeof value !== 'undefined') {
             mergedOptions[key] = value;
         }
-    });
+    }
     return mergedOptions;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _processOnChange(changes: any, api: GridApi): void {
     if (!changes) {
         return;
@@ -678,10 +695,10 @@ export function _processOnChange(changes: any, api: GridApi): void {
 
     const gridChanges: Record<string, any> = {};
     let hasChanges = false;
-    Object.keys(changes).forEach((key) => {
+    for (const key of Object.keys(changes)) {
         gridChanges[key] = changes[key];
         hasChanges = true;
-    });
+    }
 
     if (!hasChanges) {
         return;
@@ -700,4 +717,33 @@ export function _processOnChange(changes: any, api: GridApi): void {
     };
 
     api.dispatchEvent(event);
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _addGridCommonParams<T extends AgGridCommon<TData, TContext>, TData = any, TContext = any>(
+    gos: GridOptionsService,
+    params: WithoutGridCommon<T>
+): T {
+    return gos.addCommon(params);
+}
+
+/**
+ * Used for before GridOptionsService is initialised
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
+export function _getGridOption<K extends keyof GridOptions>(
+    providedGridOptions: GridOptions,
+    gridOption: K
+): GridOptionOrDefault<K> {
+    return (
+        providedGridOptions[gridOption] ??
+        (providedGridOptions as any)[`gridOptions`]?.[gridOption] ??
+        _getGlobalGridOption(gridOption) ??
+        (GRID_OPTION_DEFAULTS[gridOption as keyof typeof GRID_OPTION_DEFAULTS] as any)
+    );
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _interpretAsRightClick({ gos }: BeanCollection, event: MouseEvent): boolean {
+    return event.button === 2 || (event.ctrlKey && gos.get('allowContextMenuWithControlKey'));
 }

@@ -1,3 +1,7 @@
+import { _exists } from 'ag-stack';
+
+import { _logPreInitWarn } from 'ag-grid-community';
+
 import { MD5 } from './md5';
 
 const LICENSE_TYPES = {
@@ -5,22 +9,25 @@ const LICENSE_TYPES = {
     '02': 'CHARTS',
     '0102': 'BOTH',
 };
-const LICENSING_HELP_URL = 'https://ag-grid.com/licensing/';
+const LICENSING_HELP_URL = 'https://www.ag-grid.com/licensing/';
 
 export interface ILicenseManager {
     setLicenseKey: (key?: string, gridContext?: boolean) => void;
 }
 
 export class LicenseManager {
-    private static RELEASE_INFORMATION: string = 'MTczMzc1NjY3OTc2Mw==';
+    // eslint-disable-next-line no-restricted-syntax
+    private static readonly RELEASE_INFORMATION: string = 'MTc4NTkxOTcwNzQzNA==';
+    // eslint-disable-next-line no-restricted-syntax
     private static licenseKey: string;
+    // eslint-disable-next-line no-restricted-syntax
     private static chartsLicenseManager?: ILicenseManager;
     private watermarkMessage: string | undefined = undefined;
 
-    private md5: MD5;
-    private document: Document;
+    private readonly md5: MD5;
+    private readonly document: Document;
 
-    private totalMessageLength = 124;
+    private readonly totalMessageLength = 124;
 
     constructor(document: Document) {
         this.document = document;
@@ -93,7 +100,7 @@ export class LicenseManager {
 
         const gridReleaseDate = LicenseManager.getGridReleaseDate();
         const { md5, license, version, isTrial, type } = LicenseManager.extractLicenseComponents(licenseKey);
-        let valid = md5 === this.md5.md5(license) && licenseKey.indexOf('For_Trialing_ag-Grid_Only') === -1;
+        let valid = md5 === this.md5.md5(license) && !licenseKey.includes('For_Trialing_ag-Grid_Only');
         let trialExpired: undefined | boolean = undefined;
         let expired: undefined | boolean = undefined;
         let expiry: Date | null = null;
@@ -188,12 +195,12 @@ export class LicenseManager {
         const loc = win.location;
         const { pathname } = loc;
 
-        return pathname ? pathname.indexOf('forceWatermark') !== -1 : false;
+        return pathname ? pathname.includes('forceWatermark') : false;
     }
 
     private isWebsiteUrl(): boolean {
         const hostname = this.getHostname();
-        return hostname.match(/^((?:[\w-]+\.)?ag-grid\.com)$/) !== null;
+        return hostname.match(/^(?:[\w-]+\.)?(ag-grid|bryntum)\.com$/) !== null;
     }
 
     private isLocalhost(): boolean {
@@ -276,11 +283,24 @@ export class LicenseManager {
 
     static setChartsLicenseManager(dependantLicenseManager: ILicenseManager): void {
         this.chartsLicenseManager = dependantLicenseManager;
+
+        // we set this again in the event users have set the key BEFORE they've registered the modules
+        // if we dont then order of events can be such that we dont update the chartsLicenseManager with the license key
+        this.chartsLicenseManager?.setLicenseKey(this.licenseKey, true);
     }
 
     static setLicenseKey(licenseKey: string): void {
-        this.licenseKey = licenseKey;
+        if (_exists(this.licenseKey) && this.licenseKey !== licenseKey) {
+            // we output a flat warning without reference to modules as most of the time ValidationService.provideValidationServiceLogger
+            // will only be applied AFTER this call is made, which result in an incorrect message
+            _logPreInitWarn(
+                291,
+                undefined,
+                'AG Grid: License Key being set multiple times with different values. This can result in an incorrect license key being used.'
+            );
+        }
 
+        this.licenseKey = licenseKey;
         this.chartsLicenseManager?.setLicenseKey(licenseKey, true);
     }
 
@@ -397,7 +417,7 @@ export class LicenseManager {
         this.centerPadAndOutput(` ${currentLicenseName} License `);
         this.centerPadAndOutput(' Incompatible Software Version ');
         this.padAndOutput(
-            `* Your license key works with versions of ${suppliedLicenseName} released before ${formattedExpiryDate}.`,
+            `* Your license key works with versions${suppliedLicenseName == '' ? '' : ` of ${suppliedLicenseName}`} released before ${formattedExpiryDate}.`,
             ' ',
             '*'
         );

@@ -6,11 +6,8 @@ import type { ServerSideTransaction, ServerSideTransactionResult } from './serve
 
 export interface IServerSideRowModel<TData = any> extends IRowModel {
     refreshStore(params?: RefreshServerSideParams): void;
-    onRowHeightChanged(): void;
-    onRowHeightChangedDebounced(): void;
     getStoreState(): ServerSideGroupLevelState[];
     retryLoads(): void;
-    expandAll(value: boolean): void;
     setDatasource(datasource: IServerSideDatasource<TData>): void;
     forEachNodeAfterFilterAndSort(
         callback: (node: IRowNode<TData>, index: number) => void,
@@ -20,6 +17,11 @@ export interface IServerSideRowModel<TData = any> extends IRowModel {
     getBlockStates(): void;
     setRowCount(rowCount: number, isLastRowIndexKnown?: boolean): void;
     applyRowData(rowDataParams: LoadSuccessParams<TData>, startRow: number, route: string[]): void;
+
+    /**
+     * @deprecated v33.1.0 - use `gridApi.onRowHeightChanged()` instead
+     */
+    onRowHeightChangedDebounced(): void;
 }
 
 export interface IServerSideTransactionManager<TData = any> {
@@ -62,4 +64,10 @@ export interface LoadSuccessParams<TData = any> {
      * The pivot fields in the response - if provided the grid will attempt to generate secondary columns.
      */
     pivotResultFields?: string[];
+    /**
+     * Data for the grand total row. When provided, the grid will display or update the grand total footer row.
+     * Set to `null` to remove an existing grand total row. Takes priority over a grand total row found in `rowData`.
+     * Only the fields you want to display need to be provided; the grid assigns the row ID automatically.
+     */
+    grandTotalData?: Partial<TData> | null;
 }

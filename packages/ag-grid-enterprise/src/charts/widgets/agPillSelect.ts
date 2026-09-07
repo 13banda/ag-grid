@@ -1,18 +1,20 @@
-import type { DragAndDropIcon, DragItem, DraggingEvent, DropTarget, ListOption } from 'ag-grid-community';
-import {
-    AgSelect,
-    Component,
-    DragSourceType,
-    _escapeString,
-    _getActiveDomElement,
-    _removeFromParent,
+import { _escapeString, _getActiveDomElement, _removeFromParent } from 'ag-stack';
+
+import type {
+    DragAndDropIcon,
+    DragItem,
+    DropTarget,
+    GridDraggingEvent,
+    GridSelect,
+    ListOption,
 } from 'ag-grid-community';
+import { AgSelect, Component, DragSourceType } from 'ag-grid-community';
 
 import { PillDragComp } from '../../widgets/pillDragComp';
 import { PillDropZonePanel } from '../../widgets/pillDropZonePanel';
-import { agPillSelectCSS } from './agPillSelect.css-GENERATED';
+import agPillSelectCSS from './agPillSelect.css';
 
-export interface AgPillSelectParams<TValue = string | null> {
+interface AgPillSelectParams<TValue = string | null> {
     valueList?: TValue[];
     selectedValueList?: TValue[];
     valueFormatter?: (value: TValue) => string;
@@ -32,7 +34,7 @@ export interface AgPillSelectChangeParams<TValue> {
 
 export class AgPillSelect<TValue = string | null> extends Component {
     private dropZonePanel: PillSelectDropZonePanel<TValue>;
-    private eSelect?: AgSelect<TValue>;
+    private eSelect?: GridSelect<TValue>;
 
     private readonly config: AgPillSelectParams<TValue>;
     private valueList: TValue[];
@@ -113,11 +115,11 @@ export class AgPillSelect<TValue = string | null> extends Component {
         if (maxSelection && this.selectedValues.length >= maxSelection) {
             return options;
         }
-        this.valueList.forEach((value) => {
+        for (const value of this.valueList) {
             if (!this.selectedValues.includes(value)) {
                 options.push({ value, text: this.valueFormatter(value) });
             }
-        });
+        }
         return options;
     }
 
@@ -222,6 +224,10 @@ class PillSelectDragComp<TValue> extends PillDragComp<TValue> {
         return this.sourceId;
     }
 
+    public override isMovable(): boolean {
+        return this.isDraggable();
+    }
+
     protected override isDraggable(): boolean {
         return this.draggable;
     }
@@ -245,7 +251,7 @@ class PillSelectDropZonePanel<TValue> extends PillDropZonePanel<PillSelectDragCo
         super.init();
     }
 
-    protected isItemDroppable(item: TValue, draggingEvent: DraggingEvent): boolean {
+    protected isItemDroppable(item: TValue, draggingEvent: GridDraggingEvent): boolean {
         return (
             this.isSourceEventFromTarget(draggingEvent) ||
             (this.sourceId != null && this.sourceId === draggingEvent.dragSource.sourceId)

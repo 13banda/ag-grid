@@ -3,6 +3,8 @@ import type {
     GridApi,
     _AdvancedFilterGridApi,
     _AggregationGridApi,
+    _AiToolkitGridApi,
+    _BatchEditApi,
     _CellSelectionGridApi,
     _ClientSideRowModelGridApi,
     _ClipboardGridApi,
@@ -24,13 +26,17 @@ import type {
     _EventGridApi,
     _ExcelExportGridApi,
     _FilterGridApi,
+    _FindApi,
+    _FormulaGridApi,
     _GridChartsGridApi,
     _HighlightChangesGridApi,
     _InfiniteRowModelGridApi,
     _KeyboardNavigationGridApi,
     _MasterDetailGridApi,
+    _NotesGridApi,
     _OverlayGridApi,
     _PaginationGridApi,
+    _PdfExportGridApi,
     _PinnedRowGridApi,
     _PivotGridApi,
     _QuickFilterGridApi,
@@ -45,6 +51,7 @@ import type {
     _SsrmInfiniteSharedGridApi,
     _StateGridApi,
     _StatusBarGridApi,
+    _ToolbarGridApi,
     _UndoRedoGridApi,
     _ValueApi,
     _ValueCacheApi,
@@ -69,9 +76,12 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         isDestroyed: 0,
         setGridOption: 0,
         updateGridOptions: 0,
+        isModuleRegistered: 0,
+        getGridElement: 0,
     }),
     ...mod<_StateGridApi>('GridState', {
         getState: 0,
+        setState: 0,
     }),
     ...mod<_RowSelectionGridApi<any>>('SharedRowSelection', {
         setNodesSelected: 0,
@@ -135,6 +145,7 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         getPinnedBottomRowCount: 0,
         getPinnedTopRow: 0,
         getPinnedBottomRow: 0,
+        forEachPinnedRow: 0,
     }),
     ...mod<_OverlayGridApi>('Overlay', {
         showLoadingOverlay: 0,
@@ -153,10 +164,12 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
     ...mod<_HighlightChangesGridApi<any>>('HighlightChanges', {
         flashCells: 0,
     }),
-    ...mod<_DragGridApi>('RowDrag', {
+    ...mod<_DragGridApi<any>>('RowDrag', {
         addRowDropZone: 0,
         removeRowDropZone: 0,
         getRowDropZoneParams: 0,
+        getRowDropPositionIndicator: 0,
+        setRowDropPositionIndicator: 0,
     }),
     ...mod<_ColumnGridApi<any>>('ColumnApi', {
         getColumnDefs: 0,
@@ -212,8 +225,18 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
     ...mod<_EditGridApi<any>>('EditCore', {
         getCellEditorInstances: 0,
         getEditingCells: 0,
+        getEditRowValues: 0,
         stopEditing: 0,
         startEditingCell: 0,
+        isEditing: 0,
+        validateEdit: 0,
+        getEditValidationErrors: 0,
+    }),
+    ...mod<_BatchEditApi>('BatchEdit', {
+        startBatchEdit: 0,
+        cancelBatchEdit: 0,
+        commitBatchEdit: 0,
+        isBatchEditing: 0,
     }),
     ...mod<_UndoRedoGridApi>('UndoRedoEdit', {
         undoCellEditing: 0,
@@ -234,11 +257,30 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         getColumnFilterModel: 0,
         setColumnFilterModel: 0,
         showColumnFilter: 0,
+        hideColumnFilter: 0,
+        getColumnFilterHandler: 0,
+        doFilterAction: 0,
     }),
     ...mod<_QuickFilterGridApi>('QuickFilter', {
         isQuickFilterPresent: 0,
         getQuickFilter: 0,
         resetQuickFilter: 0,
+    }),
+    ...mod<_NotesGridApi>('Notes', {
+        getNote: 0,
+        setNote: 0,
+        refreshNotes: 0,
+    }),
+    ...mod<_FindApi<any>>('Find', {
+        findGetActiveMatch: 0,
+        findGetTotalMatches: 0,
+        findGoTo: 0,
+        findNext: 0,
+        findPrevious: 0,
+        findGetNumMatches: 0,
+        findGetParts: 0,
+        findClearActive: 0,
+        findRefresh: 0,
     }),
     ...mod<_PaginationGridApi>('Pagination', {
         paginationIsLastPageFound: 0,
@@ -252,17 +294,17 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         paginationGoToLastPage: 0,
         paginationGoToPage: 0,
     }),
+
     ...mod<_CsrmSsrmSharedGridApi>('CsrmSsrmSharedApi', {
         expandAll: 0,
         collapseAll: 0,
-        onRowHeightChanged: 0,
+        resetRowGroupExpansion: 0,
     }),
     ...mod<_SsrmInfiniteSharedGridApi>('SsrmInfiniteSharedApi', {
         setRowCount: 0,
         getCacheBlockState: 0,
         isLastRowIndexKnown: 0,
     }),
-
     ...mod<_ClientSideRowModelGridApi<any>>('ClientSideRowModelApi', {
         onGroupExpandedOrCollapsed: 0,
         refreshClientSideRowModel: 0,
@@ -270,11 +312,12 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         forEachLeafNode: 0,
         forEachNodeAfterFilter: 0,
         forEachNodeAfterFilterAndSort: 0,
-        resetRowHeights: 0,
         applyTransaction: 0,
         applyTransactionAsync: 0,
         flushAsyncTransactions: 0,
         getBestCostNodeSelection: 0,
+        onRowHeightChanged: 0,
+        resetRowHeights: 0,
     }),
 
     ...mod<_CsvExportGridApi>('CsvExport', {
@@ -326,11 +369,20 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         exportMultipleSheetsAsExcel: 0,
     }),
 
+    ...mod<_PdfExportGridApi>('PdfExport', {
+        getDataAsPdf: 0,
+        exportDataAsPdf: 0,
+    }),
+
     ...mod<_MasterDetailGridApi>('SharedMasterDetail', {
         addDetailGridInfo: 0,
         removeDetailGridInfo: 0,
         getDetailGridInfo: 0,
         forEachDetailGridInfo: 0,
+    }),
+
+    ...mod<_FormulaGridApi<any>>('Formula', {
+        refreshFormulas: 0,
     }),
 
     ...mod<_ContextMenuGridApi>('ContextMenu', {
@@ -388,6 +440,8 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         flushServerSideAsyncTransactions: 0,
         refreshServerSide: 0,
         getServerSideGroupLevelState: 0,
+        onRowHeightChanged: 0,
+        resetRowHeights: 0,
     }),
 
     ...mod<_SideBarGridApi<any>>('SideBar', {
@@ -403,7 +457,15 @@ export const gridApiFunctionsMap: Record<keyof GridApi, ValidationModuleName> = 
         getSideBar: 0,
     }),
 
+    ...mod<_ToolbarGridApi>('Toolbar', {
+        getToolbarItemInstance: 0,
+    }),
+
     ...mod<_StatusBarGridApi>('StatusBar', {
         getStatusPanel: 0,
+    }),
+
+    ...mod<_AiToolkitGridApi>('AiToolkit', {
+        getStructuredSchema: 0,
     }),
 };

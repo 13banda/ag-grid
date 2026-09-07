@@ -1,20 +1,15 @@
 {
   "name": "ag-grid-react",
-  "version": "33.0.1",
+  "version": "36.1.0-beta.20260904.1143",
   "description": "AG Grid React Component",
   "main": "./dist/package/index.cjs.js",
   "types": "./dist/types/src/index.d.ts",
   "module": "./dist/package/index.esm.mjs",
   "exports": {
     "import": "./dist/package/index.esm.mjs",
-    "require": "./dist/package/index.cjs.js",
     "types": "./dist/types/src/index.d.ts",
+    "require": "./dist/package/index.cjs.js",
     "default": "./dist/package/index.cjs.js"
-  },
-  "scripts": {
-    "cypress:open": "npx cross-env NODE_ENV=test cypress open",
-    "cypress:e2e": "npx cross-env NODE_ENV=test cypress run --spec 'cypress/integration/*spec.js'",
-    "cypress:components": "npx cross-env NODE_ENV=test cypress run --spec 'cypress/components/**/*spec.jsx'"
   },
   "repository": {
     "type": "git",
@@ -34,29 +29,22 @@
   },
   "homepage": "https://www.ag-grid.com/react-grid/",
   "devDependencies": {
-    "@babel/runtime": "^7.16.3",
+    "@babel/runtime": "^7.29.2",
     "prop-types": "^15.6.2",
-    "ag-grid-community": "33.0.1",
-    "@babel/plugin-proposal-throw-expressions": "7.14.5",
-    "@babel/preset-typescript": "7.15.0",
-    "@types/react": "~18.2.0",
-    "@types/react-dom": "~18.2.0",
-    "babel-preset-react-app": "^10.0.0",
-    "cypress": "^5.6.0",
-    "cypress-react-unit-test": "^4.17.0",
-    "enzyme": "^3.10.0",
-    "enzyme-adapter-react-16": "^1.14.0",
-    "jest": "26.6.0",
-    "jest-circus": "26.6.0",
-    "jest-watch-typeahead": "0.6.1",
+    "ag-grid-community": "36.1.0-beta.20260904.1143",
+    "@babel/plugin-proposal-throw-expressions": "^7.27.1",
+    "@babel/preset-typescript": "^7.28.5",
+    "@types/react": "~18.3.26",
+    "@types/react-dom": "~18.3.7",
+    "babel-preset-react-app": "^10.1.0",
     "react": "^16.9.0",
-    "react-app-polyfill": "^2.0.0",
+    "react-app-polyfill": "^3.0.0",
     "react-dom": "^16.9.0",
-    "typescript": "~5.2.2"
+    "typescript": "~5.8.3"
   },
   "dependencies": {
     "prop-types": "^15.8.1",
-    "ag-grid-community": "33.0.1"
+    "ag-grid-community": "36.1.0-beta.20260904.1143"
   },
   "peerDependencies": {
     "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
@@ -64,8 +52,7 @@
   },
   "eslintConfig": {
     "extends": [
-      "react-app",
-      "react-app/jest"
+      "react-app"
     ]
   },
   "browserslist": {
@@ -82,57 +69,6 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "jest": {
-    "roots": [
-      "<rootDir>/src"
-    ],
-    "collectCoverageFrom": [
-      "src/**/*.{js,jsx,ts,tsx}",
-      "!src/**/*.d.ts"
-    ],
-    "setupFiles": [
-      "react-app-polyfill/jsdom"
-    ],
-    "setupFilesAfterEnv": [
-      "<rootDir>/jest/setupTests.ts"
-    ],
-    "testMatch": [
-      "<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
-      "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}"
-    ],
-    "testEnvironment": "jsdom",
-    "testRunner": "./node_modules/jest-circus/runner.js",
-    "transform": {
-      "^.+\\.(js|jsx|mjs|cjs|ts|tsx)$": "<rootDir>/node_modules/babel-jest",
-      "^(?!.*\\.(js|jsx|mjs|cjs|ts|tsx|css|json)$)": "<rootDir>/jest/fileTransform.js"
-    },
-    "transformIgnorePatterns": [
-      "[/\\\\]node_modules[/\\\\].+\\.(js|jsx|mjs|cjs|ts|tsx)$",
-      "^.+\\.module\\.(css|sass|scss)$"
-    ],
-    "modulePaths": [],
-    "moduleNameMapper": {
-      "^react-native$": "react-native-web",
-      "^.+\\.module\\.(css|sass|scss)$": "identity-obj-proxy"
-    },
-    "moduleFileExtensions": [
-      "web.js",
-      "js",
-      "web.ts",
-      "ts",
-      "web.tsx",
-      "tsx",
-      "json",
-      "web.jsx",
-      "jsx",
-      "node"
-    ],
-    "watchPlugins": [
-      "jest-watch-typeahead/filename",
-      "jest-watch-typeahead/testname"
-    ],
-    "resetMocks": true
   },
   "babel": {
     "presets": [

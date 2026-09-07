@@ -15,9 +15,52 @@ Pagination in AG Grid is supported in [all the different row models](./row-model
 
 To see the specifics of pagination on the other row models check the relevant documentation for [Infinite Row Model](./infinite-scrolling/#pagination), [Viewport Row Model](./viewport/#example-viewport-with-pagination) and [Server-Side Row Model](./server-side-model-pagination/).
 
+## Styling the Pagination Panel
+
+The height of the pagination panel defaults to the grid row height. Use the `paginationPanelHeight` [theme parameter](./theming-parameters/) to change the height.
+
+The pagination panel can be styled with CSS, use the class `ag-paging-panel` to target the pagination panel. Use browser developer tools to find class names for specific elements within the pagination panel.
+
+## Pagination Panel Layout
+
+The pagination panel is composed of built-in components that can be individually reordered or hidden via the `paginationPanels` grid option:
+
+- `pageSize` — the page size selector dropdown.
+- `rowSummary` — the row range summary (e.g. `1 to 10 of 50`).
+- `pageSummary` — navigation buttons (first, previous, next, last) with an editable page number input for direct page navigation. Use `{ type: 'pageSummary', suppressPageInput: true }` to show a read-only page number instead.
+- `pageNumbers` — numbered page buttons for direct navigation, with ellipses for large page counts (e.g. `1 … 9 10 11 … 51`). Opt-in: not included in the default panels.
+
+The default order is: `['pageSize', 'rowSummary', 'pageSummary']`.
+
+See [Example: Customising Pagination](#example-customising-pagination) for a live demonstration of reordering the pagination panels.
+
+```js
+// Render the page navigation first, then the row summary, then the page size selector
+const paginationPanels = ['pageSummary', 'rowSummary', 'pageSize'];
+```
+
+{% note %}
+When a panel is omitted from `paginationPanels`, its accessibility announcements are also omitted.
+{% /note %}
+
+### Suppressing the Page Input
+
+To disable the editable page input and show a read-only page number instead, use the object form of the `pageSummary` entry with `suppressPageInput: true`:
+
+```js
+paginationPanels: [
+    'rowSummary',
+    { type: 'pageSummary', suppressPageInput: true },
+    'pageSize',
+]
+```
+
 ## Number Formats
 
-The numbers within the Paging Toolbar can be formatted by replacing the thousand and decimal separators. This can be achieved by customising localisation, for more info see [Localisation](./localisation/).
+The numbers within the Paging Toolbar can be formatted in two ways:
+
+- For thousand and decimal separator changes, customise [Localisation](./localisation/).
+- For full control over each number's rendering, use the `paginationNumberFormatter` callback — see [Example: Customising Pagination](#example-customising-pagination).
 
 ## Example: Auto Page Size
 
@@ -26,10 +69,7 @@ If you set `paginationAutoPageSize=true` the grid will automatically show as man
 {% gridExampleRunner title="Auto Page Size" name="auto-page-size" /%}
 
 {% note %}
-Each pagination page must have the same number of rows. If you use `paginationAutoPageSize` with
-[getRowHeight()](./row-height/#getrowheight-callback) callback (to have different
-rows with different heights) then the page height will be calculated using the default row height and not
-the actual row heights. Therefore the rows will not fit perfectly into the page if these features are mixed.
+Each pagination page must have the same number of rows. If you use `paginationAutoPageSize` with auto row height or dynamic row height via the [getRowHeight()](./row-height/#getrowheight-callback) callback, the page height will be calculated using the default row height and not the actual row heights. Therefore the rows will not fit perfectly into the page if these features are mixed.
 {% /note %}
 
 {% note %}
@@ -41,12 +81,31 @@ and the option `paginationPageSizeSelector` will be ignored.
 
 In this example the default pagination settings are changed. Note the following:
 
-* `paginationPageSizeSelector` is set to `[200, 500, 1000]`
-* `paginationPageSize` is set to `500`
-* The numbers in the pagination panel are formatted differently using the grid callback `paginationNumberFormatter` and putting the numbers into square brackets i.e. \[x].
-* `api.paginationGoToPage(4)` is called to go to page 4 (0 based, so the 5th page)
+- `paginationPageSizeSelector` is set to `[200, 500, 1000]`
+- `paginationPageSize` is set to `500`
+- `paginationPanels` is set to `[{ type: 'pageSummary', suppressPageInput: true }, 'rowSummary', 'pageSize']` to reorder the pagination controls and suppress the page number input.
+- The numbers in the pagination panel are formatted differently using the grid callback `paginationNumberFormatter` and putting the numbers into square brackets i.e. \[x].
+- `api.paginationGoToPage(4)` is called to go to page 4 (0 based, so the 5th page)
 
 {% gridExampleRunner title="Custom Paging" name="custom-paging" /%}
+
+## Example: Page Number Navigation
+
+The `pageNumbers` panel renders a numbered button for each page, letting users jump straight to one. It is opt-in: register `PaginationPageNumbersModule` and add the panel to `paginationPanels`:
+
+```js
+import { PaginationPageNumbersModule } from 'ag-grid-community';
+
+ModuleRegistry.registerModules([ PaginationModule, PaginationPageNumbersModule ]);
+
+const gridOptions = {
+    paginationPanels: ['pageNumbers']
+}
+```
+
+The example below demonstrates page number navigation:
+
+{% gridExampleRunner title="Page Number Navigation" name="page-numbers" /%}
 
 ## Example: Custom Pagination Controls
 
@@ -56,7 +115,7 @@ In the example below you can see how this works. Note that we are listening to `
 
 The example also shows how the grid handles the case where the requested page doesn't exist. In this case, when the users requests page 50, the grid will show the last page (page 18 in this example).
 
-A summary of the API methods and events can be found at the top of this documentation page.
+A list of the API methods and events can be found in the [Pagination API section](#pagination-api).
 
 The example also sets property `suppressScrollOnNewData=true`, which tells the grid to NOT scroll to the top when the page changes.
 
@@ -74,8 +133,8 @@ This mode is typically best suited for Row Grouping as children are always displ
 
 In the example below, note the following:
 
-* Each page will always contain exactly 10 groups.
-* Expanding a group will not push rows to the next page.
+- Each page will always contain exactly 10 groups.
+- Expanding a group will not push rows to the next page.
 
 {% gridExampleRunner title="Grouping Normal" name="grouping-normal"  exampleHeight=530 /%}
 
@@ -83,14 +142,14 @@ In the example below, note the following:
 
 The second mode paginates all rows, including child rows when Row Grouping and detail rows with Master Detail. For example if row grouping with a page size of 10, then each page will always contain exactly 10 rows, even if it means having children appear on a page after the page containing the parent. This can be particularly confusing if the last row of a page is expanded, as the children will appear on the next page (not visible to the user unless they navigate to the next page).
 
-This modes is typically best if the application never wants to exceed the maximum number of rows in a page past the page size. This can be helpful if designing for touch devices (e.g. tablets) where UX requirements state no scrolls should be visible in the application - paging to a strict page size can guarantee no vertical scrolls will appear.
+This mode is typically best if the application never wants to exceed the maximum number of rows in a page past the page size. This can be helpful if designing for touch devices (e.g. tablets) where UX requirements state no scrolls should be visible in the application - paging to a strict page size can guarantee no vertical scrolls will appear.
 
 To enable pagination on all rows, including children, set grid property `paginateChildRows=true`.
 
 In the example below, note the following:
 
-* Each page will always contain exactly 10 rows (not groups).
-* Expanding a group will push rows to the next page to limit the total number of rows to 10.
+- Each page will always contain exactly 10 rows (not groups).
+- Expanding a group will push rows to the next page to limit the total number of rows to 10.
 
 {% note %}
 When `paginateChildRows=true` the Grid automatically disables Group Rows Sticky, see: [suppressGroupRowsSticky](./grid-options/#reference-rowGrouping-suppressGroupRowsSticky).
@@ -102,8 +161,8 @@ When `paginateChildRows=true` the Grid automatically disables Group Rows Sticky,
 
 If using either of the following features, the grid will be forced to use the second mode:
 
-* [Hide Open Parents](./grouping-multiple-group-columns/#hiding-expanded-parent-rows)
-* [Hiding Parents of Individual Rows](./grouping-data/#hiding-parents-of-individual-rows)
+- [Hide Open Parents](./grouping-multiple-group-columns/#hiding-expanded-parent-rows)
+- [Hiding Parents of Individual Rows](./grouping-data/#hiding-parents-of-individual-rows)
 
 This is because both of these features remove top level rows (group rows and master rows) from the displayed rows, making it impossible to paginate based on the top level rows only.
 
@@ -111,9 +170,13 @@ This is because both of these features remove top level rows (group rows and mas
 
 {% apiDocumentation source="grid-options/properties.json" section="pagination" /%}
 
-The following methods compose the pagination API are all available from `api`
-
 ## Pagination API
+
+{% note %}
+The pagination state can be saved and restored as part of [Grid State](./grid-state/).
+{% /note %}
+
+The following methods comprise the pagination API and are all available from `api`
 
 {% apiDocumentation source="grid-api/api.json" section="pagination" /%}
 

@@ -9,24 +9,21 @@ import type {
 import {
     ClientSideRowModelApiModule,
     ClientSideRowModelModule,
-    ColumnAutoSizeModule,
     ModuleRegistry,
     RenderApiModule,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelApiModule,
-    RenderApiModule,
-    RowApiModule,
-    ColumnAutoSizeModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelApiModule, RenderApiModule, RowApiModule, ClientSideRowModelModule]);
 
 let minRowHeight = 25;
 let currentRowHeight: number;
@@ -35,22 +32,19 @@ let gridApi: GridApi;
 
 const gridOptions: GridOptions = {
     columnDefs: [
-        { field: 'athlete', minWidth: 150 },
-        { field: 'age', minWidth: 70, maxWidth: 90 },
-        { field: 'country', minWidth: 130 },
-        { field: 'year', minWidth: 70, maxWidth: 90 },
-        { field: 'date', minWidth: 120 },
-        { field: 'sport', minWidth: 120 },
-        { field: 'gold', minWidth: 80 },
-        { field: 'silver', minWidth: 80 },
-        { field: 'bronze', minWidth: 80 },
-        { field: 'total', minWidth: 80 },
+        { field: 'athlete', width: 140 },
+        { field: 'age', width: 60 },
+        { field: 'country', width: 130 },
+        { field: 'year', width: 70 },
+        { field: 'date', width: 110 },
+        { field: 'sport', width: 110 },
+        { field: 'gold', flex: 1 },
+        { field: 'silver', flex: 1 },
+        { field: 'bronze', flex: 1 },
+        { field: 'total', flex: 1 },
     ],
 
     rowData: getData(),
-    autoSizeStrategy: {
-        type: 'fitGridWidth',
-    },
     onGridReady: (params: GridReadyEvent) => {
         minRowHeight = params.api.getSizesForCurrentTheme().rowHeight;
         currentRowHeight = minRowHeight;
@@ -72,16 +66,22 @@ function onGridSizeChanged(params: GridSizeChangedEvent) {
 
 const updateRowHeight = (params: { api: GridApi }) => {
     // get the height of the grid body - this excludes the height of the headers
-    const bodyViewport = document.querySelector('.ag-body-viewport');
-    if (!bodyViewport) {
+    const gridViewport = document.querySelector<HTMLElement>('.ag-grid-viewport');
+    const topRows = document.querySelector<HTMLElement>('.ag-grid-pinned-top-rows');
+    const bottomRows = document.querySelector<HTMLElement>('.ag-grid-pinned-bottom-rows');
+
+    if (!gridViewport) {
         return;
     }
 
-    const gridHeight = bodyViewport.clientHeight;
+    const gridHeight = gridViewport.clientHeight - (topRows?.clientHeight ?? 0) - (bottomRows?.clientHeight ?? 0);
     // get the rendered rows
     const renderedRowCount = params.api.getDisplayedRowCount();
+    if (renderedRowCount === 0) {
+        return;
+    }
 
-    // if the rendered rows * min height is greater than available height, just just set the height
+    // if the rendered rows * min height is greater than available height, just set the height
     // to the min and let the scrollbar do its thing
     if (renderedRowCount * minRowHeight >= gridHeight) {
         if (currentRowHeight !== minRowHeight) {

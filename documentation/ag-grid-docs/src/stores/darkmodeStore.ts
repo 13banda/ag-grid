@@ -23,7 +23,7 @@ const updateHtml = (darkmode: boolean | undefined) => {
     htmlEl.classList.add('no-transitions');
     htmlEl.dataset.darkMode = darkmode === true ? 'true' : 'false';
     htmlEl.dataset.agThemeMode = htmlEl.dataset.darkMode === 'true' ? 'dark-blue' : 'light';
-    htmlEl.offsetHeight; // Trigger a reflow, flushing the CSS changes
+    void htmlEl.offsetHeight; // Trigger a reflow, flushing the CSS changes
     htmlEl.classList.remove('no-transitions');
 
     const darkModeEvent = { type: 'color-scheme-change', darkmode };
@@ -34,18 +34,30 @@ const updateHtml = (darkmode: boolean | undefined) => {
         iframe.contentWindow?.postMessage(darkModeEvent);
     });
 
-    // Send on event on page for charts that are embeded on the page
-    window.dispatchEvent(new CustomEvent('message', { detail: darkModeEvent }));
+    // No `message` CustomEvent on `window` here. A CustomEvent has no `origin`, so a third-party
+    // `message` listener that expects a real postMessage throws on it: reCAPTCHA's api.js parses
+    // `event.origin` as a URL, which breaks the captcha on any page carrying the contact form.
 };
 
 $darkmode.listen(updateHtml);
 
 if (globalThis.window) {
+    // A swap restores <html> to its server-rendered attributes, and $darkmode's listener
+    // only fires on change, so the theme needs re-applying explicitly.
+    document.addEventListener('astro:after-swap', () => {
+        updateHtml($darkmode.get());
+    });
     updateHtml($darkmode.get() ?? window?.matchMedia('(prefers-color-scheme: dark)')?.matches);
 }
 
 export const setDarkmode = (darkmode: boolean) => {
-    $darkmode.set(darkmode);
+    if ('startViewTransition' in document) {
+        document.startViewTransition(() => {
+            $darkmode.set(darkmode);
+        });
+    } else {
+        $darkmode.set(darkmode);
+    }
 };
 
 export const getDarkmode = (): boolean | undefined => {

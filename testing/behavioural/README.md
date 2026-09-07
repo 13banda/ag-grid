@@ -8,27 +8,78 @@ Mocking is to be avoided as much as possible here, and the use of fakes is prefe
 
 ## Running tests
 
-To execute all test, run in the root folder:
+`./behave.sh` runs the **merged unit suite** from the repo root as one multi-project Vitest run
+(the project list in `vitest.workspace.ts`): this behavioural project **and** the package (London-school) unit tests
+in `packages/*`, together in one command.
 
 ```sh
-nx test ag-behavioural-testing
+./behave.sh
 ```
 
-To execute a single test file
+To run only the behavioural project:
 
 ```sh
-nx test ag-behavioural-testing -- --testFile=src/folder/filename.test.ts
+./behave.sh --project behavioural
 ```
 
-To run in watch mode
+To execute tests matching a file pattern:
 
 ```sh
-nx test ag-behavioural-testing -- -w
+./behave.sh "filename"
+```
+
+To run in watch mode:
+
+```sh
+./behave.sh --watch
+```
+
+To overwrite the snapshots for snapshot tests:
+
+```sh
+./behave.sh --update
+```
+
+### Updating GridRows inline snapshots
+
+When diagram formatting or grid behaviour changes, you can automatically update all GridRows inline
+snapshots (the template literals passed to `.check()`):
+
+```sh
+# Update all GridRows snapshots
+./behave.sh --update-grid-rows
+
+# Update snapshots in matching test files only
+./behave.sh --update-grid-rows "cell-editing"
+
+# Dry-run: show what would change without writing files
+./behave.sh --update-grid-rows=dry
+
+# Equivalent env var form
+UPDATE_GRID_ROWS_SNAPSHOTS=1 ./behave.sh
+UPDATE_GRID_ROWS_SNAPSHOTS=dry ./behave.sh
+```
+
+The updater uses TypeScript's parser to locate `.check()` calls and precisely rewrite the template
+literal argument, preserving surrounding code and indentation. It handles direct inline template
+literals, variable references (`const x = \`...\`; gridRows.check(x)`), and tagged templates.
+Dynamic strings with `${}` interpolation are skipped with a warning.
+
+To execute benchmarks:
+
+```sh
+./benches.sh
+```
+
+To execute benchmarks on a single file (any positional arg is forwarded to `vitest bench`):
+
+```sh
+./benches.sh "tree-data-path"
 ```
 
 ## References:
 
--   https://www.youtube.com/watch?v=EZ05e7EMOLM
--   https://docs.google.com/presentation/d/1bEK7sOindHAMIyzFK59VMdjuSzC-NFG3hlUZkwLeGT8
--   https://martinfowler.com/articles/mocksArentStubs.html
--   https://agilewarrior.wordpress.com/2015/04/18/classical-vs-mockist-testing/
+- https://www.youtube.com/watch?v=EZ05e7EMOLM
+- https://docs.google.com/presentation/d/1bEK7sOindHAMIyzFK59VMdjuSzC-NFG3hlUZkwLeGT8
+- https://martinfowler.com/articles/mocksArentStubs.html
+- https://agilewarrior.wordpress.com/2015/04/18/classical-vs-mockist-testing/

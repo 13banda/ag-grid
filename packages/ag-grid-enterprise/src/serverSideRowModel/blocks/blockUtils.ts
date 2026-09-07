@@ -1,3 +1,5 @@
+import { _doOnce, _exists } from 'ag-stack';
+
 import type {
     AgColumn,
     BeanCollection,
@@ -9,12 +11,9 @@ import type {
 import {
     BeanStub,
     RowNode,
-    _doOnce,
-    _exists,
     _getGroupTotalRowCallback,
     _getRowHeightAsNumber,
     _getRowHeightForNode,
-    _warn,
 } from 'ag-grid-community';
 
 import { _createRowNodeFooter, _destroyRowNodeFooter } from '../../aggregation/footerUtils';
@@ -24,7 +23,7 @@ import type { ServerSideExpansionService } from '../services/serverSideExpansion
 import type { LazyStore } from '../stores/lazy/lazyStore';
 import type { StoreFactory } from '../stores/storeFactory';
 
-export const GROUP_MISSING_KEY_ID = 'ag-Grid-MissingKey' as const;
+const GROUP_MISSING_KEY_ID = 'ag-Grid-MissingKey';
 
 export class BlockUtils extends BeanStub implements NamedBean {
     beanName = 'ssrmBlockUtils' as const;
@@ -84,16 +83,15 @@ export class BlockUtils extends BeanStub implements NamedBean {
             this.destroyBean(rowNode.childStore);
             rowNode.childStore = null;
         }
-
-        // if this has a footer, destroy that too
-        if (rowNode.sibling && !rowNode.footer) {
-            this.destroyRowNode(rowNode.sibling, false);
+        const sibling = rowNode.sibling;
+        if (sibling && !rowNode.footer) {
+            this.destroyRowNode(sibling, false);
         }
 
         // this is needed, so row render knows to fade out the row, otherwise it
         // sees row top is present, and thinks the row should be shown. maybe
         // rowNode should have a flag on whether it is visible???
-        rowNode.clearRowTopAndRowIndex();
+        rowNode._destroy(true);
         if (rowNode.id != null) {
             this.nodeManager.removeNode(rowNode);
         }
@@ -111,16 +109,19 @@ export class BlockUtils extends BeanStub implements NamedBean {
         if (!hasChildren && rowNode.childStore != null) {
             this.destroyBean(rowNode.childStore);
             rowNode.childStore = null;
-            rowNode.expanded = false;
+            if (!rowNode.master) {
+                rowNode.expanded = false;
+            }
         }
     }
 
     private setRowGroupInfo(rowNode: RowNode): void {
-        rowNode.key = this.valueSvc.getValue(rowNode.rowGroupColumn!, rowNode);
+        // Use 'data' - group keys should be based on committed data, not pending edits
+        rowNode.key = this.valueSvc.getValueFromData(rowNode.rowGroupColumn!, rowNode);
 
         if (rowNode.key === null || rowNode.key === undefined) {
             _doOnce(() => {
-                _warn(190, { rowGroupId: rowNode.rowGroupColumn?.getId(), data: rowNode.data });
+                this.warn(190, { rowGroupId: rowNode.rowGroupColumn?.getId(), data: rowNode.data });
             }, 'SSBlock-BadKey');
         }
 
@@ -133,10 +134,8 @@ export class BlockUtils extends BeanStub implements NamedBean {
         const getGroupIncludeFooter = _getGroupTotalRowCallback(this.beans.gos);
         const doesRowShowFooter = getGroupIncludeFooter({ node: rowNode });
         if (doesRowShowFooter) {
-            _createRowNodeFooter(rowNode, this.beans);
-            if (rowNode.sibling) {
-                rowNode.sibling.uiLevel = rowNode.uiLevel + 1;
-            }
+            const footerNode = _createRowNodeFooter(rowNode, this.beans);
+            footerNode.uiLevel = rowNode.uiLevel + 1;
         }
     }
 
@@ -155,23 +154,10 @@ export class BlockUtils extends BeanStub implements NamedBean {
         if (this.gos.get('treeData')) {
             this.setTreeGroupInfo(rowNode);
             this.setChildCountIntoRowNode(rowNode);
+            this.updateRowFooter(rowNode);
         } else if (rowNode.group) {
             this.setChildCountIntoRowNode(rowNode);
-
-            if (!rowNode.footer) {
-                const getGroupIncludeFooter = _getGroupTotalRowCallback(this.beans.gos);
-                const doesRowShowFooter = getGroupIncludeFooter({ node: rowNode });
-                if (doesRowShowFooter) {
-                    if (rowNode.sibling) {
-                        rowNode.sibling.updateData(data);
-                    } else {
-                        _createRowNodeFooter(rowNode, this.beans);
-                    }
-                } else if (rowNode.sibling) {
-                    _destroyRowNodeFooter(rowNode);
-                }
-            }
-
+            this.updateRowFooter(rowNode);
             // it's not possible for a node to change whether it's a group or not
             // when doing row grouping (as only rows at certain levels are groups),
             // so nothing to do here
@@ -179,6 +165,25 @@ export class BlockUtils extends BeanStub implements NamedBean {
             // this should be implemented, however it's not the use case i'm currently
             // programming, so leaving for another day. to test this, create an example
             // where whether a master row is expandable or not is dynamic
+        }
+    }
+
+    private updateRowFooter(rowNode: RowNode): void {
+        if (rowNode.footer) {
+            return;
+        }
+
+        if (rowNode.group) {
+            const getGroupIncludeFooter = _getGroupTotalRowCallback(this.beans.gos);
+            const shouldRowShowFooter = getGroupIncludeFooter({ node: rowNode });
+            if (shouldRowShowFooter && !rowNode.sibling) {
+                _createRowNodeFooter(rowNode, this.beans);
+                return;
+            }
+        }
+
+        if (rowNode.sibling) {
+            _destroyRowNodeFooter(rowNode);
         }
     }
 
@@ -192,19 +197,24 @@ export class BlockUtils extends BeanStub implements NamedBean {
         const treeData = this.gos.get('treeData');
 
         rowNode.setDataAndId(data, defaultId);
+        const group = rowNode.group;
 
-        if (treeData) {
-            this.setTreeGroupInfo(rowNode);
-        } else if (rowNode.group) {
-            this.setRowGroupInfo(rowNode);
-        } else if (this.gos.get('masterDetail')) {
+        if ((treeData || !group) && this.gos.get('masterDetail')) {
             this.setMasterDetailInfo(rowNode);
         }
 
-        if (treeData || rowNode.group) {
+        if (treeData) {
+            this.setTreeGroupInfo(rowNode);
+        } else if (group) {
+            this.setRowGroupInfo(rowNode);
+        }
+
+        if (treeData || group) {
             this.setGroupDataIntoRowNode(rowNode);
             this.setChildCountIntoRowNode(rowNode);
         }
+
+        this.beans.selectionSvc?.updateRowSelectable(rowNode);
 
         // this needs to be done AFTER setGroupDataIntoRowNode(), as the height can depend on the group data
         // getting set, if it's a group node and colDef.autoHeight=true
@@ -224,21 +234,32 @@ export class BlockUtils extends BeanStub implements NamedBean {
     }
 
     private setGroupDataIntoRowNode(rowNode: RowNode): void {
-        const groupDisplayCols = this.showRowGroupCols?.getShowRowGroupCols() ?? [];
+        // set group value for full width rows.
+        const key = rowNode.key!;
+        rowNode.groupValue = key;
+        if (rowNode.sibling) {
+            rowNode.sibling.groupValue = key;
+        }
 
+        const groupDisplayCols = this.showRowGroupCols?.columns;
+        if (!groupDisplayCols) {
+            return;
+        }
         const usingTreeData = this.gos.get('treeData');
-
-        groupDisplayCols.forEach((col) => {
-            if (rowNode.groupData == null) {
-                rowNode.groupData = {};
+        for (const col of groupDisplayCols) {
+            let groupData = rowNode._groupData;
+            if (!groupData) {
+                groupData = {};
+                rowNode._groupData = groupData;
             }
             if (usingTreeData) {
-                rowNode.groupData[col.getColId()] = rowNode.key;
+                groupData[col.colId] = key;
             } else if (col.isRowGroupDisplayed(rowNode.rowGroupColumn!.getId())) {
-                const groupValue = this.valueSvc.getValue(rowNode.rowGroupColumn!, rowNode);
-                rowNode.groupData[col.getColId()] = groupValue;
+                // Use 'data' - group keys should be based on committed data, not pending edits
+                const groupValue = this.valueSvc.getValueFromData(rowNode.rowGroupColumn!, rowNode);
+                groupData[col.colId] = groupValue;
             }
-        });
+        }
     }
 
     public clearDisplayIndex(rowNode: RowNode): void {
@@ -251,7 +272,7 @@ export class BlockUtils extends BeanStub implements NamedBean {
 
         const hasDetailNode = rowNode.master && rowNode.detailNode;
         if (hasDetailNode) {
-            rowNode.detailNode.clearRowTopAndRowIndex();
+            rowNode.detailNode?.clearRowTopAndRowIndex();
         }
     }
 
@@ -296,11 +317,11 @@ export class BlockUtils extends BeanStub implements NamedBean {
             const childStore = rowNode.childStore as LazyStore;
             // unbalanced group always behaves as if it was expanded
             if (rowNode.expanded || isUnbalancedGroup) {
-                childStore!.setDisplayIndexes(displayIndexSeq, nextRowTop, isUnbalancedGroup ? uiLevel : uiLevel + 1);
+                childStore.setDisplayIndexes(displayIndexSeq, nextRowTop, isUnbalancedGroup ? uiLevel : uiLevel + 1);
             } else {
                 // we need to clear the row tops, as the row renderer depends on
                 // this to know if the row should be faded out
-                childStore!.clearDisplayIndexes();
+                childStore.clearDisplayIndexes();
             }
         }
     }
@@ -345,7 +366,7 @@ export class BlockUtils extends BeanStub implements NamedBean {
         const detailNode = rowNode.detailNode;
 
         if (expandedMasterRow && detailNode && this.isPixelInNodeRange(detailNode, pixel)) {
-            return rowNode.detailNode.rowIndex;
+            return detailNode.rowIndex;
         }
 
         // then check if it's a group row with a child cache with pixel in range
@@ -381,6 +402,12 @@ export class BlockUtils extends BeanStub implements NamedBean {
     }
 
     public checkOpenByDefault(rowNode: RowNode): void {
-        return this.expansionSvc?.checkOpenByDefault(rowNode);
+        const expanded = !!this.expansionSvc?.isNodeExpanded(rowNode);
+        const oldExpanded = rowNode._expanded;
+        if (!!oldExpanded !== expanded) {
+            rowNode.setExpanded(expanded);
+        } else if (oldExpanded === undefined) {
+            rowNode._expanded = expanded; // Initial state, don't fire event
+        }
     }
 }

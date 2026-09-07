@@ -1,4 +1,5 @@
-import type { AgPromise, IDoesFilterPassParams, IFilter, IFilterParams } from 'ag-grid-community';
+import type { IAfterGuiAttachedParams, IDoesFilterPassParams, IFilter, IFilterParams } from 'ag-grid-community';
+import { AgPromise } from 'ag-grid-community';
 
 import { CustomComponentWrapper } from './customComponentWrapper';
 import type { CustomFilterCallbacks, CustomFilterProps } from './interfaces';
@@ -9,9 +10,16 @@ export class FilterComponentWrapper
 {
     private model: any = null;
     private readonly onModelChange = (model: any) => this.updateModel(model);
-    private readonly onUiChange = () => this.sourceParams.filterChangedCallback();
+    private readonly onUiChange = () => this.sourceParams.filterModifiedCallback();
     private expectingNewMethods = true;
     private hasBeenActive = false;
+    // this is used for the initial component setup
+    private resolveSetMethodsCallback!: () => void;
+    private readonly awaitSetMethodsCallback = new AgPromise<void>((resolve) => {
+        this.resolveSetMethodsCallback = resolve;
+    });
+    // this is used to sync up every time the model changes
+    private resolveFilterPassCallback?: () => void;
 
     public isFilterActive(): boolean {
         return this.model != null;
@@ -38,8 +46,18 @@ export class FilterComponentWrapper
         return true;
     }
 
+    public afterGuiAttached(params?: IAfterGuiAttachedParams): void {
+        const providedMethods = this.providedMethods;
+        if (!providedMethods) {
+            // setMethods hasn't been called yet
+            this.awaitSetMethodsCallback.then(() => this.providedMethods?.afterGuiAttached?.(params));
+        } else {
+            providedMethods.afterGuiAttached?.(params);
+        }
+    }
+
     protected override getOptionalMethods(): string[] {
-        return ['afterGuiAttached', 'afterGuiDetached', 'onNewRowsLoaded', 'getModelAsString', 'onAnyFilterChanged'];
+        return ['afterGuiDetached', 'onNewRowsLoaded', 'getModelAsString', 'onAnyFilterChanged'];
     }
 
     protected override setMethods(methods: CustomFilterCallbacks): void {
@@ -59,10 +77,24 @@ export class FilterComponentWrapper
         }
         this.expectingNewMethods = false;
         super.setMethods(methods);
+        this.resolveSetMethodsCallback();
+        this.resolveFilterPassCallback?.();
+        this.resolveFilterPassCallback = undefined;
     }
 
     private updateModel(model: any): void {
-        this.setModel(model).then(() => this.sourceParams.filterChangedCallback());
+        // resolve any existing promises
+        this.resolveFilterPassCallback?.();
+        const awaitFilterPassCallback = new AgPromise<void>((resolve) => {
+            this.resolveFilterPassCallback = resolve;
+        });
+        this.setModel(model).then(() => {
+            // ensure that a new `doesFilterPass` has been provided
+            // (e.g. using the new model), before triggering filtering
+            awaitFilterPassCallback.then(() => {
+                this.sourceParams.filterChangedCallback();
+            });
+        });
     }
 
     protected override getProps(): CustomFilterProps {
@@ -72,7 +104,6 @@ export class FilterComponentWrapper
         props.onUiChange = this.onUiChange;
         // remove props in IFilterParams but not CustomFilterProps
         delete (props as any).filterChangedCallback;
-        delete (props as any).filterModifiedCallback;
         return props;
     }
 }

@@ -6,9 +6,14 @@ import {
     PinnedRowModule,
     RenderApiModule,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RenderApiModule,
@@ -16,7 +21,6 @@ ModuleRegistry.registerModules([
     HighlightChangesModule,
     PinnedRowModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 // placing in 13 rows, so there are exactly enough rows to fill the grid, makes

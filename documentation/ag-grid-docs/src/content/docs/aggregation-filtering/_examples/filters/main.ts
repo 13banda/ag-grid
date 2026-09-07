@@ -4,18 +4,17 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    NumberFilterModule,
-    ClientSideRowModelModule,
-    RowGroupingModule,
-    TextFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([NumberFilterModule, ClientSideRowModelModule, RowGroupingModule, TextFilterModule]);
 
 let gridApi: GridApi;
 

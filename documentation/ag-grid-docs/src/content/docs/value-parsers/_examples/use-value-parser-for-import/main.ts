@@ -3,18 +3,17 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { CellSelectionModule, ClipboardModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    TextEditorModule,
-    ClientSideRowModelModule,
-    ClipboardModule,
-    CellSelectionModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextEditorModule, ClientSideRowModelModule, ClipboardModule, CellSelectionModule]);
 
 let gridApi: GridApi;
 

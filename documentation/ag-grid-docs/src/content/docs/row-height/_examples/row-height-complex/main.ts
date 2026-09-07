@@ -1,61 +1,66 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
 import {
+    CellStyleModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    NumberEditorModule,
-    NumberFilterModule,
-    TextEditorModule,
-    TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    NumberEditorModule,
-    TextEditorModule,
-    TextFilterModule,
-    NumberFilterModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+import { getRowData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, CellStyleModule]);
 
 let gridApi: GridApi;
 
 const gridOptions: GridOptions = {
     columnDefs: [
-        { field: 'latinText', width: 350, wrapText: true },
-        { field: 'athlete' },
-        { field: 'country' },
-        { field: 'date' },
-        { field: 'sport' },
-        { field: 'gold' },
-        { field: 'silver' },
-        { field: 'bronze' },
-        { field: 'total' },
+        {
+            field: 'latinText',
+            width: 180,
+            headerName: 'Default Behaviour',
+        },
+        {
+            field: 'latinText',
+            width: 180,
+            wrapText: true,
+            headerName: 'wrapText = true',
+        },
+        {
+            headerName: 'Configured via CSS',
+            children: [
+                {
+                    field: 'latinText',
+                    width: 180,
+                    cellStyle: { 'white-space': 'normal' },
+                    headerName: 'Wrap Text',
+                },
+                {
+                    field: 'latinText',
+                    width: 180,
+                    cellStyle: { 'white-space-collapse': 'preserve-breaks' },
+                    headerName: 'Maintain New Lines',
+                },
+                {
+                    field: 'latinText',
+                    width: 205,
+                    cellStyle: { 'white-space': 'pre-line' },
+                    headerName: 'Wrap with New Lines',
+                },
+            ],
+        },
     ],
     rowHeight: 120,
-    defaultColDef: {
-        width: 170,
-        editable: true,
-        filter: true,
-    },
+    rowData: getRowData(),
 };
-const latinText =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
 
 // setup the grid after the page has finished loading
 document.addEventListener('DOMContentLoaded', function () {
     const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
     gridApi = createGrid(gridDiv, gridOptions);
-
-    fetch('https://www.ag-grid.com/example-assets/olympic-winners.json')
-        .then((response) => response.json())
-        .then(function (data) {
-            data.forEach(function (dataItem: any) {
-                dataItem.latinText = latinText;
-            });
-
-            // now set the data into the grid
-            gridApi!.setGridOption('rowData', data);
-        });
 });

@@ -1,25 +1,35 @@
-import type { HorizontalDirection } from '../../../constants/direction';
+import type { HorizontalDirection } from 'ag-stack';
+import {
+    KeyCode,
+    _addOrRemoveAttribute,
+    _batchCall,
+    _exists,
+    _getActiveDomElement,
+    _getDocument,
+    _getElementSize,
+    _normaliseQwertyAzerty,
+    _observeResize,
+    _setAriaColIndex,
+} from 'ag-stack';
+
 import { BeanStub } from '../../../context/beanStub';
-import type { DragSource } from '../../../dragAndDrop/dragAndDropService';
+import type { GridDragSource } from '../../../dragAndDrop/dragAndDropService';
 import type { AgColumn } from '../../../entities/agColumn';
 import type { AgColumnGroup } from '../../../entities/agColumnGroup';
 import type { AgProvidedColumnGroup } from '../../../entities/agProvidedColumnGroup';
-import type { SuppressHeaderKeyboardEventParams } from '../../../entities/colDef';
-import { _getActiveDomElement, _getDocument, _setDomData } from '../../../gridOptionsUtils';
+import type { HeaderClassParams, HeaderStyle, SuppressHeaderKeyboardEventParams } from '../../../entities/colDef';
+import { _addGridCommonParams, _setDomData } from '../../../gridOptionsUtils';
 import type { BrandedType } from '../../../interfaces/brandedType';
-import { _requestAnimationFrame } from '../../../misc/animationFrameService';
-import { _setAriaColIndex } from '../../../utils/aria';
-import { _addOrRemoveAttribute, _getElementSize, _observeResize } from '../../../utils/dom';
-import { _isHeaderFocusSuppressed } from '../../../utils/focus';
-import { _exists } from '../../../utils/generic';
-import { KeyCode } from '../.././../constants/keyCode';
+import { _isHeaderFocusSuppressed } from '../../../utils/gridFocus';
 import type { HeaderRowCtrl } from '../../row/headerRowCtrl';
 import { refreshFirstAndLastStyles } from '../cssClassApplier';
 
 let instanceIdSequence = 0;
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IAbstractHeaderCellComp {
-    addOrRemoveCssClass(cssClassName: string, on: boolean): void;
+    toggleCss(cssClassName: string, on: boolean): void;
+    setUserStyles(styles: HeaderStyle): void;
 }
 
 export interface IHeaderResizeFeature {
@@ -30,10 +40,11 @@ export type HeaderCellCtrlInstanceId = BrandedType<string, 'HeaderCellCtrlInstan
 
 export const DOM_DATA_KEY_HEADER_CTRL = 'headerCtrl';
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export abstract class AbstractHeaderCellCtrl<
-    TComp extends IAbstractHeaderCellComp = any,
-    TColumn extends AgColumn | AgColumnGroup = any,
-    TFeature extends IHeaderResizeFeature = any,
+    TComp extends IAbstractHeaderCellComp = IAbstractHeaderCellComp,
+    TColumn extends AgColumn | AgColumnGroup = AgColumn | AgColumnGroup,
+    TFeature extends IHeaderResizeFeature = IHeaderResizeFeature,
 > extends BeanStub {
     public readonly instanceId: HeaderCellCtrlInstanceId;
 
@@ -47,9 +58,11 @@ export abstract class AbstractHeaderCellCtrl<
 
     public lastFocusEvent: KeyboardEvent | null = null;
 
-    protected dragSource: DragSource | null = null;
+    protected dragSource: GridDragSource | null = null;
+    protected reAttemptToFocus: boolean = false;
 
     protected abstract resizeHeader(delta: number, shiftKey: boolean): void;
+    protected abstract getHeaderClassParams(): HeaderClassParams;
 
     constructor(
         public readonly column: TColumn,
@@ -69,17 +82,47 @@ export abstract class AbstractHeaderCellCtrl<
         });
     }
 
+    public setComp(
+        comp: TComp,
+        eGui: HTMLElement,
+        eResize: HTMLElement,
+        eHeaderCompWrapper: HTMLElement,
+        compBean: BeanStub<any> | undefined
+    ): void {
+        eGui.setAttribute('col-id', this.column.colIdSanitised);
+
+        this.wireComp(comp, eGui, eResize, eHeaderCompWrapper, compBean);
+
+        // Post SetComp
+        // Actions that need to be done after the component is setup and all the features and listeners are wired
+        if (this.reAttemptToFocus) {
+            this.reAttemptToFocus = false;
+            this.focus(this.lastFocusEvent ?? undefined);
+        }
+    }
+
+    protected abstract wireComp(
+        comp: TComp,
+        eGui: HTMLElement,
+        eResize: HTMLElement,
+        eHeaderCompWrapper: HTMLElement,
+        compBean: BeanStub<any> | undefined
+    ): void;
+
     protected shouldStopEventPropagation(event: KeyboardEvent): boolean {
-        const { headerRowIndex, column } = this.beans.focusSvc.focusedHeader!;
+        const { headerRowIndex, column } = this.beans.focusSvc.focusedHeader ?? {
+            headerRowIndex: this.rowCtrl.rowIndex,
+            column: this.column,
+        };
 
         const colDef = column.getDefinition();
-        const colDefFunc = colDef && colDef.suppressHeaderKeyboardEvent;
+        const colDefFunc = colDef?.suppressHeaderKeyboardEvent;
 
         if (!_exists(colDefFunc)) {
             return false;
         }
 
-        const params: SuppressHeaderKeyboardEventParams = this.gos.addGridCommonParams({
+        const params: SuppressHeaderKeyboardEventParams = _addGridCommonParams(this.gos, {
             colDef: colDef,
             column,
             headerRowIndex,
@@ -108,6 +151,29 @@ export abstract class AbstractHeaderCellCtrl<
 
         this.onDisplayedColumnsChanged();
         this.refreshTabIndex();
+    }
+
+    protected refreshHeaderStyles(): void {
+        const colDef = this.column.getDefinition();
+
+        if (!colDef) {
+            return;
+        }
+
+        const { headerStyle } = colDef;
+
+        let styles: HeaderStyle | null | undefined;
+
+        if (typeof headerStyle === 'function') {
+            const cellStyleParams = this.getHeaderClassParams();
+            styles = headerStyle(cellStyleParams);
+        } else {
+            styles = headerStyle;
+        }
+
+        if (styles) {
+            this.comp.setUserStyles(styles);
+        }
     }
 
     private onGuiFocus(): void {
@@ -139,14 +205,14 @@ export abstract class AbstractHeaderCellCtrl<
                 // if not in doc yet, means framework not yet inserted, so wait for next VM turn,
                 // maybe it will be ready next VM turn
                 const doc = _getDocument(beans);
-                const notYetInDom = !doc || !doc.contains(wrapperElement);
+                const notYetInDom = !doc?.contains(wrapperElement);
 
                 // this happens in React, where React hasn't put any content in. we say 'possibly'
                 // as a) may not be React and b) the cell could be empty anyway
                 const possiblyNoContentYet = autoHeight == 0;
 
                 if (notYetInDom || possiblyNoContentYet) {
-                    _requestAnimationFrame(beans, () => measureHeight(timesCalled + 1));
+                    _batchCall(() => measureHeight(timesCalled + 1), 'raf', beans);
                     return;
                 }
             }
@@ -170,8 +236,8 @@ export abstract class AbstractHeaderCellCtrl<
 
         const startMeasuring = () => {
             isMeasuring = true;
-            measureHeight(0);
-            this.comp.addOrRemoveCssClass('ag-header-cell-auto-height', true);
+            this.comp.toggleCss('ag-header-cell-auto-height', true);
+            measureHeight(0); // ensure measuring after the class has added, otherwise will measure incorrect height
             stopResizeObserver = _observeResize(this.beans, wrapperElement, () => measureHeight(0));
         };
 
@@ -180,8 +246,14 @@ export abstract class AbstractHeaderCellCtrl<
             if (stopResizeObserver) {
                 stopResizeObserver();
             }
-            this.comp.addOrRemoveCssClass('ag-header-cell-auto-height', false);
+            this.comp.toggleCss('ag-header-cell-auto-height', false);
             stopResizeObserver = undefined;
+            // Only clear the stored height when auto-height is genuinely off. A displayed
+            // header cell can stop measuring on teardown (e.g. column hidden) while still
+            // being auto-height, and must retain its height for when it is shown again.
+            if (!this.column.isAutoHeaderHeight()) {
+                this.setColHeaderHeight(this.column, null);
+            }
         };
 
         checkMeasuring();
@@ -213,7 +285,7 @@ export abstract class AbstractHeaderCellCtrl<
             return;
         }
         refreshFirstAndLastStyles(comp, column, beans.visibleCols);
-        _setAriaColIndex(eGui, beans.visibleCols.getAriaColIndex(column)); // for react, we don't use JSX, as it slowed down column moving
+        _setAriaColIndex(eGui, column.ariaColIndex); // for react, we don't use JSX, as it slowed down column moving
     }
 
     protected addResizeAndMoveKeyboardListeners(compBean: BeanStub): void {
@@ -243,8 +315,8 @@ export abstract class AbstractHeaderCellCtrl<
         if (
             // if elements within the header are focused, we don't process the event
             activeEl !== this.eGui ||
-            // if shiftKey and altKey are not pressed, it's cell navigation so we don't process the event
-            (!e.shiftKey && !e.altKey)
+            // if shiftKey, ctrlKey, metaKey and altKey are not pressed, it's cell navigation so we don't process the event
+            (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey)
         ) {
             return;
         }
@@ -252,6 +324,12 @@ export abstract class AbstractHeaderCellCtrl<
         if (this.isResizing || isLeftOrRight) {
             e.preventDefault();
             e.stopImmediatePropagation();
+        }
+
+        const isCopy = (e.ctrlKey || e.metaKey) && _normaliseQwertyAzerty(e) === KeyCode.C;
+
+        if (isCopy) {
+            return this.beans.clipboardSvc?.copyToClipboard();
         }
 
         if (!isLeftOrRight) {
@@ -273,7 +351,7 @@ export abstract class AbstractHeaderCellCtrl<
     }
 
     protected moveHeader(hDirection: HorizontalDirection): void {
-        this.beans.colMoves?.moveHeader(hDirection, this.eGui, this.column, this.rowCtrl.pinned, this);
+        this.beans.colMoves?.moveHeader(hDirection, this.eGui, this.column, this.column.getPinned(), this);
     }
 
     private getViewportAdjustedResizeDiff(e: KeyboardEvent): number {
@@ -336,13 +414,19 @@ export abstract class AbstractHeaderCellCtrl<
     }
 
     public focus(event?: KeyboardEvent): boolean {
-        const { eGui } = this;
-        if (!eGui) {
+        if (!this.isAlive()) {
             return false;
         }
 
-        this.lastFocusEvent = event || null;
-        eGui.focus();
+        const { eGui } = this;
+
+        if (!eGui) {
+            this.reAttemptToFocus = true;
+        } else {
+            this.lastFocusEvent = event || null;
+            eGui.focus();
+        }
+
         return true;
     }
 
@@ -384,7 +468,7 @@ export abstract class AbstractHeaderCellCtrl<
         });
     }
 
-    private setColHeaderHeight(col: AgColumn | AgColumnGroup, height: number): void {
+    private setColHeaderHeight(col: AgColumn | AgColumnGroup, height: number | null): void {
         if (!col.setAutoHeaderHeight(height)) {
             return;
         }

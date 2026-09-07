@@ -3,22 +3,27 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    RowSelectionModule,
-    ClientSideRowModelModule,
-    RowGroupingModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule, RowGroupingModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
-    columnDefs: [{ field: 'country', rowGroup: true }, { field: 'athlete' }, { field: 'year' }, { field: 'sport' }],
+    columnDefs: [
+        { field: 'country', rowGroup: true, hide: true },
+        { field: 'sport', rowGroup: true, hide: true },
+        { field: 'athlete' },
+        { field: 'year' },
+    ],
     defaultColDef: {
         flex: 1,
         minWidth: 100,
@@ -26,6 +31,7 @@ const gridOptions: GridOptions<IOlympicData> = {
     groupDisplayType: 'multipleColumns',
     rowSelection: {
         mode: 'multiRow',
+        groupSelects: 'descendants',
         selectAll: 'all',
         checkboxLocation: 'autoGroupColumn',
     },

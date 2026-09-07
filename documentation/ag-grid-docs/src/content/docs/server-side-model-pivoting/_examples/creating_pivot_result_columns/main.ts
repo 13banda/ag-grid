@@ -6,34 +6,41 @@ import type {
     IServerSideDatasource,
     IServerSideGetRowsRequest,
 } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
     ContextMenuModule,
     RowGroupingModule,
+    RowGroupingPanelModule,
     ServerSideRowModelModule,
 } from 'ag-grid-enterprise';
 
 import { FakeServer } from './fakeServer';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnsToolPanelModule,
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
+    RowGroupingPanelModule,
     ServerSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: [
-        { field: 'country', rowGroup: true },
-        { field: 'year', pivot: true }, // pivot on 'year'
-        { field: 'gold', aggFunc: 'sum' },
-        { field: 'silver', aggFunc: 'sum' },
-        { field: 'bronze', aggFunc: 'sum' },
+        { field: 'country', rowGroup: true, enableRowGroup: true },
+        { field: 'sport', enableRowGroup: true },
+        { field: 'year', pivot: true, enablePivot: true }, // pivot on 'year'
+        { field: 'gold', aggFunc: 'sum', enableValue: true },
+        { field: 'silver', aggFunc: 'sum', enableValue: true },
+        { field: 'bronze', aggFunc: 'sum', enableValue: true },
     ],
     defaultColDef: {
         flex: 1,
@@ -48,6 +55,12 @@ const gridOptions: GridOptions<IOlympicData> = {
 
     // enable pivoting
     pivotMode: true,
+
+    sideBar: {
+        toolPanels: ['columns'],
+    },
+    rowGroupPanelShow: 'always',
+    pivotPanelShow: 'always',
 };
 
 // setup the grid after the page has finished loading
@@ -150,11 +163,21 @@ function addColDef(
     return res;
 }
 
+// The supplied order is the pivot result columns' natural order, used when the YEAR pill in the pivot panel is
+// cycled to no sort. This example supplies the year groups shuffled so that order is distinguishable from asc/desc.
+// Only the groups move, so Gold/Silver/Bronze keep their order within each year.
+function shuffleYearGroups(yearGroups: ColGroupDef[]): ColGroupDef[] {
+    return yearGroups
+        .map((group) => ({ group, rank: Math.random() }))
+        .sort((a, b) => a.rank - b.rank)
+        .map((entry) => entry.group);
+}
+
 function createPivotResultColumns(request: IServerSideGetRowsRequest, pivotFields: string[]): ColGroupDef[] {
     if (request.pivotMode && request.pivotCols.length > 0) {
         const pivotResultCols: ColGroupDef[] = [];
         pivotFields.forEach((field) => addColDef(field, field.split('_'), pivotResultCols, request));
-        return pivotResultCols;
+        return shuffleYearGroups(pivotResultCols);
     }
 
     return [];

@@ -1,10 +1,9 @@
-import type { IFilter, IFilterParams } from '../../interfaces/iFilter';
+import type { FilterAction, IFilter, IFilterParams } from '../../interfaces/iFilter';
 
 /**
  * Parameters provided by the grid to the `init` method of a `ProvidedFilter`.
  * Do not use in `colDef.filterParams` - see `IProvidedFilterParams` instead.
  */
-
 export type ProvidedFilterParams<TData = any> = IProvidedFilterParams & IFilterParams<TData>;
 /**
  * Common parameters in `colDef.filterParams` used by all provided filters. Extended by the specific filter types.
@@ -20,7 +19,7 @@ export interface IProvidedFilterParams {
      *  - `'reset'`: The Reset button will clear the details of the filter and any active filters on that column.
      *  - `'cancel'`: The Cancel button will discard any changes that have been made to the filter in the UI, restoring the applied model.
      */
-    buttons?: ('apply' | 'clear' | 'reset' | 'cancel')[];
+    buttons?: FilterAction[];
     /**
      * If the Apply button is present, the filter popup will be closed immediately when the Apply
      * or Reset button is clicked if this is set to `true`.
@@ -45,6 +44,8 @@ export interface IProvidedFilterParams {
 /** Interface contract for the public aspects of the ProvidedFilter implementation(s). */
 
 export interface IProvidedFilter extends IFilter {
+    /** The type of filter. Matches the `filterType` property in the filter model */
+    readonly filterType: 'text' | 'number' | 'bigint' | 'date' | 'set' | 'multi';
     /**
      * Applies the model shown in the UI (so that `getModel()` will now return what was in the UI
      * when `applyModel()` was called).
@@ -56,4 +57,8 @@ export interface IProvidedFilter extends IFilter {
      * applied, this model will reflect those changes.
      */
     getModelFromUi(): any;
+}
+
+export interface ProvidedFilterModel {
+    filterType?: string;
 }

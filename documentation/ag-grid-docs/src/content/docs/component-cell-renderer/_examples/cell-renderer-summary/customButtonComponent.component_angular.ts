@@ -1,18 +1,27 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
 import type { ICellRendererAngularComp } from 'ag-grid-angular';
 import type { ICellRendererParams } from 'ag-grid-community';
 
 @Component({
     standalone: true,
-    template: `<button (click)="buttonClicked()">Launch!</button>`,
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    template: `<button class="btn-simple" (click)="buttonClicked()">
+        {{ 'Launch ' + company() + '!' }}
+    </button>`,
 })
 export class CustomButtonComponent implements ICellRendererAngularComp {
-    agInit(params: ICellRendererParams): void {}
+    data: any;
+    company = signal('');
+    agInit(params: ICellRendererParams): void {
+        this.data = params.data;
+        this.refresh(params);
+    }
     refresh(params: ICellRendererParams) {
+        this.company.set(params.data?.company ?? '');
         return true;
     }
     buttonClicked() {
-        alert('Software Launched');
+        console.log('Software Launched');
     }
 }

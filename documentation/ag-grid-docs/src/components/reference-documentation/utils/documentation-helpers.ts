@@ -2,7 +2,14 @@ import type { Framework } from '@ag-grid-types';
 import { urlWithPrefix } from '@utils/urlWithPrefix';
 
 import type { InterfaceEntry, Properties, PropertyType } from '../types';
+import { getAllPotentialTypesFromString } from './getAllPotentialTypesFromString';
 import { getTypeLink } from './type-links';
+
+const paramReg = /\* @param (\w+) (.*)\n/g;
+const returnsReg = /\* (@returns) (.*)\n/g;
+const newLineReg = /\n\s+\*(?!\*)/g;
+// Turn option list, new line starting with - into bullet points
+const optionReg = /\n[\s]*[*]*[\s]*- (.*)/g;
 
 export const inferType = (value: any): string | null => {
     if (value == null) {
@@ -22,10 +29,15 @@ export const inferType = (value: any): string | null => {
 export const convertMarkdown = (content: string | undefined, framework: Framework) =>
     content &&
     content
+        // {@link Target | Display} → <code>Display</code>, {@link Target} → <code>Target</code>
+        .replace(/\{@link(?:code|plain)?\s+([^}|]+?)(?:\s*\|\s*([^}]+))?\}/g, (_, target, display) => {
+            const text = (display || target).trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<code>${text}</code>`;
+        })
         .replace(/`(.*?)`/g, '<code>$1</code>')
         .replace(
             /\[([^\]]+)\]\(([^)]+)\)/g,
-            (_, text, href) => `<a href="${urlWithPrefix({ url: href, framework })}">${text}</a>`
+            (_, text, href) => `<a tabindex="0" href="${urlWithPrefix({ url: href, framework })}">${text}</a>`
         )
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
@@ -82,21 +94,19 @@ export function getLinkedType(type: string | string[], framework: Framework) {
     }
 
     // Extract all the words to enable support for Union types
-    const typeRegex = /\w+/g;
     const formattedTypes = type
         .filter((t) => typeof t === 'string')
         .map((t) => {
-            const definitionTypes = [...t.matchAll(typeRegex)];
+            const definitionTypes = getAllPotentialTypesFromString(t);
 
             const typesToLink = definitionTypes
-                .map((regMatch) => {
-                    const typeName = regMatch[0];
+                .map((typeName) => {
                     const url = getTypeUrl(typeName, framework);
 
                     return url
                         ? {
                               toReplace: typeName,
-                              link: `<a href="${url}" target="${url.startsWith('http') ? '_blank' : '_self'}" rel="noreferrer">${typeName}</a>`,
+                              link: `<a tabindex="0" href="${url}" target="${url.startsWith('http') ? '_blank' : '_self'}" rel="noreferrer">${typeName}</a>`,
                           }
                         : undefined;
                 })
@@ -119,8 +129,12 @@ export function sortAndFilterProperties(properties: Properties, framework: Frame
             // Push mandatory props to the top
             const isP1Optional = p1.includes('?');
             const isP2Optional = p2.includes('?');
-            if (isP1Optional && !isP2Optional) return 1;
-            if (!isP1Optional && isP2Optional) return -1;
+            if (isP1Optional && !isP2Optional) {
+                return 1;
+            }
+            if (!isP1Optional && isP2Optional) {
+                return -1;
+            }
             if (!isP1Optional && !isP2Optional) {
                 return p1 < p2 ? -1 : 1;
             }
@@ -221,23 +235,55 @@ export function formatJsDocString(docString: string) {
     if (!docString || docString.length === 0) {
         return;
     }
-    const paramReg = /\* @param (\w+) (.*)\n/g;
-    const returnsReg = /\* (@returns) (.*)\n/g;
-    const newLineReg = /\n\s+\*(?!\*)/g;
-
-    // Turn option list, new line starting with - into bullet points
-
-    const optionReg = /\n[\s]*[*]*[\s]*- (.*)/g;
 
     const formatted = docString
         .replace('/**', '')
         .replace('*/', '')
-        .replace(paramReg, '<br> `$1` $2 \n')
-        .replace(returnsReg, '<br> <strong>Returns: </strong> $2 \n')
+        .replace(paramReg, '<span class="param"> `$1` $2 </span>\n')
+        .replace(returnsReg, '\n<br/><strong>Returns: </strong> $2 \n')
+        // Render @example blocks as formatted code snippets
+        .replace(/\s*\*?\s*@example\b([^\n]*)([\s\S]*?)(?=\s*\*?\s*@\w|$)/g, (_match, desc: string, body: string) => {
+            const descText = desc.replace(/^\s*\*?\s*/, '').trim();
+            const fenceMatch = body.match(/```\w*\n([\s\S]*?)```/);
+            const rawCode = fenceMatch ? fenceMatch[1] : body;
+            const code =
+                rawCode
+                    .replace(/^\s*\*\s?/gm, '')
+                    .trim()
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;') || null;
+            if (!descText && !code) {
+                return '';
+            }
+            let result = `\n\n<br/><strong>Example${descText ? `: ${descText}` : ''}</strong>`;
+            if (code) {
+                result += `\n<pre class="code"><code>${code}</code></pre>`;
+            }
+            return result;
+        })
         .replace(optionReg, '<li style="margin-left:1rem"> $1 </li>')
         .replace(newLineReg, ' ');
 
     return formatted;
+}
+
+export function extractJSDocTags(docString?: string) {
+    if (!docString || docString.length === 0) {
+        return {};
+    }
+
+    const params = [...docString.matchAll(paramReg)].map(([_, name, value]) => {
+        return {
+            name,
+            value,
+        };
+    });
+    const returns = [...docString.matchAll(returnsReg)].map(([_, _returns, value]) => {
+        return value;
+    })[0]; // Take first match only
+
+    return { params, returns };
 }
 
 export function appendCallSignature(name: string, interfaceType: any, framework: Framework, allLines: string[]) {
@@ -322,15 +368,21 @@ export function extractInterfaces(
     overrideIncludeInterfaceFunc: any,
     allDefs: string[] = []
 ) {
-    if (!definitionOrArray) return [];
+    if (!definitionOrArray) {
+        return [];
+    }
 
     if (allDefs.length > 1000) {
         // eslint-disable-next-line no-console
-        console.warn('AG Charts - Possible recursion error on type: ', definitionOrArray, allDefs);
+        console.warn(
+            'AG Charts - Possible recursion error on type: ',
+            definitionOrArray,
+            allDefs.map((x) => (typeof x === 'object' ? ((x as any).name ?? x) : x))
+        );
         return allDefs;
     }
 
-    const alreadyIncluded = {};
+    const alreadyIncluded: Record<string, boolean> = {};
     allDefs.forEach((v) => {
         alreadyIncluded[v.name] = true;
     });
@@ -371,10 +423,8 @@ export function extractInterfaces(
     const definition = definitionOrArray;
 
     if (typeof definition == 'string') {
-        const typeRegex = /\w+/g;
-        const definitionTypes = [...definition.matchAll(typeRegex)];
-        definitionTypes.forEach((regMatch) => {
-            const type = regMatch[0];
+        const definitionTypes = getAllPotentialTypesFromString(definition);
+        definitionTypes.forEach((type) => {
             // If we have the actual interface use that definition
             const interfaceType = interfaceLookup[type];
             if (!interfaceType) {
@@ -407,7 +457,7 @@ export function extractInterfaces(
 
                 // Now if this is a top level interface see if we should include any interfaces for its properties
                 if (interfaceType.type) {
-                    const interfacesToInclude = {};
+                    const interfacesToInclude: Record<string, boolean> = {};
 
                     if (typeof interfaceType.type === 'string') {
                         interfacesToInclude[interfaceType.type] = true;
@@ -421,7 +471,9 @@ export function extractInterfaces(
                             })
                             .map(([k, i]) => {
                                 // Extract all the words from the type to handle unions and functions and params cleanly.
-                                const words = [...k.matchAll(typeRegex), ...i.matchAll(typeRegex)].map((ws) => ws[0]);
+                                const words = getAllPotentialTypesFromString(k).concat(
+                                    getAllPotentialTypesFromString(i as string)
+                                );
                                 return words.filter((w) => !getTypeLink(w) && interfaceLookup[w]);
                             })
                             .forEach((s) => {

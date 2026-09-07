@@ -1,8 +1,8 @@
+import { _isNodeOrElement, _loadTemplate } from 'ag-stack';
+
 import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
-import { _warn } from '../validation/logging';
-import { _setAriaRole } from './aria';
-import { _isNodeOrElement, _loadTemplate } from './dom';
+import { _createElement } from './element';
 
 //
 // IMPORTANT NOTE!
@@ -32,6 +32,7 @@ export type IconName =
     | 'setFilterGroupClosed'
     | 'setFilterGroupOpen'
     | 'setFilterGroupIndeterminate'
+    | 'setFilterLoading'
     | 'chart'
     | 'close'
     | 'cancel'
@@ -44,20 +45,31 @@ export type IconName =
     | 'unlinked'
     | 'colorPicker' // deprecated v33
     | 'groupLoading'
+    | 'overlayLoading'
+    | 'overlayExporting'
     | 'menu'
     | 'legacyMenu'
     | 'loadingMenuItems'
     | 'menuAlt'
     | 'filter'
     | 'filterActive'
+    | 'filterAdd'
+    | 'filterCardExpand'
+    | 'filterCardCollapse'
+    | 'filterCardEditing'
     | 'filterTab'
     | 'filtersToolPanel'
     | 'columns'
     | 'columnsToolPanel'
+    | 'calculatedColumnAdd'
+    | 'calculatedColumnEdit'
+    | 'calculatedColumnRemove'
+    | 'columnHeaderEdit'
     | 'maximize'
     | 'minimize'
     | 'menuPin'
     | 'menuValue'
+    | 'showValuesAs'
     | 'menuAddRowGroup'
     | 'menuRemoveRowGroup'
     | 'clipboardCopy'
@@ -68,13 +80,19 @@ export type IconName =
     | 'valuePanel'
     | 'columnDrag'
     | 'rowDrag'
+    | 'rowPin'
+    | 'rowPinTop'
+    | 'rowPinBottom'
+    | 'rowUnpin'
     | 'save'
     | 'csvExport'
     | 'excelExport'
+    | 'pdfExport'
     | 'smallDown' // deprecated v33
     | 'selectOpen'
     | 'richSelectOpen'
     | 'richSelectRemove'
+    | 'richSelectLoading'
     | 'smallLeft' // deprecated v33
     | 'smallRight' // deprecated v33
     | 'panelDelimiter'
@@ -84,6 +102,8 @@ export type IconName =
     | 'smallUp' // deprecated v33
     | 'sortAscending'
     | 'sortDescending'
+    | 'sortAbsoluteAscending'
+    | 'sortAbsoluteDescending'
     | 'sortUnSort'
     | 'advancedFilterBuilder'
     | 'advancedFilterBuilderDrag'
@@ -101,76 +121,24 @@ export type IconName =
     | 'chartsThemePrevious'
     | 'chartsThemeNext'
     | 'chartsDownload'
+    | 'ensureColumnVisible'
+    | 'search'
+    | 'document'
+    | 'calculatedColumnsHeader'
     | 'checkboxChecked' // deprecated v33
     | 'checkboxIndeterminate' // deprecated v33
     | 'checkboxUnchecked' // deprecated v33
     | 'radioButtonOn' // deprecated v33
     | 'radioButtonOff'; // deprecated v33
 
-export type IconValue =
-    | 'expanded'
-    | 'contracted'
-    | 'tree-closed'
-    | 'tree-open'
-    | 'tree-indeterminate'
-    | 'pin'
-    | 'eye-slash'
-    | 'arrows'
-    | 'left'
-    | 'right'
-    | 'group'
-    | 'aggregation'
-    | 'pivot'
-    | 'not-allowed'
-    | 'chart'
-    | 'cross'
-    | 'cancel'
-    | 'tick'
-    | 'first'
-    | 'previous'
-    | 'next'
-    | 'last'
-    | 'linked'
-    | 'unlinked'
-    | 'color-picker'
-    | 'loading'
-    | 'menu'
-    | 'menu-alt'
-    | 'filter'
-    | 'columns'
-    | 'maximize'
-    | 'minimize'
-    | 'copy'
-    | 'cut'
-    | 'paste'
-    | 'grip'
-    | 'save'
-    | 'csv'
-    | 'excel'
-    | 'small-down'
-    | 'small-left'
-    | 'small-right'
-    | 'small-up'
-    | 'asc'
-    | 'desc'
-    | 'none'
-    | 'up'
-    | 'down'
-    | 'plus'
-    | 'minus'
-    | 'settings'
-    | 'checkbox-checked'
-    | 'checkbox-indeterminate'
-    | 'checkbox-unchecked'
-    | 'radio-button-on'
-    | 'radio-button-off'
-    | 'eye';
+export type Icons = { [key: string]: ((...args: any[]) => any) | string };
 
 /**
  * If icon provided, use this (either a string, or a function callback).
  * if not, then use the default icon from the theme.
  * Technically `iconName` could be any string, if using user-provided icons map.
  * However, in most cases we're providing a specific icon name, so better to have type-checking.
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export function _createIcon(iconName: IconName, beans: BeanCollection, column: AgColumn | null): Element {
     const iconContents = _createIconNoSpan(iconName, beans, column);
@@ -178,14 +146,14 @@ export function _createIcon(iconName: IconName, beans: BeanCollection, column: A
     if (iconContents) {
         const { className } = iconContents;
         if (
-            (typeof className === 'string' && className.indexOf('ag-icon') > -1) ||
+            (typeof className === 'string' && className.includes('ag-icon')) ||
             (typeof className === 'object' && className['ag-icon'])
         ) {
             return iconContents;
         }
     }
 
-    const eResult = document.createElement('span');
+    const eResult = _createElement({ tag: 'span' });
     eResult.appendChild(iconContents!);
 
     return eResult;
@@ -194,6 +162,7 @@ export function _createIcon(iconName: IconName, beans: BeanCollection, column: A
 /**
  * Technically `iconName` could be any string, if using user-provided icons map.
  * However, in most cases we're providing a specific icon name, so better to have type-checking.
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export function _createIconNoSpan(
     iconName: IconName,
@@ -203,15 +172,15 @@ export function _createIconNoSpan(
     let userProvidedIcon: ((...args: any[]) => any) | string | null = null;
 
     if (iconName === 'smallDown') {
-        _warn(262);
+        beans.log.warn(262);
     } else if (iconName === 'smallLeft') {
-        _warn(263);
+        beans.log.warn(263);
     } else if (iconName === 'smallRight') {
-        _warn(264);
+        beans.log.warn(264);
     }
 
     // check col for icon first
-    const icons: any = column && column.getColDef().icons;
+    const icons: any = column?.colDef.icons;
 
     if (icons) {
         userProvidedIcon = icons[iconName];
@@ -234,7 +203,7 @@ export function _createIconNoSpan(
         } else if (typeof userProvidedIcon === 'string') {
             rendererResult = userProvidedIcon;
         } else {
-            _warn(38, { iconName });
+            beans.log.warn(38, { iconName });
             return undefined;
         }
 
@@ -246,20 +215,19 @@ export function _createIconNoSpan(
             return rendererResult as Element;
         }
 
-        _warn(133, { iconName });
+        beans.log.warn(133, { iconName });
         return undefined;
     } else {
-        const span = document.createElement('span');
-        const iconValue = beans.registry.getIcon(iconName as IconName);
+        const iconValue = beans.registry.getIcon(iconName);
         if (!iconValue) {
             beans.validation?.validateIcon(iconName);
         }
-        const cssClass = iconValue ?? iconName;
 
-        span.setAttribute('class', `ag-icon ag-icon-${cssClass}`);
-        span.setAttribute('unselectable', 'on');
-        _setAriaRole(span, 'presentation');
-
-        return span;
+        return _createElement({
+            tag: 'span',
+            cls: `ag-icon ag-icon-${iconValue ?? iconName}`,
+            role: 'presentation',
+            attrs: { unselectable: 'on' },
+        });
     }
 }

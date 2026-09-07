@@ -1,3 +1,4 @@
+import { _toString } from 'ag-stack';
 import React, {
     forwardRef,
     useCallback,
@@ -15,7 +16,6 @@ import type {
     IGroupCellRendererCtrl,
     UserCompDetails,
 } from 'ag-grid-community';
-import { _escapeString } from 'ag-grid-community';
 
 import { BeansContext } from '../beansContext';
 import { showJsComp } from '../jsComp';
@@ -36,8 +36,11 @@ const GroupCellRenderer = forwardRef((props: GroupCellRendererParams, ref) => {
     const [value, setValue] = useState<any>();
     const [cssClasses, setCssClasses] = useState<CssClasses>(() => new CssClasses());
     const [expandedCssClasses, setExpandedCssClasses] = useState<CssClasses>(() => new CssClasses('ag-hidden'));
+    const [expandedAriaHidden, setExpandedAriaHidden] = useState<boolean>(true);
     const [contractedCssClasses, setContractedCssClasses] = useState<CssClasses>(() => new CssClasses('ag-hidden'));
+    const [contractedAriaHidden, setContractedAriaHidden] = useState<boolean>(true);
     const [checkboxCssClasses, setCheckboxCssClasses] = useState<CssClasses>(() => new CssClasses('ag-invisible'));
+    const [checkboxAriaHidden, setCheckboxAriaHidden] = useState<boolean>(true);
 
     useImperativeHandle(ref, () => {
         return {
@@ -54,7 +57,7 @@ const GroupCellRenderer = forwardRef((props: GroupCellRendererParams, ref) => {
 
     const setRef = useCallback((eRef: HTMLDivElement | null) => {
         eGui.current = eRef;
-        if (!eRef) {
+        if (!eRef || context.isDestroyed()) {
             ctrlRef.current = context.destroyBean(ctrlRef.current);
             return;
         }
@@ -64,12 +67,21 @@ const GroupCellRenderer = forwardRef((props: GroupCellRendererParams, ref) => {
                 setValue(valueToDisplay);
             },
             setChildCount: (count) => setChildCount(count),
-            addOrRemoveCssClass: (name, on) => setCssClasses((prev) => prev.setClass(name, on)),
-            setContractedDisplayed: (displayed) =>
-                setContractedCssClasses((prev) => prev.setClass('ag-hidden', !displayed)),
-            setExpandedDisplayed: (displayed) =>
-                setExpandedCssClasses((prev) => prev.setClass('ag-hidden', !displayed)),
-            setCheckboxVisible: (visible) => setCheckboxCssClasses((prev) => prev.setClass('ag-invisible', !visible)),
+            toggleCss: (name, on) => setCssClasses((prev) => prev.setClass(name, on)),
+            setContractedDisplayed: (displayed) => {
+                setContractedCssClasses((prev) => prev.setClass('ag-hidden', !displayed));
+                setContractedAriaHidden(!displayed);
+            },
+            setExpandedDisplayed: (displayed) => {
+                setExpandedCssClasses((prev) => prev.setClass('ag-hidden', !displayed));
+                setExpandedAriaHidden(!displayed);
+            },
+            setCheckboxVisible: (visible) => {
+                setCheckboxCssClasses((prev) => prev.setClass('ag-invisible', !visible));
+                setCheckboxAriaHidden(!visible);
+            },
+            setCheckboxSpacing: (add) =>
+                setCheckboxCssClasses((prev) => prev.setClass('ag-group-checkbox-spacing', add)),
         };
 
         const groupCellRendererCtrl = registry.createDynamicBean<IGroupCellRendererCtrl>('groupCellRendererCtrl', true);
@@ -95,10 +107,10 @@ const GroupCellRenderer = forwardRef((props: GroupCellRendererParams, ref) => {
     );
     const checkboxClassName = useMemo(() => `ag-group-checkbox ${checkboxCssClasses.toString()}`, [checkboxCssClasses]);
 
-    const useFwRenderer = innerCompDetails && innerCompDetails.componentFromFramework;
+    const useFwRenderer = innerCompDetails?.componentFromFramework;
     const FwRenderer = useFwRenderer ? innerCompDetails!.componentClass : undefined;
     const useValue = innerCompDetails == null && value != null;
-    const escapedValue = _escapeString(value, true);
+    const escapedValue = _toString(value);
 
     // if there is no ColDef, it means this is a Full Width Group, then we need to add `role="gridcell"`.
     return (
@@ -107,12 +119,11 @@ const GroupCellRenderer = forwardRef((props: GroupCellRendererParams, ref) => {
             ref={setRef}
             {...(!props.colDef ? { role: ctrlRef.current?.getCellAriaRole() } : {})}
         >
-            <span className={expandedClassName} ref={eExpandedRef}></span>
-            <span className={contractedClassName} ref={eContractedRef}></span>
-            <span className={checkboxClassName} ref={eCheckboxRef}></span>
+            <span className={expandedClassName} ref={eExpandedRef} aria-hidden={expandedAriaHidden}></span>
+            <span className={contractedClassName} ref={eContractedRef} aria-hidden={contractedAriaHidden}></span>
+            <span className={checkboxClassName} ref={eCheckboxRef} aria-hidden={checkboxAriaHidden}></span>
             <span className="ag-group-value" ref={eValueRef}>
-                {useValue && <>{escapedValue}</>}
-                {useFwRenderer && <FwRenderer {...innerCompDetails!.params} />}
+                {useValue ? escapedValue : useFwRenderer ? <FwRenderer {...innerCompDetails!.params} /> : null}
             </span>
             <span className="ag-group-child-count">{childCount}</span>
         </span>

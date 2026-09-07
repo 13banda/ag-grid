@@ -5,7 +5,7 @@ description: "See whats new in AG Grid, view a full list of changes and migrate 
 
 ## What's New
 
-See the [release post](https://blog.ag-grid.com/whats-new-in-ag-grid-31-3/) for details of what's new in 
+See the [release post](https://www.ag-grid.com/blog/whats-new-in-ag-grid-31-3/) for details of what's new in
 version 31.3.
 
 ## Codemods
@@ -21,7 +21,7 @@ Follow these steps to upgrade your project's AG Grid version to `31.3.1`:
 1. Run the `migrate` command of version `31.3` of the AG Grid codemod runner, where `$FROM_VERSION` refers to your project's existing AG Grid version:
 
     ```
-    npx @ag-grid-devtools/cli@31.3 migrate --from=$FROM_VERSION
+    npx @ag-grid-devtools/cli@latest migrate --from=$FROM_VERSION --to=31.3
     ```
 
     This will update your project's source files to prepare for the new release.
@@ -37,7 +37,6 @@ The codemod only transforms source files that make use of deprecated features, s
 See the [Codemods](./codemods/) documentation for more details.
 
 ## Deprecations
-{% metaTag tags=["ToolPanelColumnCompParams", "groupIncludeFooter", "groupIncludeTotalFooter", "footerValueGetter", "tabToNextCell", "tabToNextHeaderCell", "getValue"] /%}
 
 This release includes the following deprecations:
 

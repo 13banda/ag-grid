@@ -1,10 +1,10 @@
 import type { MutableRefObject } from 'react';
-import { useCallback, useContext, useEffect } from 'react';
+import { useCallback, useContext, useEffect, useRef } from 'react';
 
 import type { ICellRendererComp } from 'ag-grid-community';
 
 import { BeansContext } from '../beansContext';
-import type { RenderDetails } from './cellComp';
+import type { RenderDetails } from './interfaces';
 
 const useJsCellRenderer = (
     showDetails: RenderDetails | undefined,
@@ -12,11 +12,19 @@ const useJsCellRenderer = (
     eCellValue: HTMLElement | undefined | null,
     cellValueVersion: number,
     jsCellRendererRef: MutableRefObject<ICellRendererComp | undefined>,
-    eGui: MutableRefObject<any>
+    eGui: MutableRefObject<any>,
+    suppressInlineEditRenderer = false,
+    onRendererDestroyed?: () => void
 ) => {
     const { context } = useContext(BeansContext);
 
-    const destroyCellRenderer = useCallback(() => {
+    // keep the latest onRendererDestroyed in a ref so destroyCellRenderer can
+    // stay memoised with empty deps (used by the unmount-cleanup effect) while
+    // always invoking the current handler
+    const onRendererDestroyedRef = useRef(onRendererDestroyed);
+    onRendererDestroyedRef.current = onRendererDestroyed;
+
+    const destroyCellRenderer = useCallback((resetTooltip = true) => {
         const comp = jsCellRendererRef.current;
         if (!comp) {
             return;
@@ -25,16 +33,22 @@ const useJsCellRenderer = (
         const compGui = comp.getGui();
 
         if (compGui && compGui.parentElement) {
-            compGui.parentElement.removeChild(compGui);
+            compGui.remove();
         }
 
         context.destroyBean(comp);
         jsCellRendererRef.current = undefined;
+
+        if (!resetTooltip) {
+            return;
+        }
+
+        onRendererDestroyedRef.current?.();
     }, []);
 
     // create or refresh JS cell renderer
     useEffect(() => {
-        const showValue = showDetails != null;
+        const showValue = showDetails != null && !suppressInlineEditRenderer;
         const jsCompDetails = showDetails?.compDetails && !showDetails.compDetails.componentFromFramework;
         const waitingForToolsSetup = showTools && eCellValue == null;
         const showComp = showValue && jsCompDetails && !waitingForToolsSetup;
@@ -81,13 +95,13 @@ const useJsCellRenderer = (
             jsCellRendererRef.current = comp;
         });
         // We do not return the destroy here as we want to keep the comp alive for our custom refresh approach above
-    }, [showDetails, showTools, cellValueVersion]);
+    }, [showDetails, showTools, cellValueVersion, suppressInlineEditRenderer]);
 
     // this effect makes sure destroyCellRenderer gets called when the
     // component is destroyed. as the other effect only updates when there
     // is a change in state
     useEffect(() => {
-        return destroyCellRenderer;
+        return () => destroyCellRenderer(false);
     }, []);
 };
 

@@ -3,14 +3,15 @@ import Code from '@ag-website-shared/components/code/Code';
 import { Icon } from '@ag-website-shared/components/icon/Icon';
 import { LinkIcon } from '@ag-website-shared/components/link-icon/LinkIcon';
 import styles from '@ag-website-shared/components/reference-documentation/ApiReference.module.scss';
-import { useScrollToAnchor } from '@ag-website-shared/utils/navigation';
 import { urlWithPrefix } from '@utils/urlWithPrefix';
 import classnames from 'classnames';
 import { Fragment, type FunctionComponent, useCallback, useEffect, useRef, useState } from 'react';
 
+import { AG_MODULE_TAG_NAME } from '../constants';
 import type { ChildDocEntry, Config, ICallSignature, InterfaceEntry } from '../types';
 import {
     convertMarkdown,
+    extractJSDocTags,
     formatJsDocString,
     getTypeUrl,
     inferType,
@@ -18,6 +19,7 @@ import {
 } from '../utils/documentation-helpers';
 import { formatJson, getInterfaceName } from '../utils/interface-helpers';
 import legacyStyles from './LegacyApiReference.module.scss';
+import { PropertyModules } from './PropertyModules';
 
 function getDisplayNameSplit({ name, definition }: { name: string; definition: ChildDocEntry }) {
     let displayName = name;
@@ -64,6 +66,16 @@ function getDescription({
 
     if (propDescription) {
         propDescription = formatJsDocString(propDescription);
+        if (!definition.description && gridOpProp && (gridOpProp.meta as ICallSignature['meta'])?.all) {
+            const { params, returns } = extractJSDocTags(
+                definition.description || (gridOpProp && (gridOpProp.meta as ICallSignature['meta'])?.all)
+            );
+            const paramsStr = params?.map((p) => `<span class="param">\`${p.name}\`: ${p.value}</span>`).join('');
+            const returnsStr = returns ? `<strong>Returns:</strong> ${returns}` : '';
+
+            propDescription = [propDescription, paramsStr, returnsStr].filter(Boolean).join('\n');
+        }
+
         // process property object
         description = convertMarkdown(propDescription, framework);
     } else {
@@ -137,11 +149,19 @@ function getDefinitionTypeUrl({
     return typeUrl;
 }
 
-function getTagsData({ definition, gridOpProp }: { definition: ChildDocEntry; gridOpProp: InterfaceEntry }) {
+function getTagsData({
+    definition,
+    gridOpProp,
+    config,
+}: {
+    definition: ChildDocEntry;
+    gridOpProp: InterfaceEntry;
+    config: Config;
+}) {
     // Default may or may not be on a new line in JsDoc but in both cases we want the default to be on the next line
     const tags = gridOpProp?.meta?.tags ?? definition?.tags ?? [];
     const jsdocDefault = tags.find((t) => t.name === 'default');
-    const defaultValue = definition.default ?? jsdocDefault?.comment;
+    const defaultValue = definition?.default ?? jsdocDefault?.comment;
     const formattedDefaultValue = Array.isArray(defaultValue)
         ? '[' +
           defaultValue.map((v, i) => {
@@ -150,10 +170,21 @@ function getTagsData({ definition, gridOpProp }: { definition: ChildDocEntry; gr
           ']'
         : defaultValue;
     const isInitial = tags.some((t) => t.name === 'initial') ?? false;
+    let modules = tags.find((t) => t.name === AG_MODULE_TAG_NAME)?.modules ?? [];
+
+    const restrictedModule: string | undefined = definition?.restrictModule ?? config.restrictModule;
+    if (modules.length > 1 && restrictedModule) {
+        // If the property contains the restricted module and others then only show the restricted module
+        const restrictedModuleTag = modules.find((mod) => restrictedModule == mod.name);
+        if (restrictedModuleTag) {
+            modules = [restrictedModuleTag];
+        }
+    }
 
     return {
         formattedDefaultValue,
         isInitial,
+        modules,
     };
 }
 
@@ -161,14 +192,30 @@ function getDetailsId(id: string) {
     return `${id}-details`;
 }
 
-function CollapsibleButton({ name, isExpanded, onClick }: { name: string; isExpanded?: boolean; onClick: () => void }) {
+function CollapsibleButton({
+    name,
+    isExpanded,
+    detailsId,
+    onClick,
+}: {
+    name: string;
+    isExpanded?: boolean;
+    detailsId: string;
+    onClick: () => void;
+}) {
     return (
         <button
-            className={classnames(styles.seeMore, 'button-style-none', {
+            type="button"
+            // Safari omits buttons from the tab order without an explicit tabindex.
+            tabIndex={0}
+            className={classnames(styles.seeMore, 'button-tertiary', {
                 [styles.isExpanded]: isExpanded,
             })}
             onClick={onClick}
-            aria-label={`See more details about ${name}`}
+            aria-expanded={Boolean(isExpanded)}
+            // Only reference the panel while it exists — it is unmounted when collapsed.
+            aria-controls={isExpanded ? detailsId : undefined}
+            aria-label={`${isExpanded ? 'Hide' : 'See more'} details about ${name}`}
         >
             <Icon className={`${styles.chevron} ${isExpanded ? 'expandedIcon' : ''}`} name="chevronDown" />
         </button>
@@ -198,17 +245,22 @@ export const Property: FunctionComponent<{
         isObject,
         config,
     });
-    const { formattedDefaultValue, isInitial } = getTagsData({ definition, gridOpProp });
+    const { formattedDefaultValue, isInitial, modules } = getTagsData({
+        definition,
+        gridOpProp,
+        config,
+    });
+
     const { more } = definition;
 
     const propertyRef = useRef<HTMLTableRowElement>(null);
     const [isExpanded, setExpanded] = useState(config.defaultExpand);
-    const scrollToAnchor = useScrollToAnchor();
 
     useEffect(() => {
         const hashId = location.hash.slice(1); // Remove the '#' symbol
 
         if (idName === hashId) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- expand property when URL hash matches
             setExpanded(true);
             propertyRef.current?.scrollIntoView();
         }
@@ -221,121 +273,137 @@ export const Property: FunctionComponent<{
     }, []);
 
     return (
-        <>
-            <tr ref={propertyRef} className={legacyStyles.tableRow}>
-                <td className={legacyStyles.propertyNameDescription}>
-                    <div className={classnames(styles.propertyRow)}>
-                        <div className={styles.leftColumn}>
-                            <div id={idName} className={classnames(styles.name, 'side-menu-exclude')}>
-                                <span dangerouslySetInnerHTML={{ __html: displayNameSplit }}></span>
-                                <LinkIcon
-                                    href={`#${idName}`}
-                                    onClick={scrollToAnchor}
-                                    className={styles.linkIcon}
-                                    aria-label={`Link to ${name} property`}
-                                />
-                            </div>
-                            <div className={styles.metaItem}>
-                                <div className={styles.metaRow}>
-                                    {detailsCode && (
-                                        <CollapsibleButton
-                                            name={more?.name ?? name}
-                                            isExpanded={isExpanded}
-                                            onClick={onCollapseClick}
-                                        />
-                                    )}
-                                    {typeUrl ? (
-                                        <a
-                                            className={styles.metaValue}
-                                            href={typeUrl}
-                                            target={typeUrl.startsWith('http') ? '_blank' : '_self'}
-                                            rel="noreferrer"
-                                        >
-                                            {isObject ? getInterfaceName(name) : propertyType}
-                                        </a>
-                                    ) : (
-                                        <span
-                                            onClick={onCollapseClick}
-                                            className={classnames(styles.metaValue, {
-                                                [styles.isExpandable]: detailsCode,
-                                            })}
-                                        >
-                                            {propertyType}
-                                        </span>
-                                    )}
-                                </div>
-
-                                {formattedDefaultValue != null && (
-                                    <div className={styles.metaItem}>
-                                        <span className={classnames(styles.metaValue, styles.defaultValue)}>
-                                            <span className={styles.defaultLabel}>default: </span>
-                                            {formattedDefaultValue}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {isInitial && (
-                                    <div className={classnames(styles.metaItem, styles.initialItem)}>
-                                        <a
-                                            className={classnames(styles.metaValue)}
-                                            href={urlWithPrefix({
-                                                url: config?.initialLink ?? './grid-interface/#initial-grid-options',
-                                                framework,
-                                            })}
-                                        >
-                                            Initial
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
+        <tr ref={propertyRef} className={legacyStyles.tableRow}>
+            <td className={legacyStyles.propertyNameDescription}>
+                <div className={classnames(styles.propertyRow)} data-api-property>
+                    <div className={styles.leftColumn}>
+                        <div
+                            id={idName}
+                            className={classnames(styles.name, 'side-menu-exclude')}
+                            data-api-property-name
+                        >
+                            <span dangerouslySetInnerHTML={{ __html: displayNameSplit }}></span>
+                            <LinkIcon
+                                href={`#${idName}`}
+                                className={styles.linkIcon}
+                                aria-label={`Link to ${name} property`}
+                            />
                         </div>
-                        <div className={styles.rightColumn}>
-                            <div
-                                role="presentation"
-                                className={styles.description}
-                                dangerouslySetInnerHTML={{ __html: removeDefaultValue(description) }}
-                            ></div>
-                            <div className={styles.actions}>
-                                {isObject && (
-                                    <div>
-                                        See <a href={`#reference-${id}.${name}`}>{name}</a> for more details.
-                                    </div>
-                                )}
 
-                                {definition.options != null && (
-                                    <div>
-                                        Options:{' '}
-                                        {definition.options.map((o, i) => (
-                                            <Fragment key={o}>
-                                                {i > 0 ? ', ' : ''}
-                                                <code>{formatJson(o)}</code>
-                                            </Fragment>
-                                        ))}
-                                    </div>
+                        <div className={styles.metaItem}>
+                            <div className={styles.metaRow}>
+                                {detailsCode && (
+                                    <CollapsibleButton
+                                        name={more?.name ?? name}
+                                        isExpanded={isExpanded}
+                                        detailsId={getDetailsId(idName)}
+                                        onClick={onCollapseClick}
+                                    />
                                 )}
-                                {more != null && more.url && !config.hideMore && (
+                                {typeUrl ? (
                                     <a
-                                        className={styles.docLink}
+                                        tabIndex={0}
+                                        className={styles.metaValue}
+                                        href={typeUrl}
+                                        target={typeUrl.startsWith('http') ? '_blank' : '_self'}
+                                        rel="noreferrer"
+                                    >
+                                        {isObject ? getInterfaceName(name) : propertyType}
+                                    </a>
+                                ) : (
+                                    <span
+                                        onClick={onCollapseClick}
+                                        className={classnames(styles.metaValue, {
+                                            [styles.isClickable]: detailsCode,
+                                        })}
+                                    >
+                                        {propertyType}
+                                    </span>
+                                )}
+                            </div>
+
+                            {formattedDefaultValue != null && (
+                                <div className={styles.metaItem}>
+                                    <span className={classnames(styles.metaValue, styles.defaultValue)}>
+                                        <span className={styles.defaultLabel}>default: </span>
+                                        {formattedDefaultValue}
+                                    </span>
+                                </div>
+                            )}
+
+                            {isInitial && (
+                                <div className={classnames(styles.metaItem, styles.initialItem)}>
+                                    <a
+                                        tabIndex={0}
+                                        className={classnames(styles.metaValue)}
                                         href={urlWithPrefix({
-                                            url: more.url,
+                                            url: config?.initialLink ?? './grid-interface/#initial-grid-options',
                                             framework,
                                         })}
                                     >
-                                        {more.name}
-                                        <Icon name="newTab" />
+                                        Initial
                                     </a>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
-
-                        {detailsCode && isExpanded && (
-                            <div id={getDetailsId(idName)} className={styles.expandedContent}>
-                                {detailsCode && <Code code={detailsCode} keepMarkup={true} />}
-                            </div>
-                        )}
                     </div>
-                </td>
-            </tr>
-        </>
+
+                    <div className={styles.rightColumn}>
+                        <div
+                            role="presentation"
+                            className={styles.description}
+                            data-api-property-description
+                            dangerouslySetInnerHTML={{ __html: removeDefaultValue(description) }}
+                        ></div>
+
+                        <div className={styles.actions}>
+                            {isObject && (
+                                <div>
+                                    See{' '}
+                                    <a tabIndex={0} href={`#reference-${id}.${name}`}>
+                                        {name}
+                                    </a>{' '}
+                                    for more details.
+                                </div>
+                            )}
+
+                            {definition.options != null && (
+                                <div>
+                                    Options:{' '}
+                                    {definition.options.map((o, i) => (
+                                        <Fragment key={o}>
+                                            {i > 0 ? ', ' : ''}
+                                            <code>{formatJson(o)}</code>
+                                        </Fragment>
+                                    ))}
+                                </div>
+                            )}
+
+                            {more != null && more.url && !config.hideMore && (
+                                <a
+                                    tabIndex={0}
+                                    className={styles.docLink}
+                                    href={urlWithPrefix({
+                                        url: more.url,
+                                        framework,
+                                    })}
+                                >
+                                    {more.name}
+                                    <Icon name="newTab" />
+                                </a>
+                            )}
+
+                            {modules[0] && <PropertyModules modules={modules} framework={framework} />}
+                        </div>
+                    </div>
+
+                    {detailsCode && isExpanded && (
+                        <div id={getDetailsId(idName)} className={styles.expandedContent}>
+                            {detailsCode && <Code code={detailsCode} keepMarkup={true} />}
+                        </div>
+                    )}
+                </div>
+            </td>
+        </tr>
     );
 };

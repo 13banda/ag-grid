@@ -1,13 +1,17 @@
 import type {
     CellValueChangedEvent,
-    ColDef,
     GridApi,
     GridOptions,
     ICellRendererComp,
     ICellRendererParams,
     ValueFormatterParams,
 } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid } from 'ag-grid-community';
+import { AllCommunityModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -59,9 +63,9 @@ interface IRow {
     successful: boolean;
 }
 
-const gridOptions: GridOptions = {
+const gridOptions: GridOptions<IRow> = {
     // Data to be displayed
-    rowData: [] as IRow[],
+    rowData: [],
     // Columns to be displayed (Should match rowData properties)
     columnDefs: [
         {
@@ -84,12 +88,12 @@ const gridOptions: GridOptions = {
         },
         { field: 'successful' },
         { field: 'rocket' },
-    ] as ColDef[],
+    ],
     // Configurations applied to all columns
     defaultColDef: {
         editable: true,
         filter: true,
-    } as ColDef,
+    },
     // Grid Options & Callbacks
     pagination: true,
     onCellValueChanged: (event: CellValueChangedEvent) => {

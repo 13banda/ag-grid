@@ -1,9 +1,13 @@
+import type { HighlightTooltipEventType } from 'ag-stack';
+import { _clearElement, _exists, _isElementOverflowingCallback, _setAriaSelected, _toString } from 'ag-stack';
+
 import type {
     AgPromise,
     BeanCollection,
+    ComponentInstanceClaim,
+    ElementParams,
+    ICellRendererComp,
     IRichCellEditorRendererParams,
-    ITooltipCtrl,
-    Registry,
     RichSelectParams,
     TooltipFeature,
     UserCompDetails,
@@ -11,53 +15,59 @@ import type {
 } from 'ag-grid-community';
 import {
     Component,
-    _bindCellRendererToHtmlElement,
-    _escapeString,
-    _exists,
-    _getDocument,
+    ComponentInstanceGuard,
+    _addGridCommonParams,
+    _createElement,
     _getEditorRendererDetails,
-    _setAriaSelected,
-    _shouldDisplayTooltip,
 } from 'ag-grid-community';
 
 import type { AgRichSelect } from './agRichSelect';
+import { _bindCellRendererToHtmlElement, resolveRichSelectValueFormatter } from './agRichSelect';
 
-export class RichSelectRow<TValue> extends Component {
+const RichSelectRowElement: ElementParams = { tag: 'div', cls: 'ag-rich-select-row', role: 'presentation' };
+export class RichSelectRow<TValue> extends Component<HighlightTooltipEventType> {
     private userCompFactory: UserComponentFactory;
-    private registry: Registry;
 
     public wireBeans(beans: BeanCollection) {
         this.userCompFactory = beans.userCompFactory;
-        this.registry = beans.registry;
     }
 
     private value: TValue;
     private parsedValue: string | null;
     private tooltipFeature?: TooltipFeature;
     private shouldDisplayTooltip?: () => boolean;
+    private cellRenderer?: ICellRendererComp;
+    private readonly rendererGuard = new ComponentInstanceGuard();
+    private readonly valueFormatter: (value: TValue | TValue[] | null | undefined) => string;
 
     constructor(private readonly params: RichSelectParams<TValue>) {
-        super(/* html */ `<div class="ag-rich-select-row" role="presentation"></div>`);
+        super(RichSelectRowElement);
+        this.valueFormatter = resolveRichSelectValueFormatter<TValue>(params.valueFormatter);
     }
 
     public postConstruct(): void {
         this.tooltipFeature = this.createOptionalManagedBean(
-            this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
-                getGui: () => this.getGui(),
-                shouldDisplayTooltip: () => this.shouldDisplayTooltip?.() ?? true,
-            } as ITooltipCtrl)
+            this.beans.tooltipSvc?.createHighlightTooltip(
+                {
+                    getGui: () => this.getGui(),
+                    getTooltipComponentDefinition: () => undefined,
+                    getLocation: () => 'richSelectListItem',
+                    shouldDisplayTooltip: () => this.shouldDisplayTooltip?.() ?? true,
+                },
+                this
+            )
         );
     }
 
     public setState(value: TValue): void {
-        let formattedValue: string = '';
+        const formattedValue = this.valueFormatter(value);
+        const rendererClaim = this.rendererGuard.claim();
+        this.cellRenderer = this.destroyBean(this.cellRenderer);
+        this.shouldDisplayTooltip = undefined;
+        this.tooltipFeature?.setTooltipAndRefresh(null);
+        _clearElement(this.getGui());
 
-        const { params } = this;
-
-        if (params.valueFormatter) {
-            formattedValue = params.valueFormatter(value);
-        }
-        const rendererSuccessful = this.populateWithRenderer(value, formattedValue);
+        const rendererSuccessful = this.populateWithRenderer(value, formattedValue, rendererClaim);
         if (!rendererSuccessful) {
             this.populateWithoutRenderer(value, formattedValue);
         }
@@ -66,9 +76,9 @@ export class RichSelectRow<TValue> extends Component {
     }
 
     public highlightString(matchString: string): void {
-        const { parsedValue } = this;
+        const { parsedValue, params } = this;
 
-        if (this.params.cellRenderer || !_exists(parsedValue)) {
+        if (params.cellRenderer || !_exists(parsedValue)) {
             return;
         }
 
@@ -78,12 +88,23 @@ export class RichSelectRow<TValue> extends Component {
             const index = parsedValue?.toLocaleLowerCase().indexOf(matchString.toLocaleLowerCase());
             if (index >= 0) {
                 const highlightEndIndex = index + matchString.length;
-                const startPart = _escapeString(parsedValue.slice(0, index), true);
-                const highlightedPart = _escapeString(parsedValue.slice(index, highlightEndIndex), true);
-                const endPart = _escapeString(parsedValue.slice(highlightEndIndex));
-                this.renderValueWithoutRenderer(
-                    /* html */ `${startPart}<span class="ag-rich-select-row-text-highlight">${highlightedPart}</span>${endPart}`
-                );
+
+                const child = this.getGui().querySelector('span');
+                if (child) {
+                    _clearElement(child);
+                    child.append(
+                        // Start part
+                        parsedValue.slice(0, index),
+                        // Highlighted part wrapped in bold tag
+                        _createElement({
+                            tag: 'span',
+                            cls: 'ag-rich-select-row-text-highlight',
+                            children: parsedValue.slice(index, highlightEndIndex),
+                        }),
+                        // End part
+                        parsedValue.slice(highlightEndIndex)
+                    );
+                }
             } else {
                 hasMatch = false;
             }
@@ -98,7 +119,7 @@ export class RichSelectRow<TValue> extends Component {
         const eGui = this.getGui();
         _setAriaSelected(eGui.parentElement!, selected);
 
-        this.addOrRemoveCssClass('ag-rich-select-row-selected', selected);
+        this.toggleCss('ag-rich-select-row-selected', selected);
     }
 
     public getValue(): TValue {
@@ -106,22 +127,25 @@ export class RichSelectRow<TValue> extends Component {
     }
 
     public toggleHighlighted(highlighted: boolean): void {
-        this.addOrRemoveCssClass('ag-rich-select-row-highlighted', highlighted);
+        this.toggleCss('ag-rich-select-row-highlighted', highlighted);
+        this.dispatchLocalEvent({
+            type: 'itemHighlighted',
+            highlighted,
+        });
     }
 
     private populateWithoutRenderer(value: any, valueFormatted: any) {
-        const eDocument = _getDocument(this.beans);
         const eGui = this.getGui();
 
-        const span = eDocument.createElement('span');
+        const span = _createElement({ tag: 'span' });
         span.style.overflow = 'hidden';
         span.style.textOverflow = 'ellipsis';
-        const parsedValue = _escapeString(_exists(valueFormatted) ? valueFormatted : value, true);
+        const parsedValue = _toString(_exists(valueFormatted) ? valueFormatted : value);
         this.parsedValue = _exists(parsedValue) ? parsedValue : null;
 
         eGui.appendChild(span);
         this.renderValueWithoutRenderer(parsedValue);
-        this.shouldDisplayTooltip = _shouldDisplayTooltip(() => span);
+        this.shouldDisplayTooltip = _isElementOverflowingCallback(() => span);
         this.tooltipFeature?.setTooltipAndRefresh(this.parsedValue);
     }
 
@@ -130,32 +154,38 @@ export class RichSelectRow<TValue> extends Component {
         if (!span) {
             return;
         }
-        span.innerHTML = _exists(value) ? value : '&nbsp;';
+        span.textContent = _exists(value) ? value : '\u00A0';
     }
 
-    private populateWithRenderer(value: TValue, valueFormatted: string): boolean {
-        // bad coder here - we are not populating all values of the cellRendererParams
+    private populateWithRenderer(
+        value: TValue,
+        valueFormatted: string,
+        rendererClaim: ComponentInstanceClaim
+    ): boolean {
         let cellRendererPromise: AgPromise<any> | undefined;
         let userCompDetails: UserCompDetails | undefined;
-
-        if (this.params.cellRenderer) {
+        const { cellRenderer, cellRendererParams } = this.params;
+        if (cellRenderer) {
             const richSelect = this.getParentComponent()?.getParentComponent() as AgRichSelect;
             userCompDetails = _getEditorRendererDetails<RichSelectParams, IRichCellEditorRendererParams<TValue>>(
                 this.userCompFactory,
                 this.params,
-                {
+                _addGridCommonParams(this.gos, {
                     value,
                     valueFormatted,
+                    cellRendererParams,
                     getValue: () => richSelect?.getValue(),
                     setValue: (value: TValue[] | TValue | null) => {
                         richSelect?.setValue(value, true);
                     },
                     setTooltip: (value: string, shouldDisplayTooltip: () => boolean) => {
                         this.gos.assertModuleRegistered('Tooltip', 3);
-                        this.shouldDisplayTooltip = shouldDisplayTooltip;
-                        this.tooltipFeature?.setTooltipAndRefresh(value);
+                        if (rendererClaim.isCurrent()) {
+                            this.shouldDisplayTooltip = shouldDisplayTooltip;
+                            this.tooltipFeature?.setTooltipAndRefresh(value);
+                        }
                     },
-                }
+                })
             );
         }
 
@@ -164,17 +194,22 @@ export class RichSelectRow<TValue> extends Component {
         }
 
         if (cellRendererPromise) {
-            _bindCellRendererToHtmlElement(cellRendererPromise, this.getGui());
-        }
-
-        if (cellRendererPromise) {
-            cellRendererPromise.then((childComponent) => {
-                this.addDestroyFunc(() => {
+            _bindCellRendererToHtmlElement(cellRendererPromise, this.getGui(), (childComponent) => {
+                if (!this.isAlive() || !rendererClaim.isCurrent()) {
                     this.destroyBean(childComponent);
-                });
+                    return false;
+                }
+                this.cellRenderer = childComponent;
+                return true;
             });
             return true;
         }
         return false;
+    }
+
+    public override destroy(): void {
+        this.rendererGuard.invalidate();
+        this.cellRenderer = this.destroyBean(this.cellRenderer);
+        super.destroy();
     }
 }

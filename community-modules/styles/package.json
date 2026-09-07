@@ -1,6 +1,6 @@
 {
   "name": "@ag-grid-community/styles",
-  "version": "33.0.1",
+  "version": "36.1.0-beta.20260904.1143",
   "description": "AG Grid Styles and Themes",
   "main": "_index.scss",
   "files": [
@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build:styles": "npm run build:sass -- --no-error-css && node post-build.js",
-    "build:sass": "sass --silence-deprecation=mixed-decls --no-source-map --load-path src/internal src:.",
+    "build:sass": "sass --no-source-map --load-path src/internal src:.",
     "watch": "npm-run-all build --parallel watch:sass watch:post-build",
     "watch:post-build": "chokidar '*.css' --ignore '*.min.css' --command 'node post-build.js'",
     "watch:sass": "npm run build:sass -- --watch",
@@ -30,6 +30,7 @@
     "style",
     "theme"
   ],
+  "private": true,
   "author": "Niall Crosby <niall.crosby@gmail.com>",
   "license": "MIT",
   "bugs": {
@@ -39,14 +40,14 @@
   "devDependencies": {
     "@vusion/webfonts-generator": "0.8.0",
     "chokidar-cli": "3.0.0",
-    "csso": "5.0.4",
-    "css-tree": "2.1.0",
+    "csso": "5.0.5",
+    "css-tree": "^3.2.1",
     "npm-run-all": "4.1.5",
-    "postcss-scss": "4.0.4",
-    "sass": "^1.54.4",
-    "stylelint": "14.9.1",
-    "stylelint-csstree-validator": "2.0.0",
-    "stylelint-scss": "4.3.0",
-    "glob": "8.0.3"
+    "postcss-scss": "4.0.9",
+    "sass": "1.99.0",
+    "stylelint": "^17.9.0",
+    "stylelint-csstree-validator": "^4.0.0",
+    "stylelint-scss": "^7.0.0",
+    "glob": "^11.1.0"
   }
 }

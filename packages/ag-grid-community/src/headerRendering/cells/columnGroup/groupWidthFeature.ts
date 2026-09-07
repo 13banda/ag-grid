@@ -3,8 +3,8 @@ import type { AgColumnGroup } from '../../../entities/agColumnGroup';
 import type { IHeaderGroupCellComp } from './headerGroupCellCtrl';
 
 export class GroupWidthFeature extends BeanStub {
-    private columnGroup: AgColumnGroup;
-    private comp: IHeaderGroupCellComp;
+    private readonly columnGroup: AgColumnGroup;
+    private readonly comp: IHeaderGroupCellComp;
 
     // the children can change, we keep destroy functions related to listening to the children here
     private removeChildListenersFuncs: (() => void)[] = [];
@@ -38,18 +38,20 @@ export class GroupWidthFeature extends BeanStub {
 
         // now add new listeners to the new set of children
         const widthChangedListener = this.onWidthChanged.bind(this);
-        this.columnGroup.getLeafColumns().forEach((column) => {
-            column.addEventListener('widthChanged', widthChangedListener);
-            column.addEventListener('visibleChanged', widthChangedListener);
+        for (const column of this.columnGroup.getLeafColumns()) {
+            column.__addEventListener('widthChanged', widthChangedListener);
+            column.__addEventListener('visibleChanged', widthChangedListener);
             this.removeChildListenersFuncs.push(() => {
-                column.removeEventListener('widthChanged', widthChangedListener);
-                column.removeEventListener('visibleChanged', widthChangedListener);
+                column.__removeEventListener('widthChanged', widthChangedListener);
+                column.__removeEventListener('visibleChanged', widthChangedListener);
             });
-        });
+        }
     }
 
     private removeListenersOnChildrenColumns(): void {
-        this.removeChildListenersFuncs.forEach((func) => func());
+        for (const func of this.removeChildListenersFuncs) {
+            func();
+        }
         this.removeChildListenersFuncs = [];
     }
 
@@ -61,6 +63,6 @@ export class GroupWidthFeature extends BeanStub {
     private onWidthChanged(): void {
         const columnWidth = this.columnGroup.getActualWidth();
         this.comp.setWidth(`${columnWidth}px`);
-        this.comp.addOrRemoveCssClass('ag-hidden', columnWidth === 0);
+        this.comp.toggleCss('ag-hidden', columnWidth === 0);
     }
 }

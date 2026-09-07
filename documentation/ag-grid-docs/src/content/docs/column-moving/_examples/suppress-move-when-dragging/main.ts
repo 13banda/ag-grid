@@ -1,22 +1,29 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: [
-        { field: 'athlete' },
-        { field: 'age' },
-        { field: 'country' },
-        { field: 'year' },
-        { field: 'date' },
-        { field: 'sport' },
-        { field: 'gold' },
-        { field: 'silver' },
-        { field: 'bronze' },
-        { field: 'total' },
+        {
+            headerName: 'Athlete Info',
+            children: [{ field: 'athlete' }, { field: 'age' }, { field: 'country' }],
+        },
+        {
+            headerName: 'Event',
+            children: [{ field: 'year' }, { field: 'date' }, { field: 'sport' }],
+        },
+        {
+            headerName: 'Medals',
+            children: [{ field: 'gold' }, { field: 'silver' }, { field: 'bronze' }, { field: 'total' }],
+        },
     ],
     defaultColDef: {
         width: 150,

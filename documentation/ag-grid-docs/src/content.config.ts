@@ -1,0 +1,599 @@
+import { ALL_INTERNAL_FRAMEWORKS, FRAMEWORKS } from '@constants';
+// NOTE: Use glob, instead of file for single object files unless the file is an
+// array of objects
+import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
+import { defineCollection } from 'astro:content';
+
+const framework = z.enum(FRAMEWORKS as any);
+const internalFramework = z.enum(ALL_INTERNAL_FRAMEWORKS as any);
+
+const docs = defineCollection({
+    loader: glob({ pattern: '**/[^_]*.mdoc', base: './src/content/docs' }),
+    schema: z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        enterprise: z.boolean().optional(),
+        frameworks: z.array(framework).optional(),
+        /**
+         * Hide right hand side menu
+         */
+        hideSideMenu: z.boolean().optional(),
+        /**
+         * Hide left hand page menu
+         */
+        hidePageMenu: z.boolean().optional(),
+        /**
+         * Override side navigation headings
+         */
+        headings: z
+            .array(
+                z.object({
+                    depth: z.number(),
+                    slug: z.string(),
+                    text: z.string(),
+                    frameworks: z.array(framework).optional(),
+                })
+            )
+            .optional(),
+
+        migrationVersion: z.string().optional(),
+
+        /**
+         * Override the `related:` links in the page's markdown twin, which are otherwise the
+         * page's nav neighbours (see `docsRelatedLinks.ts`). Each entry is either a docs page
+         * name, titled from the nav, or an explicit `{ title, url }` for anything else.
+         */
+        related: z.array(z.union([z.string(), z.object({ title: z.string(), url: z.string() })])).optional(),
+    }),
+});
+
+const apiDocumentation = defineCollection({
+    loader: glob({ pattern: '**/[^_]*.json', base: './src/content/api-documentation' }),
+});
+
+const interfaceDocumentation = defineCollection({
+    loader: glob({
+        pattern: '**/[^_]*.json',
+        base: './src/content/interface-documentation',
+    }),
+});
+
+const matrixTable = defineCollection({
+    loader: glob({ pattern: '*.json', base: './src/content/matrix-table' }),
+    schema: z.array(z.record(z.string(), z.any())),
+});
+
+const moduleItemBase = {
+    moduleName: z.string(),
+    name: z.string(),
+    path: z.string().optional(),
+    isEnterprise: z.boolean().optional(),
+    ssrmBundled: z.boolean().optional(),
+    hideFromSelection: z.boolean().optional(),
+};
+
+const moduleGroupLevel2 = z.object({
+    name: z.string(),
+    children: z.array(z.object(moduleItemBase)).optional(),
+    isEnterprise: z.boolean().optional(),
+});
+
+const moduleGroupLevel1 = z.object({
+    name: z.string(),
+    children: z.array(z.object(moduleItemBase).or(moduleGroupLevel2)).optional(),
+    isEnterprise: z.boolean().optional(),
+    hideFromSelection: z.boolean().optional(),
+});
+
+const moduleMappings = defineCollection({
+    loader: glob({ base: './src/content/module-mappings', pattern: 'modules.json' }),
+    schema: z.object({
+        groups: z.array(z.object(moduleItemBase).or(moduleGroupLevel1)),
+    }),
+});
+
+const errors = defineCollection({
+    loader: glob({ pattern: '*.mdoc', base: './src/content/errors' }),
+    schema: z.object({
+        description: z.string().optional(),
+    }),
+});
+
+const errorLinks = defineCollection({
+    loader: glob({ base: './src/content/errorLinks', pattern: 'links.json' }),
+    schema: z.array(
+        z.object({
+            errorIds: z.array(z.number()),
+            text: z.string(),
+            url: z.string(),
+            description: z.string().optional(),
+        })
+    ),
+});
+
+const metadata = defineCollection({
+    loader: glob({ base: './src/content/metadata', pattern: 'metadata.json' }),
+    schema: z.object({
+        title: z.string(),
+        description: z.string(),
+        canonicalUrlBase: z.string(),
+        socialImage: z.string(),
+    }),
+});
+
+const navType = z.enum(['item', 'group']);
+const navBase = {
+    title: z.string().optional(),
+    type: navType.optional(),
+    path: z.string().optional(),
+    url: z.string().optional(),
+    frameworks: z.array(framework).optional(),
+    childPaths: z.array(z.string()).optional(),
+    isEnterprise: z.boolean().optional(),
+
+    hideTitle: z.boolean().optional(),
+};
+const navLevel5 = z.object({
+    ...navBase,
+});
+const navLevel4 = z.object({
+    ...navBase,
+    children: z.array(navLevel5).optional(),
+});
+const navLevel3 = z.object({
+    ...navBase,
+    children: z.array(navLevel4).optional(),
+});
+const navLevel2 = z.object({
+    ...navBase,
+    children: z.array(navLevel3).optional(),
+});
+const navLevel1 = z.object({
+    ...navBase,
+    children: z.array(navLevel2).optional(),
+});
+
+const docsNav = defineCollection({
+    loader: glob({ base: './src/content/docs-nav', pattern: 'nav.json' }),
+    schema: z.object({
+        sections: z.array(navLevel1),
+    }),
+});
+
+const apiNav = defineCollection({
+    loader: glob({ base: './src/content/api-nav', pattern: 'nav.json' }),
+    schema: z.object({
+        sections: z.array(navLevel1),
+    }),
+});
+
+const announcementBanner = defineCollection({
+    loader: glob({ base: './src/content/announcement-banner', pattern: 'announcement-banner.json' }),
+    schema: z.object({
+        enabled: z.boolean(),
+        href: z.string(),
+        title: z.string(),
+        description: z.string().optional(),
+        ctaLabel: z.string().optional(),
+        external: z.boolean().optional(),
+        /** Show the banner from this date onwards (format: YYYY-MM-DD). */
+        showDate: z.string().nullable().optional(),
+        /** Hide the banner once this date has passed (format: YYYY-MM-DD). */
+        untilDate: z.string().nullable().optional(),
+    }),
+});
+
+const footer = defineCollection({
+    loader: glob({ base: './src/content/footer', pattern: 'footer.json' }),
+    schema: z.array(
+        z.object({
+            title: z.string(),
+            links: z.array(
+                z.object({
+                    name: z.string(),
+                    url: z.string(),
+                    newTab: z.boolean().optional(),
+                    showCookiesPrefs: z.boolean().optional(),
+                    iconName: z.string().optional(),
+                })
+            ),
+        })
+    ),
+});
+
+const versions = defineCollection({
+    loader: glob({ base: './src/content/versions', pattern: 'ag-grid-versions.json' }),
+    schema: z.array(
+        z.object({
+            version: z.string(),
+            date: z.string().optional(),
+            landingPageHighlight: z.string().optional(),
+            highlights: z
+                .array(
+                    z.object({
+                        text: z.string(),
+                        path: z.string().optional(),
+                    })
+                )
+                .optional(),
+            notesPath: z.string().optional(),
+            hideBlogPostLink: z.boolean().optional(),
+            noDocs: z.boolean().optional(),
+        })
+    ),
+});
+
+const faqs = defineCollection({
+    loader: glob({ base: './src/content/faqs', pattern: '*.json' }),
+    schema: z.array(
+        z.object({
+            question: z.string(),
+            answer: z.string(),
+        })
+    ),
+});
+
+const siteHeader = defineCollection({
+    loader: glob({ base: './src/content/site-header', pattern: 'header.json' }),
+    schema: z.object({
+        header: z.object({
+            items: z.array(
+                z.object({
+                    title: z.string(),
+                    url: z.string().optional(),
+                    path: z.string().optional(),
+                    icon: z.string().optional(),
+                    isCollapsed: z.boolean().optional(),
+                })
+            ),
+        }),
+    }),
+});
+
+const seedProjects = defineCollection({
+    loader: glob({ base: './src/content/seed-projects', pattern: 'grid-seed-projects.json' }),
+    schema: z.array(
+        z.object({
+            name: z.string(),
+            devEnvironment: z.string(),
+            framework,
+            licenseType: z.enum(['enterprise', 'enterprise-bundle']),
+            url: z.string(),
+        })
+    ),
+});
+
+const aboutPage = defineCollection({
+    loader: glob({ base: './src/content/about', pattern: 'about.json' }),
+    schema: z.object({
+        prose: z.object({
+            intro: z.object({
+                headingLine1: z.string(),
+                headingLine2: z.string(),
+                paragraphHtml: z.string(),
+            }),
+            customerLogosFootnote: z.string(),
+            memoriam: z.object({
+                heading: z.string(),
+                paragraph: z.string(),
+                linkText: z.string(),
+                linkUrl: z.string(),
+            }),
+            history: z.object({ heading: z.string(), paragraph: z.string() }),
+            principles: z.object({ heading: z.string(), subheading: z.string() }),
+            leadership: z.object({ heading: z.string(), subheading: z.string() }),
+            lifeAt: z.object({ heading: z.string(), paragraph: z.string() }),
+            resources: z.object({
+                heading: z.string(),
+                subheading: z.string(),
+                items: z.array(
+                    z.object({
+                        icon: z.string(),
+                        title: z.string(),
+                        description: z.string(),
+                        url: z.string(),
+                        external: z.boolean().optional(),
+                    })
+                ),
+            }),
+            contact: z.object({ heading: z.string(), subheading: z.string() }),
+            office: z.object({
+                heading: z.string(),
+                addressLines: z.array(z.string()),
+                mapUrl: z.string(),
+                mapCta: z.string(),
+            }),
+            socials: z.array(z.object({ icon: z.string(), label: z.string(), ariaLabel: z.string(), url: z.string() })),
+        }),
+        timeline: z.array(
+            z.object({
+                year: z.string(),
+                icon: z.string(),
+                title: z.string(),
+                description: z.string(),
+            })
+        ),
+        principles: z.array(
+            z.object({
+                icon: z.string(),
+                title: z.string(),
+                description: z.string(),
+            })
+        ),
+        leadershipTeam: z.array(
+            z.object({
+                name: z.string(),
+                role: z.string(),
+                bio: z.string(),
+                imageSrc: z.string(),
+            })
+        ),
+    }),
+});
+
+const contactResults = defineCollection({
+    loader: glob({ base: '../../external/ag-website-shared/src/content/contact', pattern: 'result.json' }),
+    schema: z.record(
+        z.string(),
+        z.object({
+            title: z.string(),
+            description: z.string(),
+            heroTag: z.string(),
+            heroHeading: z.string(),
+        })
+    ),
+});
+
+// ============================================================================
+// Unified Landing Pages Collection
+// All landing page content is defined in a single JSON file per page
+// ============================================================================
+
+const featureItemSchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    isEnterprise: z.boolean().optional(),
+    example: z.object({
+        pageName: z.string(),
+        exampleName: z.string(),
+    }),
+    features: z.array(
+        z.object({
+            heading: z.string(),
+            detail: z.string(),
+            link: z.string().optional(),
+        })
+    ),
+    docsLink: z.string(),
+});
+
+const exampleItemSchema = z.object({
+    img: z.string(),
+    imgAlt: z.string(),
+    title: z.string(),
+    content: z.string(),
+    docs: z.string(),
+    demo: z.string(),
+});
+
+const faqItemSchema = z.object({
+    question: z.string(),
+    answer: z.string(),
+});
+
+const pricingCardSchema = z.object({
+    title: z.string(),
+    price: z.string(),
+    priceNote: z.string(),
+    features: z.array(z.string()),
+    ctaText: z.string(),
+    ctaUrl: z.string(),
+    ctaId: z.string().optional(),
+    isPrimary: z.boolean().optional(),
+    showTrialButton: z.boolean().optional(),
+});
+
+const landingPages = defineCollection({
+    loader: glob({ base: './src/content/landing-pages', pattern: '*.json' }),
+    schema: z.object({
+        meta: z.object({
+            title: z.string(),
+            description: z.string(),
+        }),
+        internalFramework,
+        packageName: z.string().optional(),
+        docsPath: z.string(),
+        analyticsPrefix: z.string(),
+
+        sections: z.array(
+            z.discriminatedUnion('type', [
+                // Hero section
+                z.object({
+                    type: z.literal('hero'),
+                    variant: z.enum(['default', 'enterprise']).optional(),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    subHeadingHtml: z.string().optional(),
+                    showVersionBadge: z.boolean().optional(),
+                    secondaryCta: z
+                        .object({
+                            text: z.string(),
+                            url: z.string().optional(),
+                        })
+                        .optional(),
+                    demo: z
+                        .object({
+                            enableRowGroup: z.boolean().optional(),
+                            gridHeight: z.number().optional(),
+                        })
+                        .optional(),
+                }),
+
+                // Features section
+                z.object({
+                    type: z.literal('features'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    items: z.array(featureItemSchema),
+                }),
+
+                // Showcase section
+                z.object({
+                    type: z.literal('showcase'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                }),
+
+                // Customers section
+                z.object({
+                    type: z.literal('customers'),
+                    tag: z.string(),
+                    headingHtml: z.string(),
+                    subHeadingHtml: z.string(),
+                    displayLogos: z.boolean().optional(),
+                }),
+
+                // Examples section
+                z.object({
+                    type: z.literal('examples'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    showBackgroundGradient: z.boolean().optional(),
+                    items: z.array(exampleItemSchema),
+                }),
+
+                // FAQ section
+                z.object({
+                    type: z.literal('faq'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    items: z.array(faqItemSchema),
+                }),
+
+                // Contact section
+                z.object({
+                    type: z.literal('contact'),
+                    variant: z.enum(['default', 'sales']).optional(),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    features: z.array(z.string()),
+                }),
+
+                // Enterprise-specific sections
+                z.object({
+                    type: z.literal('integrated-charts'),
+                    tag: z.string(),
+                    heading: z.string().optional(),
+                    headingHtml: z.string().optional(),
+                    subHeading: z.string(),
+                    showBackgroundGradient: z.boolean().optional(),
+                }),
+
+                z.object({
+                    type: z.literal('theme-builder'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                }),
+
+                z.object({
+                    type: z.literal('comparison'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    showBackgroundGradient: z.boolean().optional(),
+                }),
+
+                z.object({
+                    type: z.literal('pricing'),
+                    tag: z.string(),
+                    heading: z.string(),
+                    subHeading: z.string(),
+                    showBackgroundGradient: z.boolean().optional(),
+                    cards: z.array(pricingCardSchema),
+                }),
+            ])
+        ),
+    }),
+});
+
+// Homepage marketing copy (index.astro). The bespoke interactive islands stay inline in the
+// page; only the hero and section text lives here so it can be shared with the /index.md twin.
+const homepage = defineCollection({
+    loader: glob({ base: './src/content/homepage', pattern: 'homepage.json' }),
+    schema: z.object({
+        hero: z.object({
+            headingPrefix: z.string(),
+            headingSuffix: z.string(),
+            subHeading: z.string(),
+            seeDemosText: z.string(),
+            seeDemosUrl: z.string(),
+            githubText: z.string(),
+            githubUrl: z.string(),
+            freeTrialText: z.string(),
+            // A './' path, resolved against the visitor's selected framework at render.
+            freeTrialUrl: z.string(),
+            buyNowText: z.string(),
+            buyNowUrl: z.string(),
+        }),
+        sections: z.array(
+            z.object({
+                id: z.string(),
+                tag: z.string().optional(),
+                heading: z.string().optional(),
+                headingHtml: z.string().optional(),
+                subHeading: z.string().optional(),
+                subHeadingHtml: z.string().optional(),
+                ctaTitle: z.string().optional(),
+                ctaUrl: z.string().optional(),
+                // When true, index.astro wraps ctaUrl with urlWithBaseUrl (matching the original
+                // per-section behaviour); framework CTAs instead pass the raw './' path through.
+                ctaUrlIsBaseUrl: z.boolean().optional(),
+                ctaId: z.string().optional(),
+                // An extra CTA rendered after the section's main CTA. `isFramework` resolves its
+                // './' url against the visitor's selected framework.
+                secondaryCta: z
+                    .object({
+                        title: z.string(),
+                        url: z.string(),
+                        id: z.string().optional(),
+                        isFramework: z.boolean().optional(),
+                    })
+                    .optional(),
+                isFramework: z.boolean().optional(),
+                showBackgroundGradient: z.boolean().optional(),
+                sectionClass: z.string().optional(),
+            })
+        ),
+    }),
+});
+
+export const collections = {
+    docs,
+    homepage,
+    apiDocumentation,
+    interfaceDocumentation,
+    matrixTable,
+    moduleMappings,
+    errors,
+    errorLinks,
+    metadata,
+    apiNav,
+    docsNav,
+    footer,
+    announcementBanner,
+    versions,
+    faqs,
+    siteHeader,
+    seedProjects,
+    aboutPage,
+    contactResults,
+    landingPages,
+};

@@ -1,8 +1,10 @@
 import type { FooterItem } from '@ag-grid-types';
+import { DevToolsToggle } from '@ag-website-shared/components/dev-tools/DevTools';
 import { Icon } from '@ag-website-shared/components/icon/Icon';
 import { SiteLogo } from '@components/SiteLogo';
 import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 import classNames from 'classnames';
+import GithubSlugger from 'github-slugger';
 
 import styles from './Footer.module.scss';
 
@@ -11,22 +13,46 @@ interface FooterProps {
     footerItems: FooterItem[];
 }
 
-const MenuColumns = ({ footerItems }: { footerItems: FooterItem[] }) =>
-    footerItems.map(({ title, links }) => (
-        <div key={title} className={styles.menuColumn}>
-            <h2>{title}</h2>
-            <ul className="list-style-none">
-                {links.map(({ name, url, newTab, iconName }: any) => (
-                    <li key={`${title}_${name}`}>
-                        <a href={urlWithBaseUrl(url)} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
-                            {iconName && <Icon name={iconName} />}
-                            {name}
-                        </a>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    ));
+const MenuColumns = ({ footerItems }: { footerItems: FooterItem[] }) => {
+    const slugger = new GithubSlugger();
+
+    const toggleCookiesPrefs = (event) => {
+        event.preventDefault();
+
+        if (!window.__enzuzoApi) return;
+
+        window.__enzuzoApi.prefCenter.show();
+    };
+
+    return footerItems.map(({ title, links }) => {
+        // Associate each link list with its (non-heading) title so assistive tech still announces the
+        // group label. SE-45 deliberately drops the <h2> to keep these out of the page heading outline.
+        const titleId = `footer-${new GithubSlugger().slug(title)}`;
+        return (
+            <div key={title} className={styles.menuColumn}>
+                <span className={styles.menuColumnTitle} id={titleId}>
+                    {title}
+                </span>
+                <ul className="list-style-none" aria-labelledby={titleId}>
+                    {links.map(({ name, url, newTab, iconName, showCookiesPrefs }: any) => (
+                        <li key={`${title}_${name}`}>
+                            <a
+                                id={`${slugger.slug(name)}-nav`}
+                                tabIndex={0}
+                                href={urlWithBaseUrl(url)}
+                                onClick={showCookiesPrefs ? toggleCookiesPrefs : undefined}
+                                {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}
+                            >
+                                {iconName && <Icon name={iconName} />}
+                                {name}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
+    });
+};
 
 export const Footer = ({ showMicrosoftMessage, footerItems }: FooterProps) => {
     return (
@@ -36,18 +62,36 @@ export const Footer = ({ showMicrosoftMessage, footerItems }: FooterProps) => {
                     <div className={styles.logoContainer}>
                         <SiteLogo />
                     </div>
+                    <div className={styles.footerInfo}>
+                        <p className="text-sm">&copy; AG Grid Ltd 2015-{new Date().getFullYear()}</p>
 
-                    <p className="text-sm">&copy; AG Grid Ltd. 2015-{new Date().getFullYear()}</p>
-
-                    <p className="text-sm">
-                        AG Grid Ltd registered in the United Kingdom. Company&nbsp;No.&nbsp;07318192.
-                    </p>
-
-                    {showMicrosoftMessage && (
                         <p className="text-sm">
-                            The Microsoft logo is a trademark of the Microsoft group of companies.
+                            <DevToolsToggle>AG Grid Ltd registered</DevToolsToggle> in England&nbsp;&amp;&nbsp;Wales.
+                            <br />
+                            Company&nbsp;No.&nbsp;07318192.
+                            <br />
+                            VAT&nbsp;no.&nbsp;GB998360167
                         </p>
-                    )}
+
+                        <p className="text-sm">
+                            Registered address
+                            <br />
+                            AG Grid Ltd
+                            <br />
+                            70 Wilson Street
+                            <br />
+                            London
+                            <br />
+                            EC2A 2DB
+                            <br />
+                        </p>
+
+                        {showMicrosoftMessage && (
+                            <p className="text-sm">
+                                The Microsoft logo is a trademark of the Microsoft group of companies.
+                            </p>
+                        )}
+                    </div>
                 </div>
                 <MenuColumns footerItems={footerItems} />
             </div>

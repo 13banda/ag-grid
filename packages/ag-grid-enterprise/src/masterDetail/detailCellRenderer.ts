@@ -1,6 +1,9 @@
+import { RefPlaceholder, _missing } from 'ag-stack';
+
 import type {
     BeanCollection,
     Context,
+    ElementParams,
     GridApi,
     GridOptions,
     GridParams,
@@ -8,17 +11,24 @@ import type {
     IDetailCellRenderer,
     IDetailCellRendererParams,
 } from 'ag-grid-community';
-import { Component, RefPlaceholder, _getGridRegisteredModules, _missing, _warn, createGrid } from 'ag-grid-community';
+import { Component, _getGridRegisteredModules, createGrid } from 'ag-grid-community';
 
 import { DetailCellRendererCtrl } from './detailCellRendererCtrl';
 import { DetailFrameworkComponentWrapper } from './detailFrameworkComponentWrapper';
 
+const PinnedDetailCellRendererElement: ElementParams = { tag: 'div', cls: 'ag-details-row' };
+const DetailCellRendererElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-details-row',
+    role: 'gridcell',
+    children: [{ tag: 'div', ref: 'eDetailGrid', cls: 'ag-details-grid', role: 'presentation' }],
+};
 export class DetailCellRenderer extends Component implements ICellRenderer {
-    private eDetailGrid: HTMLElement = RefPlaceholder;
+    private readonly eDetailGrid: HTMLElement = RefPlaceholder;
 
-    private detailApi: GridApi;
+    private detailApi?: GridApi;
     private params: IDetailCellRendererParams;
-    private ctrl: DetailCellRendererCtrl;
+    private ctrl?: DetailCellRendererCtrl;
     private context: Context;
 
     public wireBeans(beans: BeanCollection): void {
@@ -30,8 +40,8 @@ export class DetailCellRenderer extends Component implements ICellRenderer {
         this.selectAndSetTemplate();
 
         const compProxy: IDetailCellRenderer = {
-            addOrRemoveCssClass: (cssClassName: string, on: boolean) => this.addOrRemoveCssClass(cssClassName, on),
-            addOrRemoveDetailGridCssClass: (cssClassName: string, on: boolean) =>
+            toggleCss: (cssClassName: string, on: boolean) => this.toggleCss(cssClassName, on),
+            toggleDetailGridCss: (cssClassName: string, on: boolean) =>
                 this.eDetailGrid.classList.toggle(cssClassName, on),
             setDetailGrid: (gridOptions) => this.setDetailGrid(gridOptions),
             setRowData: (rowData) => this.setRowData(rowData),
@@ -43,41 +53,37 @@ export class DetailCellRenderer extends Component implements ICellRenderer {
     }
 
     public refresh(): boolean {
-        return this.ctrl && this.ctrl.refresh();
+        return this.ctrl?.refresh() ?? false;
     }
 
     private selectAndSetTemplate(): void {
         const params = this.params;
         if (params.pinned) {
-            this.setTemplate(/* html*/ `<div class="ag-details-row"></div>`);
+            this.setTemplate(PinnedDetailCellRendererElement);
             return;
         }
 
         const setDefaultTemplate = () => {
-            this.setTemplate(/* html */ `<div class="ag-details-row" role="gridcell">
-                <div data-ref="eDetailGrid" class="ag-details-grid" role="presentation"></div>
-            </div>`);
+            this.setTemplate(DetailCellRendererElement);
         };
 
         if (_missing(params.template)) {
             // use default template
             setDefaultTemplate();
-        } else {
+        } else if (typeof params.template === 'string') {
             // use user provided template
-            if (typeof params.template === 'string') {
-                this.setTemplate(params.template, []);
-            } else if (typeof params.template === 'function') {
-                const templateFunc = params.template;
-                const template = templateFunc(params);
-                this.setTemplate(template, []);
-            } else {
-                _warn(168);
-                setDefaultTemplate();
-            }
+            this.setTemplate(params.template, []);
+        } else if (typeof params.template === 'function') {
+            const templateFunc = params.template;
+            const template = templateFunc(params);
+            this.setTemplate(template, []);
+        } else {
+            this.beans.log.warn(168);
+            setDefaultTemplate();
         }
 
         if (this.eDetailGrid == null) {
-            _warn(169);
+            this.beans.log.warn(169);
         }
     }
 
@@ -95,17 +101,16 @@ export class DetailCellRenderer extends Component implements ICellRenderer {
 
         const api = createGrid(this.eDetailGrid, gridOptions, {
             frameworkOverrides,
-            providedBeanInstances: {
-                frameworkCompWrapper: frameworkCompWrapper,
-            },
+            providedBeanInstances: { frameworkCompWrapper },
             modules: _getGridRegisteredModules(this.params.api.getGridId(), gridOptions.rowModelType ?? 'clientSide'),
+            hasAncestorStyledRoot: true,
         } as GridParams);
 
         this.detailApi = api;
-        this.ctrl.registerDetailWithMaster(api);
+        this.ctrl?.registerDetailWithMaster(api);
 
         this.addDestroyFunc(() => {
-            api?.destroy();
+            api.destroy();
         });
     }
 

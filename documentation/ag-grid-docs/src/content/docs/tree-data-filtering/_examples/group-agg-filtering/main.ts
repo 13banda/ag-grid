@@ -4,20 +4,19 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { TreeDataModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    TreeDataModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, TreeDataModule, NumberFilterModule]);
 
 let gridApi: GridApi;
 
@@ -30,6 +29,10 @@ const gridOptions: GridOptions = {
             aggFunc: 'sum',
             filter: 'agNumberColumnFilter',
             valueFormatter: (params) => {
+                if (params.value == null) {
+                    return ''; // params.value can be null/undefined here (e.g. no size for this row)
+                }
+
                 const sizeInKb = params.value / 1024;
 
                 if (sizeInKb > 1024) {
@@ -60,7 +63,7 @@ const gridOptions: GridOptions = {
         gridApi.setFilterModel({
             size: {
                 filterType: 'number',
-                type: 'equal',
+                type: 'equals',
                 filter: 5193728,
             },
         });

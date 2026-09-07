@@ -6,12 +6,17 @@ import {
     NumberEditorModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 import { MySimpleEditor } from './mySimpleEditor_typescript';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberEditorModule,
@@ -19,7 +24,6 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     CustomEditorModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [

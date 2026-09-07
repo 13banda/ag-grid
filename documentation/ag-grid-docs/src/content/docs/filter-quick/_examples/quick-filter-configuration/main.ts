@@ -6,11 +6,16 @@ import {
     QuickFilterModule,
     RowApiModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowApiModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     NumberEditorModule,
     TextEditorModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const getMedalString = function ({ gold, silver, bronze }: { gold: number; silver: number; bronze: number }) {
@@ -89,6 +93,8 @@ function onPrintQuickFilterTexts() {
 }
 
 function quickFilterParser(quickFilter: string) {
+    // Note that this implementation is just provided as a simple example of the feature.
+    // It does not handle all edge cases, e.g. preceding spaces inside quotes.
     const quickFilterParts = [];
     let lastSpaceIndex = -1;
 

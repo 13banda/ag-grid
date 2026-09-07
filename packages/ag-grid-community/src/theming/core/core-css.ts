@@ -1,695 +1,846 @@
-import type { ExpandTypeKeys } from '../Part';
-import type { WithParamTypes } from '../theme-types';
-import { accentColor, accentMix, foregroundBackgroundMix, foregroundColor, foregroundMix } from '../theme-utils';
-
-export { coreCSS } from './core.css-GENERATED';
+import type {
+    BorderStyleValue,
+    BorderValue,
+    ColorValue,
+    DurationValue,
+    FontFamilyValue,
+    FontWeightValue,
+    LengthValue,
+    ScaleValue,
+    ShadowValue,
+    SharedThemeParams,
+} from 'ag-stack';
+import {
+    accentColor,
+    accentMix,
+    backgroundColor,
+    foregroundColor,
+    foregroundHeaderBackgroundMix,
+    foregroundMix,
+} from 'ag-stack';
 
 /**
  * All possible theme param types - the actual params available will be a subset of this type depending on the parts in use by the theme.
  */
-type CoreParamsDefinitions = {
-    /**
-     * The 'brand color' for the grid, used wherever a non-neutral color is required. Selections, focus outlines and checkboxes use the accent color by default.
-     */
-    accentColor: 'infer';
-
+export interface CoreParams extends SharedThemeParams {
     /**
      * Color of the dividing line above the buttons in the advanced filter builder
      */
-    advancedFilterBuilderButtonBarBorder: 'infer';
+    advancedFilterBuilderButtonBarBorder: BorderValue;
 
     /**
      * Color of the column pills in the Advanced Filter Builder
      */
-    advancedFilterBuilderColumnPillColor: 'infer';
+    advancedFilterBuilderColumnPillColor: ColorValue;
 
     /**
      * Amount that each level of the nesting in the advanced filter builder is indented by
      */
-    advancedFilterBuilderIndentSize: 'infer';
+    advancedFilterBuilderIndentSize: LengthValue;
 
     /**
      * Color of the join operator pills in the Advanced Filter Builder
      */
-    advancedFilterBuilderJoinPillColor: 'infer';
+    advancedFilterBuilderJoinPillColor: ColorValue;
 
     /**
      * Color of the filter option pills in the Advanced Filter Builder
      */
-    advancedFilterBuilderOptionPillColor: 'infer';
+    advancedFilterBuilderOptionPillColor: ColorValue;
 
     /**
      * Color of the value pills in the Advanced Filter Builder
      */
-    advancedFilterBuilderValuePillColor: 'infer';
+    advancedFilterBuilderValuePillColor: ColorValue;
 
     /**
-     * Background color of the grid. Many UI elements are semi-transparent, so their color blends with the background color.
+     * Minimum height of the grid's rows section when using auto-height or print layout. This prevents an empty grid from collapsing to nothing. Set to `0` to remove the minimum height.
      */
-    backgroundColor: 'infer';
-
-    /**
-     * Default color for borders.
-     */
-    borderColor: 'infer';
-
-    /**
-     * Default corner radius for many UI elements such as menus, dialogs and form widgets.
-     */
-    borderRadius: 'infer';
-
-    /**
-     * The CSS color-scheme to apply to the grid, which affects the default appearance of browser scrollbars form inputs unless these have been styled with CSS.
-     */
-    browserColorScheme: 'infer';
+    autoHeightMinBodyHeight: LengthValue;
 
     /**
      * Padding at the start and end of grid cells and header cells.
      */
-    cellHorizontalPadding: 'infer';
+    cellHorizontalPadding: LengthValue;
 
     /**
      * Multiply the cell horizontal padding by a number, e.g. 1.5 to increase by 50%
      */
-    cellHorizontalPaddingScale: 'infer';
+    cellHorizontalPaddingScale: ScaleValue;
 
     /**
-     * Color of text in grid cells.
+     * Color of text in cells in the grid data area
      */
-    cellTextColor: 'infer';
+    cellTextColor: ColorValue;
 
     /**
      * Horizontal spacing between widgets inside cells (e.g. row group expand buttons and row selection checkboxes).
      */
-    cellWidgetSpacing: 'infer';
+    cellWidgetSpacing: LengthValue;
 
     /**
      * Color of form field labels within the chart editing panel for integrated charts
      */
-    chartMenuLabelColor: 'infer';
+    chartMenuLabelColor: ColorValue;
 
     /**
      * Width of the chart editing panel for integrated charts
      */
-    chartMenuPanelWidth: 'infer';
-
-    /**
-     * Background color for non-data areas of the grid. Headers, tool panels and menus use this color by default.
-     */
-    chromeBackgroundColor: 'infer';
+    chartMenuPanelWidth: LengthValue;
 
     /**
      * Vertical borders between columns within the grid only, excluding headers.
      */
-    columnBorder: 'infer';
+    columnBorder: BorderValue;
 
     /**
      * Background color of the pill shape representing columns in the column drop component
      */
-    columnDropCellBackgroundColor: 'infer';
+    columnDropCellBackgroundColor: ColorValue;
 
     /**
      * Text color for the pill shape representing columns in the column drop component
      */
-    columnDropCellTextColor: 'infer';
+    columnDropCellTextColor: ColorValue;
 
     /**
      * Color of the drag grip icon in the pill shape representing columns in the column drop component
      */
-    columnDropCellDragHandleColor: 'infer';
+    columnDropCellDragHandleColor: ColorValue;
 
     /**
      * Border for the pill shape representing columns in the column drop component
      */
-    columnDropCellBorder: 'infer';
+    columnDropCellBorder: BorderValue;
 
     /**
      * Background color when hovering over columns in the grid. This is not visible unless enabled in the grid options.
      */
-    columnHoverColor: 'infer';
+    columnHoverColor: ColorValue;
 
     /**
      * Amount of indentation for each level of children when selecting grouped columns in the column select widget.
      */
-    columnSelectIndentSize: 'infer';
-
-    /**
-     * Border color popup dialogs such as the integrated charts and the advanced filter builder.
-     */
-    dialogBorder: 'infer';
-
-    /**
-     * Shadow for popup dialogs such as the integrated charts and the advanced filter builder.
-     */
-    dialogShadow: 'infer';
+    columnSelectIndentSize: LengthValue;
 
     /**
      * Border around cells being edited
      */
-    cellEditingBorder: 'infer';
+    cellEditingBorder: BorderValue;
 
     /**
      * Shadow for cells being edited
      */
-    cellEditingShadow: 'infer';
+    cellEditingShadow: ShadowValue;
 
     /**
-     * Background color of the drag and drop image component element when dragging columns
+     * Background color for a row with invalid editor status
      */
-    dragAndDropImageBackgroundColor: 'infer';
+    fullRowEditInvalidBackgroundColor: ColorValue;
 
     /**
-     * Border color of the drag and drop image component element when dragging columns
+     * Background color for cells in batch edit mode
      */
-    dragAndDropImageBorder: 'infer';
+    cellBatchEditBackgroundColor: ColorValue;
 
     /**
-     * Shadow for the drag and drop image component element when dragging columns
+     * Text color for cells in batch edit mode
      */
-    dragAndDropImageShadow: 'infer';
+    cellBatchEditTextColor: ColorValue;
+
+    /**
+     * Background color for rows in batch edit mode
+     */
+    rowBatchEditBackgroundColor: ColorValue;
+
+    /**
+     * Text color for rows in batch edit mode
+     */
+    rowBatchEditTextColor: ColorValue;
 
     /**
      * Color of the drag handle on draggable rows and column markers
      */
-    dragHandleColor: 'infer';
-
-    /**
-     * Default shadow for dropdown menus
-     */
-    dropdownShadow: 'infer';
+    dragHandleColor: ColorValue;
 
     /**
      * How much to indent child columns in the filters tool panel relative to their parent
      */
-    filterToolPanelGroupIndent: 'infer';
+    filterToolPanelGroupIndent: LengthValue;
 
     /**
-     * Shadow around UI controls that have focus e.g. text inputs and buttons. The value must a valid CSS box-shadow.
+     * Color of new Filters Tool Panel apply button
      */
-    focusShadow: 'infer';
+    filterPanelApplyButtonColor: ColorValue;
 
     /**
-     * Default font family for all text. Can be overridden by more specific parameters like `headerFontFamily`
+     * Background color of new Filters Tool Panel apply button
      */
-    fontFamily: 'infer';
+    filterPanelApplyButtonBackgroundColor: ColorValue;
 
     /**
-     * Default font size for text throughout the grid UI
+     * Color of Columns Tool Panel apply button
      */
-    fontSize: 'infer';
+    columnPanelApplyButtonColor: ColorValue;
 
     /**
-     * Font size for data in grid rows
+     * Background color of Columns Tool Panel apply button
      */
-    dataFontSize: 'infer';
+    columnPanelApplyButtonBackgroundColor: ColorValue;
+
+    /**
+     * Color of text and UI elements that should stand out less than the default in new Filters Tool Panel
+     */
+    filterPanelCardSubtleColor: ColorValue;
+
+    /**
+     * Color of text and UI elements that should stand out less than the default in new Filters Tool Panel when hovered
+     */
+    filterPanelCardSubtleHoverColor: ColorValue;
+
+    /**
+     * Color of matches used in Find
+     */
+    findMatchColor: ColorValue;
+
+    /**
+     * Background color of matches used in Find
+     */
+    findMatchBackgroundColor: ColorValue;
+
+    /**
+     * Color of the active match used in Find
+     */
+    findActiveMatchColor: ColorValue;
+
+    /**
+     * Background color of the active match used in Find
+     */
+    findActiveMatchBackgroundColor: ColorValue;
 
     /**
      * Horizontal borders above footer components like the pagination and status bars
      */
-    footerRowBorder: 'infer';
+    footerRowBorder: BorderValue;
 
     /**
-     * Default color for neutral UI elements. Most text, borders and backgrounds are defined as semi-transparent versions of this color, resulting in a blend between the background and foreground colours.
+     * Duration in seconds of the background color transition if headerCellHoverBackgroundColor or headerCellMovingBackgroundColor is set
      */
-    foregroundColor: 'infer';
-
-    /**
-     * Amount of spacing around and inside UI elements. All padding and margins in the grid are defined as a multiple of this value.
-     */
-    spacing: 'infer';
-
-    /**
-     * Background color for header and header-like.
-     */
-    headerBackgroundColor: 'infer';
-
-    /**
-     * Duration in seconds of the background color transition if headerCellHoverBackgroundColor or headerCellMovingBackgroundColor is set.
-     */
-    headerCellBackgroundTransitionDuration: 'infer';
+    headerCellBackgroundTransitionDuration: DurationValue;
 
     /**
      * Background color of a header cell when hovering over it, or `transparent` for no change.
      */
-    headerCellHoverBackgroundColor: 'infer';
+    headerCellHoverBackgroundColor: ColorValue;
 
     /**
      * Background color of a header cell when dragging to reposition it, or `transparent` for no change.
      */
-    headerCellMovingBackgroundColor: 'infer';
+    headerCellMovingBackgroundColor: ColorValue;
 
     /**
      * Vertical borders between columns within headers.
      */
-    headerColumnBorder: 'infer';
+    headerColumnBorder: BorderValue;
 
     /**
      * Height of the vertical border between column headers. Percentage values are relative to the header height.
      */
-    headerColumnBorderHeight: 'infer';
+    headerColumnBorderHeight: LengthValue;
 
     /**
      * Color of the drag handle on resizable header columns. Set this to transparent to hide the resize handle.
      */
-    headerColumnResizeHandleColor: 'infer';
+    headerColumnResizeHandleColor: ColorValue;
 
     /**
      * Height of the drag handle on resizable header columns. Percentage values are relative to the header height.
      */
-    headerColumnResizeHandleHeight: 'infer';
+    headerColumnResizeHandleHeight: LengthValue;
 
     /**
      * Width of the drag handle on resizable header columns.
      */
-    headerColumnResizeHandleWidth: 'infer';
-
-    /**
-     * Font family of text in the header
-     */
-    headerFontFamily: 'infer';
+    headerColumnResizeHandleWidth: LengthValue;
 
     /**
      * Font family of text in grid cells
      */
-    cellFontFamily: 'infer';
+    cellFontFamily: FontFamilyValue;
 
     /**
-     * Size of text in the header
+     * Font size of text in grid cells
      */
-    headerFontSize: 'infer';
+    cellFontSize: LengthValue;
 
     /**
-     * Font weight of text in the header
+     * Font weight of text in grid cells
      */
-    headerFontWeight: 'infer';
-
-    /**
-     * Height of header rows. NOTE: by default this value is calculated to leave enough room for text, icons and padding. Most applications should leave it as is and use rowVerticalPaddingScale to change padding.
-     */
-    headerHeight: 'infer';
+    cellFontWeight: FontWeightValue;
 
     /**
      * Borders between and below header rows.
      */
-    headerRowBorder: 'infer';
+    headerRowBorder: BorderValue;
 
     /**
-     * Color of text in the header
+     * Default color for clickable icons
      */
-    headerTextColor: 'infer';
+    iconButtonColor: ColorValue;
 
     /**
-     * Multiply the header vertical padding by a number, e.g. 1.5 to increase by 50%
+     * Default background color for clickable icons
      */
-    headerVerticalPaddingScale: 'infer';
+    iconButtonBackgroundColor: ColorValue;
 
     /**
-     * Background color of clickable icons when hovered
+     * The distance beyond the border of the clickable icons that the background extends to
      */
-    iconButtonHoverBackgroundColor: 'infer';
+    iconButtonBackgroundSpread: LengthValue;
 
     /**
-     * Hover color for clickable icons
+     * Corner radius of clickable icon background
      */
-    iconButtonHoverColor: 'infer';
+    iconButtonBorderRadius: LengthValue;
 
     /**
-     * The size of square icons and icon-buttons
+     * Color of clickable icons when hovered
      */
-    iconSize: 'infer';
+    iconButtonHoverColor: ColorValue;
 
     /**
-     * The color for inputs and UI controls in an invalid state.
+     * Background color for clickable icons when hovered
      */
-    invalidColor: 'infer';
+    iconButtonHoverBackgroundColor: ColorValue;
 
     /**
-     * Height of items in scrolling lists e.g. dropdown select inputs and column menu set filters.
+     * Color of clickable icon buttons when styled as active. This is used for the column filter button when a filter is applied to the column.
      */
-    listItemHeight: 'infer';
+    iconButtonActiveColor: ColorValue;
 
     /**
-     * Background color for menus e.g. column menu and right-click context menu
+     * Background color of clickable icon buttons when styled as active. This is used for the column filter button when a filter is applied to the column.
      */
-    menuBackgroundColor: 'infer';
+    iconButtonActiveBackgroundColor: ColorValue;
 
     /**
-     * Border around menus e.g. column menu and right-click context menu
+     * Color of the marker dot shown on icon buttons when styled as active. This is used for the column filter button when a filter is applied to the column.
      */
-    menuBorder: 'infer';
-
-    /**
-     * Color of the dividing line between sections of menus e.g. column menu and right-click context menu
-     */
-    menuSeparatorColor: 'infer';
-
-    /**
-     * Shadow for menus e.g. column menu and right-click context menu
-     */
-    menuShadow: 'infer';
-
-    /**
-     * Text color for menus e.g. column menu and right-click context menu
-     */
-    menuTextColor: 'infer';
+    iconButtonActiveIndicatorColor: ColorValue;
 
     /**
      * Background color of the overlay shown over the grid e.g. a data loading indicator.
      */
-    modalOverlayBackgroundColor: 'infer';
+    modalOverlayBackgroundColor: ColorValue;
 
     /**
-     * Background color applied to every other row
+     * Background color applied to grid rows, and also behind the header so a transparent header will blend with this
+     * colour. Must be opaque - setting a semi-transparent colour will cause scrolling columns to be visible under
+     * pinned left/right columns as you scroll horizontally, and rows to be visible under the header as you scroll
+     * vertically.
      */
-    oddRowBackgroundColor: 'infer';
+    dataBackgroundColor: ColorValue;
 
     /**
-     * Background color for panels and dialogs such as the integrated charts and the advanced filter builder.
+     * Alternative background colour applied to every other row to create a striped effect
      */
-    panelBackgroundColor: 'infer';
-
-    /**
-     * Background color for the title bar of panels and dialogs such as the integrated charts and the advanced filter builder.
-     */
-    panelTitleBarBackgroundColor: 'infer';
-
-    /**
-     * Border below the title bar of panels and dialogs such as the integrated charts and the advanced filter builder.
-     */
-    panelTitleBarBorder: 'infer';
+    oddRowBackgroundColor: ColorValue;
 
     /**
      * Vertical borders between columns that are pinned to the left or right and the rest of the grid
      */
-    pinnedColumnBorder: 'infer';
+    pinnedColumnBorder: BorderValue;
 
     /**
      * Horizontal borders between the grid and rows that are pinned to the top or bottom and the rest of the grid
      */
-    pinnedRowBorder: 'infer';
+    pinnedRowBorder: BorderValue;
 
     /**
-     * Default shadow for elements that float above the grid and are intended to appear separated from it e.g. dialogs and menus
+     * Font-weight for the rows that have been pinned to the top or bottom
      */
-    popupShadow: 'infer';
+    pinnedRowFontWeight: FontWeightValue;
 
     /**
-     * Default shadow for elements that float above the grid and are intended to appear elevated byt still attached e.g. dropdowns and cell editors
+     * Background color for the rows that have been pinned to the top or bottom
      */
-    cardShadow: 'infer';
+    pinnedRowBackgroundColor: ColorValue;
+
+    /**
+     * Text color for rows that have been pinned to the top or bottom
+     */
+    pinnedRowTextColor: ColorValue;
+
+    /**
+     * Text color for row in the main viewport that has been pinned to the top or bottom
+     */
+    pinnedSourceRowTextColor: ColorValue;
+
+    /**
+     * Background color for the row in the main viewport that has been pinned to the top or bottom
+     */
+    pinnedSourceRowBackgroundColor: ColorValue;
+
+    /**
+     * Font-weight for the row in the main viewport that has been pinned to the top or bottom
+     */
+    pinnedSourceRowFontWeight: FontWeightValue;
 
     /**
      * Background color of selected cell ranges. Choosing a semi-transparent color ensure that multiple overlapping ranges look correct.
      */
-    rangeSelectionBackgroundColor: 'infer';
+    rangeSelectionBackgroundColor: ColorValue;
 
     /**
      * The color used for borders around range selections. The selection background defaults to a semi-transparent version of this color.
      */
-    rangeSelectionBorderColor: 'infer';
+    rangeSelectionBorderColor: ColorValue;
 
     /**
      * Border style around range selections.
      */
-    rangeSelectionBorderStyle: 'infer';
+    rangeSelectionBorderStyle: BorderStyleValue;
 
     /**
      * Background color for cells that provide data to the current range chart
      */
-    rangeSelectionChartBackgroundColor: 'infer';
+    rangeSelectionChartBackgroundColor: ColorValue;
 
     /**
      * Background color for cells that provide categories to the current range chart
      */
-    rangeSelectionChartCategoryBackgroundColor: 'infer';
+    rangeSelectionChartCategoryBackgroundColor: ColorValue;
 
     /**
      * Background color to briefly apply to a cell range when the user copies from or pastes into it.
      */
-    rangeSelectionHighlightColor: 'infer';
+    rangeSelectionHighlightColor: ColorValue;
+
+    /**
+     * Background color of the grid header when any cell of that header is part of a range. This is not visible unless enabled in the cell selection options.
+     */
+    rangeHeaderHighlightColor: ColorValue;
+
+    /**
+     * Background color for the calculated column currently being edited.
+     */
+    calculatedColumnHighlightColor: ColorValue;
+
+    /**
+     * Background color for the column header currently being edited.
+     */
+    columnHeaderEditHighlightColor: ColorValue;
+
+    /**
+     * Color for the parent of columns in the suggestion list.
+     */
+    calculatedColumnParentSuggestionColor: ColorValue;
+
+    /**
+     * Width of the calculated column suggestion list opened from helper buttons.
+     */
+    calculatedColumnSuggestionListWidth: LengthValue;
+
+    /**
+     * Color of the indicator line used to show where a row will be inserted when dragging to reorder rows
+     */
+    rowDragIndicatorColor: ColorValue;
+
+    /**
+     * Width of the indicator line used to show where a row will be inserted when dragging to reorder rows
+     */
+    rowDragIndicatorWidth: LengthValue;
+
+    /**
+     * Color of the indicator line used to show where a row will be inserted when dragging to reorder columns
+     */
+    columnDragIndicatorColor: ColorValue;
+
+    /**
+     * Width of the indicator line used to show where a row will be inserted when dragging to reorder columns
+     */
+    columnDragIndicatorWidth: LengthValue;
+
+    /**
+     * Background color of the Row Numbers cells when the range selects all cells for that row.
+     */
+    rowNumbersSelectedColor: ColorValue;
 
     /**
      * Horizontal borders between rows.
      */
-    rowBorder: 'infer';
+    rowBorder: BorderValue;
 
     /**
      * The size of indentation applied to each level of row grouping - deep rows are indented by a multiple of this value.
      */
-    rowGroupIndentSize: 'infer';
+    rowGroupIndentSize: LengthValue;
 
     /**
      * Height of grid rows. NOTE: by default this value is calculated to leave enough room for text, icons and padding. Most applications should leave it as is and use rowVerticalPaddingScale to change padding.
      */
-    rowHeight: 'infer';
+    rowHeight: LengthValue;
+
+    /**
+     * Height of the pagination panel at the bottom of the grid.
+     */
+    paginationPanelHeight: LengthValue;
 
     /**
      * Background color when hovering over rows in the grid and in dropdown menus. Set to `transparent` to disable the hover effect. Note: if you want a hover effect on one but not the other, use CSS selectors instead of this property.
      */
-    rowHoverColor: 'infer';
+    rowHoverColor: ColorValue;
 
     /**
      * Color of the skeleton loading effect used when loading row data with the Server-side Row Model
      */
-    rowLoadingSkeletonEffectColor: 'infer';
+    rowLoadingSkeletonEffectColor: ColorValue;
 
     /**
      * Multiply the row vertical padding by a number, e.g. 1.5 to increase by 50%. Has no effect if rowHeight is set.
      */
-    rowVerticalPaddingScale: 'infer';
+    rowVerticalPaddingScale: ScaleValue;
 
     /**
      * Background color for selected items within the multiple select widget
      */
-    selectCellBackgroundColor: 'infer';
+    selectCellBackgroundColor: ColorValue;
 
     /**
      * Border for selected items within the multiple select widget
      */
-    selectCellBorder: 'infer';
+    selectCellBorder: BorderValue;
 
     /**
      * Background color of selected rows in the grid and in dropdown menus.
      */
-    selectedRowBackgroundColor: 'infer';
+    selectedRowBackgroundColor: ColorValue;
 
     /**
      * Amount of indentation for each level of child items in the Set Filter list when filtering tree data.
      */
-    setFilterIndentSize: 'infer';
+    setFilterIndentSize: LengthValue;
 
     /**
      * Background color of the sidebar that contains the columns and filters tool panels
      */
-    sideBarBackgroundColor: 'infer';
+    sideBarBackgroundColor: ColorValue;
 
     /**
      * Background color of the row of tab buttons at the edge of the sidebar
      */
-    sideButtonBarBackgroundColor: 'infer';
+    sideButtonBarBackgroundColor: ColorValue;
 
     /**
      * Default width of the sidebar that contains the columns and filters tool panels
      */
-    sideBarPanelWidth: 'infer';
+    sideBarPanelWidth: LengthValue;
+
+    /**
+     * Duration of the animation when a sidebar panel opens or closes. Set to 0
+     * to disable animations. Automatically disabled if the user has requested
+     * reduced motion in their OS accessibility settings.
+     */
+    sideBarPanelAnimationDuration: DurationValue;
 
     /**
      * Borders between the grid and side panels including the column and filter tool bars, and chart settings
      */
-    sidePanelBorder: 'infer';
+    sidePanelBorder: BorderValue;
 
     /**
      * Spacing between the topmost side button and the top of the sidebar
      */
-    sideButtonBarTopPadding: 'infer';
+    sideButtonBarTopPadding: LengthValue;
 
     /**
      * Width of the underline below the selected tab in the sidebar
      */
-    sideButtonSelectedUnderlineWidth: 'infer';
+    sideButtonSelectedUnderlineWidth: LengthValue;
 
     /**
      * Color of the underline below the selected tab in the sidebar, or 'transparent' to disable the underline effect
      */
-    sideButtonSelectedUnderlineColor: 'infer';
+    sideButtonSelectedUnderlineColor: ColorValue;
 
     /**
      * Duration of the transition effect for the underline below the selected tab in the sidebar
      */
-    sideButtonSelectedUnderlineTransitionDuration: 'infer';
+    sideButtonSelectedUnderlineTransitionDuration: DurationValue;
 
     /**
      * Background color of the tab buttons in the sidebar
      */
-    sideButtonBackgroundColor: 'infer';
+    sideButtonBackgroundColor: ColorValue;
 
     /**
      * Text color of the tab buttons in the sidebar
      */
-    sideButtonTextColor: 'infer';
+    sideButtonTextColor: ColorValue;
 
     /**
      * Background color of the tab buttons in the sidebar when hovered
      */
-    sideButtonHoverBackgroundColor: 'infer';
+    sideButtonHoverBackgroundColor: ColorValue;
 
     /**
      * Text color of the tab buttons in the sidebar when hovered
      */
-    sideButtonHoverTextColor: 'infer';
+    sideButtonHoverTextColor: ColorValue;
 
     /**
      * Background color of the selected tab button in the sidebar
      */
-    sideButtonSelectedBackgroundColor: 'infer';
+    sideButtonSelectedBackgroundColor: ColorValue;
 
     /**
      * Text color of the selected tab button in the sidebar
      */
-    sideButtonSelectedTextColor: 'infer';
+    sideButtonSelectedTextColor: ColorValue;
 
     /**
-     * Color of the border drawn above and below the selected tab button in the
-     * sidebar, or 'transparent' to disable the border on the selected tab
+     * Border drawn above and below tab buttons in the sidebar
      */
-    sideButtonSelectedBorder: 'infer';
+    sideButtonBorder: BorderValue;
+
+    /**
+     * Border drawn above and below the selected tab button in the sidebar
+     */
+    sideButtonSelectedBorder: BorderValue;
 
     /**
      * Padding to the left of the text in tab buttons in the sidebar (this is always the padding on the inward facing side of the button, so in right-to-left layout it will be on the right)
      */
-    sideButtonLeftPadding: 'infer';
+    sideButtonLeftPadding: LengthValue;
 
     /**
      * Padding to the right of the text in tab buttons in the sidebar (this is always the padding on the outward facing side of the button, so in right-to-left layout it will be on the left)
      */
-    sideButtonRightPadding: 'infer';
+    sideButtonRightPadding: LengthValue;
 
     /**
      * Padding above and below the text in tab buttons in the sidebar
      */
-    sideButtonVerticalPadding: 'infer';
+    sideButtonVerticalPadding: LengthValue;
 
     /**
-     * Color of text and UI elements that should stand out less than the default.
+     * Background color of the toolbar. Defaults to the header background color.
      */
-    subtleTextColor: 'infer';
+    toolbarBackgroundColor: ColorValue;
 
     /**
-     * Default color for all text
+     * Text color in the toolbar. Defaults to the header text color.
      */
-    textColor: 'infer';
+    toolbarTextColor: ColorValue;
 
     /**
-     * Width of the whole toggle button component
+     * Border style for the vertical separator between toolbar items.
      */
-    toggleButtonWidth: 'infer';
-
-    /**
-     * Height of the whole toggle button component
-     */
-    toggleButtonHeight: 'infer';
-
-    /**
-     * Color of the toggle button background in its 'off' state
-     */
-    toggleButtonOffBackgroundColor: 'infer';
-
-    /**
-     * Color of the toggle button background in its 'on' state
-     */
-    toggleButtonOnBackgroundColor: 'infer';
-
-    /**
-     * Background color of the toggle button switch (the bit that slides from left to right)
-     */
-    toggleButtonSwitchBackgroundColor: 'infer';
-
-    /**
-     * The amount that the toggle switch is inset from the edge of the button
-     */
-    toggleButtonSwitchInset: 'infer';
+    toolbarSeparatorBorder: BorderValue;
 
     /**
      * The dividing line between sections of menus e.g. column menu and right-click context menu
      */
-    toolPanelSeparatorBorder: 'infer';
-
-    /**
-     * Background color for tooltips
-     */
-    tooltipBackgroundColor: 'infer';
-
-    /**
-     * Border for tooltips
-     */
-    tooltipBorder: 'infer';
-
-    /**
-     * Text color for tooltips
-     */
-    tooltipTextColor: 'infer';
+    toolPanelSeparatorBorder: BorderValue;
 
     /**
      * Color to temporarily apply to cell data when its value decreases in an agAnimateShowChangeCellRenderer cell
      */
-    valueChangeDeltaDownColor: 'infer';
+    valueChangeDeltaDownColor: ColorValue;
 
     /**
      * Color to temporarily apply to cell data when its value increases in an agAnimateShowChangeCellRenderer cell
      */
-    valueChangeDeltaUpColor: 'infer';
+    valueChangeDeltaUpColor: ColorValue;
 
     /**
      * Background color to apply when a cell value changes and enableCellChangeFlash is enabled
      */
-    valueChangeValueHighlightBackgroundColor: 'infer';
+    valueChangeValueHighlightBackgroundColor: ColorValue;
 
     /**
-     * The horizontal padding of containers that contain stacked widgets, such as menus and tool panels
+     * Background color of the outermost container around the grid.
      */
-    widgetContainerHorizontalPadding: 'infer';
-
-    /**
-     * The vertical padding of containers that contain stacked widgets, such as menus and tool panels
-     */
-    widgetContainerVerticalPadding: 'infer';
-
-    /**
-     * The spacing between widgets in containers arrange widgets horizontally
-     */
-    widgetHorizontalSpacing: 'infer';
-
-    /**
-     * The spacing between widgets in containers arrange widgets vertically
-     */
-    widgetVerticalSpacing: 'infer';
+    wrapperBackgroundColor: ColorValue;
 
     /**
      * Borders around the outside of the grid
      */
-    wrapperBorder: 'infer';
+    wrapperBorder: BorderValue;
 
     /**
      * Corner radius of the outermost container around the grid.
      */
-    wrapperBorderRadius: 'infer';
-};
+    wrapperBorderRadius: LengthValue;
 
-export type CoreParams = ExpandTypeKeys<WithParamTypes<CoreParamsDefinitions>>;
+    /**
+     * Text color for labels in the status bar component
+     */
+    statusBarLabelColor: ColorValue;
 
-export const defaultLightColorSchemeParams = {
-    backgroundColor: '#fff',
-    foregroundColor: '#181d1f',
-    borderColor: foregroundMix(0.15),
-    chromeBackgroundColor: foregroundBackgroundMix(0.02),
-    browserColorScheme: 'light',
-} as const;
+    /**
+     * Font weight for labels in the status bar component
+     */
+    statusBarLabelFontWeight: FontWeightValue;
 
-export const coreDefaults: Readonly<CoreParams> = {
-    ...defaultLightColorSchemeParams,
-    textColor: foregroundColor,
-    accentColor: '#2196f3',
-    invalidColor: '#e02525',
+    /**
+     * Text color for values in the status bar component
+     */
+    statusBarValueColor: ColorValue;
+
+    /**
+     * Font weight for values in the status bar component
+     */
+    statusBarValueFontWeight: FontWeightValue;
+
+    /**
+     * The color of the 1st formula field token
+     */
+    formulaToken1Color: ColorValue;
+
+    /**
+     * The background color of the 1st formula field token associated range
+     */
+    formulaToken1BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 1st formula field token associated range
+     */
+    formulaToken1Border: BorderValue;
+
+    /**
+     * The color of the 2nd formula field token
+     */
+    formulaToken2Color: ColorValue;
+
+    /**
+     * The background color of the 2nd formula field token associated range
+     */
+    formulaToken2BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 2nd formula field token associated range
+     */
+    formulaToken2Border: BorderValue;
+
+    /**
+     * The color of the 3rd formula field token
+     */
+    formulaToken3Color: ColorValue;
+
+    /**
+     * The background color of the 3rd formula field token associated range
+     */
+    formulaToken3BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 3rd formula field token associated range
+     */
+    formulaToken3Border: BorderValue;
+
+    /**
+     * The color of the 4th formula field token
+     */
+    formulaToken4Color: ColorValue;
+
+    /**
+     * The background color of the 4th formula field token associated range
+     */
+    formulaToken4BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 4th formula field token associated range
+     */
+    formulaToken4Border: BorderValue;
+
+    /**
+     * The color of the 5th formula field token
+     */
+    formulaToken5Color: ColorValue;
+
+    /**
+     * The background color of the 5th formula field token associated range
+     */
+    formulaToken5BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 5th formula field token associated range
+     */
+    formulaToken5Border: BorderValue;
+
+    /**
+     * The color of the 6th formula field token
+     */
+    formulaToken6Color: ColorValue;
+
+    /**
+     * The background color of the 6th formula field token associated range
+     */
+    formulaToken6BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 6th formula field token associated range
+     */
+    formulaToken6Border: BorderValue;
+
+    /**
+     * The color of the 7th formula field token
+     */
+    formulaToken7Color: ColorValue;
+
+    /**
+     * The background color of the 7th formula field token associated range
+     */
+    formulaToken7BackgroundColor: ColorValue;
+
+    /**
+     * The border of the 7th formula field token associated range
+     */
+    formulaToken7Border: BorderValue;
+
+    /**
+     * The color of the note indicator
+     */
+    noteIndicatorColor: ColorValue;
+
+    /**
+     * The size of the note indicator
+     */
+    noteIndicatorSize: LengthValue;
+
+    /**
+     * The background color of the note popup
+     */
+    notePopupBackgroundColor: ColorValue;
+
+    /**
+     * The color of the note popup text
+     */
+    notePopupTextColor: ColorValue;
+
+    /**
+     * The color of the note popup input text
+     */
+    notePopupInputTextColor: ColorValue;
+
+    /**
+     * The background color of the note popup input
+     */
+    notePopupInputBackgroundColor: ColorValue;
+
+    /**
+     * The border of the note popup
+     */
+    notePopupBorder: BorderValue;
+
+    /**
+     * The padding inside the note popup
+     */
+    notePopupPadding: LengthValue;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const coreDefaults: Readonly<Omit<CoreParams, keyof SharedThemeParams>> = {
     wrapperBorder: true,
     rowBorder: true,
     headerRowBorder: true,
@@ -707,6 +858,7 @@ export const coreDefaults: Readonly<CoreParams> = {
     pinnedRowBorder: true,
     sidePanelBorder: true,
     sideBarPanelWidth: 250,
+    sideBarPanelAnimationDuration: 0,
     sideBarBackgroundColor: {
         ref: 'chromeBackgroundColor',
     },
@@ -721,51 +873,27 @@ export const coreDefaults: Readonly<CoreParams> = {
     sideButtonTextColor: { ref: 'textColor' },
     sideButtonHoverBackgroundColor: { ref: 'sideButtonBackgroundColor' },
     sideButtonHoverTextColor: { ref: 'sideButtonTextColor' },
-    sideButtonSelectedBackgroundColor: { ref: 'backgroundColor' },
+    sideButtonSelectedBackgroundColor: backgroundColor,
     sideButtonSelectedTextColor: { ref: 'sideButtonTextColor' },
+    sideButtonBorder: 'solid 1px transparent',
     sideButtonSelectedBorder: true,
     sideButtonLeftPadding: { ref: 'spacing' },
     sideButtonRightPadding: { ref: 'spacing' },
     sideButtonVerticalPadding: { calc: 'spacing * 3' },
-    fontFamily: [
-        '-apple-system',
-        'BlinkMacSystemFont',
-        'Segoe UI',
-        'Roboto',
-        'Oxygen-Sans',
-        'Ubuntu',
-        'Cantarell',
-        'Helvetica Neue',
-        'sans-serif',
-    ],
-    headerBackgroundColor: {
-        ref: 'chromeBackgroundColor',
-    },
-    headerFontFamily: {
-        ref: 'fontFamily',
-    },
     cellFontFamily: {
         ref: 'fontFamily',
     },
-    headerFontWeight: 500,
-    headerFontSize: {
-        ref: 'fontSize',
+    cellFontSize: {
+        ref: 'dataFontSize',
     },
-    dataFontSize: {
-        ref: 'fontSize',
-    },
-    headerTextColor: {
-        ref: 'textColor',
+    cellFontWeight: {
+        ref: 'fontWeight',
     },
     headerCellHoverBackgroundColor: 'transparent',
-    headerCellMovingBackgroundColor: { ref: 'backgroundColor' },
+    headerCellMovingBackgroundColor: { ref: 'headerCellHoverBackgroundColor' },
     headerCellBackgroundTransitionDuration: '0.2s',
     cellTextColor: {
         ref: 'textColor',
-    },
-    subtleTextColor: {
-        ref: 'textColor',
-        mix: 0.5,
     },
     rangeSelectionBorderStyle: 'solid',
     rangeSelectionBorderColor: accentColor,
@@ -773,6 +901,12 @@ export const coreDefaults: Readonly<CoreParams> = {
     rangeSelectionChartBackgroundColor: '#0058FF1A',
     rangeSelectionChartCategoryBackgroundColor: '#00FF841A',
     rangeSelectionHighlightColor: accentMix(0.5),
+    rangeHeaderHighlightColor: foregroundHeaderBackgroundMix(0.08),
+    calculatedColumnHighlightColor: accentMix(0.12),
+    columnHeaderEditHighlightColor: accentMix(0.12),
+    calculatedColumnParentSuggestionColor: foregroundMix(0.75),
+    calculatedColumnSuggestionListWidth: 200,
+    rowNumbersSelectedColor: accentMix(0.5),
     rowHoverColor: accentMix(0.08),
     columnHoverColor: accentMix(0.05),
     selectedRowBackgroundColor: accentMix(0.12),
@@ -780,10 +914,9 @@ export const coreDefaults: Readonly<CoreParams> = {
         ref: 'backgroundColor',
         mix: 0.66,
     },
-    oddRowBackgroundColor: {
-        ref: 'backgroundColor',
-    },
-    borderRadius: 4,
+    dataBackgroundColor: backgroundColor,
+    oddRowBackgroundColor: { ref: 'dataBackgroundColor' },
+    wrapperBackgroundColor: backgroundColor,
     wrapperBorderRadius: 8,
     cellHorizontalPadding: {
         calc: 'spacing * 2 * cellHorizontalPaddingScale',
@@ -792,111 +925,64 @@ export const coreDefaults: Readonly<CoreParams> = {
         calc: 'spacing * 1.5',
     },
     cellHorizontalPaddingScale: 1,
+    autoHeightMinBodyHeight: 150,
     rowGroupIndentSize: {
         calc: 'cellWidgetSpacing + iconSize',
     },
     valueChangeDeltaUpColor: '#43a047',
     valueChangeDeltaDownColor: '#e53935',
     valueChangeValueHighlightBackgroundColor: '#16a08580',
-    spacing: 8,
-    fontSize: 14,
     rowHeight: {
-        calc: 'max(iconSize, dataFontSize) + spacing * 3.25 * rowVerticalPaddingScale',
+        calc: 'max(iconSize, cellFontSize) + spacing * 3.25 * rowVerticalPaddingScale',
     },
     rowVerticalPaddingScale: 1,
-    headerHeight: {
-        calc: 'max(iconSize, dataFontSize) + spacing * 4 * headerVerticalPaddingScale',
-    },
-    headerVerticalPaddingScale: 1,
-    popupShadow: '0 0 16px #00000026',
-    cardShadow: '0 1px 4px 1px #00000018',
-    dropdownShadow: { ref: 'cardShadow' },
-    dragAndDropImageBackgroundColor: {
-        ref: 'backgroundColor',
-    },
-    dragAndDropImageBorder: true,
-    dragAndDropImageShadow: {
-        ref: 'popupShadow',
+    paginationPanelHeight: {
+        calc: 'pickerFieldHeight + spacing * 1.25',
     },
     dragHandleColor: foregroundMix(0.7),
-    focusShadow: {
-        spread: 3,
-        color: accentMix(0.5),
-    },
     headerColumnResizeHandleHeight: '30%',
     headerColumnResizeHandleWidth: 2,
     headerColumnResizeHandleColor: {
         ref: 'borderColor',
     },
-    widgetContainerHorizontalPadding: {
-        calc: 'spacing * 1.5',
-    },
-    widgetContainerVerticalPadding: {
-        calc: 'spacing * 1.5',
-    },
-    widgetHorizontalSpacing: {
-        calc: 'spacing * 1.5',
-    },
-    widgetVerticalSpacing: {
-        ref: 'spacing',
-    },
-    listItemHeight: {
-        calc: 'iconSize + widgetVerticalSpacing',
-    },
-    iconSize: 16,
-    toggleButtonWidth: 28,
-    toggleButtonHeight: 18,
-    toggleButtonOnBackgroundColor: accentColor,
-    toggleButtonOffBackgroundColor: foregroundBackgroundMix(0.3),
-    toggleButtonSwitchBackgroundColor: {
-        ref: 'backgroundColor',
-    },
-    toggleButtonSwitchInset: 2,
-    menuBorder: {
-        color: foregroundMix(0.2),
-    },
-    menuBackgroundColor: foregroundBackgroundMix(0.03),
-    menuTextColor: foregroundBackgroundMix(0.95),
-    menuShadow: {
-        ref: 'popupShadow',
-    },
-    menuSeparatorColor: {
-        ref: 'borderColor',
-    },
+    iconButtonColor: { ref: 'iconColor' },
+    iconButtonBackgroundColor: 'transparent',
+    iconButtonBackgroundSpread: 4,
+    iconButtonBorderRadius: 1,
+    iconButtonHoverColor: { ref: 'iconButtonColor' },
+    iconButtonHoverBackgroundColor: foregroundMix(0.1),
+    iconButtonActiveColor: accentColor,
+    iconButtonActiveBackgroundColor: accentMix(0.28),
+    iconButtonActiveIndicatorColor: accentColor,
     setFilterIndentSize: {
         ref: 'iconSize',
     },
     chartMenuPanelWidth: 260,
     chartMenuLabelColor: foregroundMix(0.8),
-    iconButtonHoverColor: foregroundMix(0.1),
-    dialogShadow: {
-        ref: 'popupShadow',
-    },
     cellEditingBorder: {
         color: accentColor,
     },
     cellEditingShadow: { ref: 'cardShadow' },
-    dialogBorder: {
-        color: foregroundMix(0.2),
+    fullRowEditInvalidBackgroundColor: {
+        ref: 'invalidColor',
+        onto: 'backgroundColor',
+        mix: 0.25,
     },
-    panelBackgroundColor: {
-        ref: 'backgroundColor',
-    },
-    panelTitleBarBackgroundColor: {
-        ref: 'headerBackgroundColor',
-    },
-    panelTitleBarBorder: true,
+    cellBatchEditBackgroundColor: 'rgba(220 181 139 / 16%)',
+    cellBatchEditTextColor: '#422f00',
+    rowBatchEditBackgroundColor: { ref: 'cellBatchEditBackgroundColor' },
+    rowBatchEditTextColor: { ref: 'cellBatchEditTextColor' },
     columnSelectIndentSize: {
         ref: 'iconSize',
     },
+    toolbarBackgroundColor: {
+        ref: 'headerBackgroundColor',
+    },
+    toolbarTextColor: {
+        ref: 'headerTextColor',
+    },
+    toolbarSeparatorBorder: true,
     toolPanelSeparatorBorder: true,
-    tooltipBackgroundColor: {
-        ref: 'chromeBackgroundColor',
-    },
-    tooltipTextColor: {
-        ref: 'textColor',
-    },
-    tooltipBorder: true,
     columnDropCellBackgroundColor: foregroundMix(0.07),
     columnDropCellTextColor: {
         ref: 'textColor',
@@ -919,9 +1005,72 @@ export const coreDefaults: Readonly<CoreParams> = {
     advancedFilterBuilderColumnPillColor: '#a6e194',
     advancedFilterBuilderOptionPillColor: '#f3c08b',
     advancedFilterBuilderValuePillColor: '#85c0e4',
+    filterPanelApplyButtonColor: backgroundColor,
+    filterPanelApplyButtonBackgroundColor: accentColor,
+    columnPanelApplyButtonColor: backgroundColor,
+    columnPanelApplyButtonBackgroundColor: accentColor,
+    filterPanelCardSubtleColor: {
+        ref: 'textColor',
+        mix: 0.7,
+    },
+    filterPanelCardSubtleHoverColor: { ref: 'textColor' },
+    findMatchColor: foregroundColor,
+    findMatchBackgroundColor: '#ffff00',
+    findActiveMatchColor: foregroundColor,
+    findActiveMatchBackgroundColor: '#ffa500',
     filterToolPanelGroupIndent: {
         ref: 'spacing',
     },
-    iconButtonHoverBackgroundColor: foregroundMix(0.1),
     rowLoadingSkeletonEffectColor: foregroundMix(0.15),
+    statusBarLabelColor: foregroundColor,
+    statusBarLabelFontWeight: 500,
+    statusBarValueColor: foregroundColor,
+    statusBarValueFontWeight: 500,
+    pinnedSourceRowTextColor: {
+        ref: 'textColor',
+    },
+    pinnedSourceRowBackgroundColor: {
+        ref: 'dataBackgroundColor',
+    },
+    pinnedSourceRowFontWeight: 600,
+    pinnedRowFontWeight: 600,
+    pinnedRowBackgroundColor: {
+        ref: 'dataBackgroundColor',
+    },
+    pinnedRowTextColor: {
+        ref: 'textColor',
+    },
+    rowDragIndicatorColor: { ref: 'rangeSelectionBorderColor' },
+    rowDragIndicatorWidth: 2,
+    columnDragIndicatorColor: { ref: 'accentColor' },
+    columnDragIndicatorWidth: 2,
+    formulaToken1Color: '#3269c6',
+    formulaToken1BackgroundColor: { ref: 'formulaToken1Color', mix: 0.08 },
+    formulaToken1Border: { color: { ref: 'formulaToken1Color' } },
+    formulaToken2Color: '#c0343f',
+    formulaToken2BackgroundColor: { ref: 'formulaToken2Color', mix: 0.06 },
+    formulaToken2Border: { color: { ref: 'formulaToken2Color' } },
+    formulaToken3Color: '#8156b8',
+    formulaToken3BackgroundColor: { ref: 'formulaToken3Color', mix: 0.08 },
+    formulaToken3Border: { color: { ref: 'formulaToken3Color' } },
+    formulaToken4Color: '#007c1f',
+    formulaToken4BackgroundColor: { ref: 'formulaToken4Color', mix: 0.06 },
+    formulaToken4Border: { color: { ref: 'formulaToken4Color' } },
+    formulaToken5Color: '#b03e85',
+    formulaToken5BackgroundColor: { ref: 'formulaToken5Color', mix: 0.08 },
+    formulaToken5Border: { color: { ref: 'formulaToken5Color' } },
+    formulaToken6Color: '#b74900',
+    formulaToken6BackgroundColor: { ref: 'formulaToken6Color', mix: 0.06 },
+    formulaToken6Border: { color: { ref: 'formulaToken6Color' } },
+    formulaToken7Color: '#247492',
+    formulaToken7BackgroundColor: { ref: 'formulaToken7Color', mix: 0.08 },
+    formulaToken7Border: { color: { ref: 'formulaToken7Color' } },
+    noteIndicatorColor: { ref: 'accentColor' },
+    noteIndicatorSize: '8px',
+    notePopupBackgroundColor: { ref: 'menuBackgroundColor' },
+    notePopupTextColor: { ref: 'menuTextColor', mix: 0.75 },
+    notePopupInputTextColor: { ref: 'inputTextColor' },
+    notePopupInputBackgroundColor: { ref: 'inputBackgroundColor' },
+    notePopupBorder: { ref: 'dialogBorder' },
+    notePopupPadding: { calc: 'spacing * 0.5' },
 };

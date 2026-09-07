@@ -1,17 +1,36 @@
 import type { InternalFramework } from '@ag-grid-types';
+import {
+    isTransformableModule,
+    toModuleFileName,
+} from '@ag-website-shared/components/example-runner/utils/transformExampleModule';
+import { getGeneratedContents } from '@components/example-generator';
 import { FRAMEWORKS, QUICK_BUILD_PAGES, SHOW_DEBUG_LOGS } from '@constants';
 import { type DocsPage, getContentRootFileUrl } from '@utils/pages';
 import { pathJoin } from '@utils/pathJoin';
 
 import { getIsDev } from '../../../utils/env';
-import { getGeneratedContentsFileList } from '../../example-generator';
-import { getInternalFrameworkExamples, getPagesList } from './filesData';
+import { type GeneratedExampleParams, getGeneratedContentsFileList } from '../../example-generator';
+import { getAllInternalFrameworkExamples, getPagesList } from './filesData';
 
 interface Example {
     internalFramework: InternalFramework;
     pageName: string;
     exampleName: string;
+    supportedFrameworks?: InternalFramework[];
 }
+
+type DocExamplePages = Awaited<ReturnType<typeof getDocsExamplePages>>;
+type DocExamplePage = DocExamplePages[number]['params'] & {
+    isEnterprise: boolean;
+    isIntegratedCharts?: boolean;
+    isLocale?: boolean;
+    hasExampleConsoleLog?: boolean;
+    hasSimpleHtml?: boolean;
+    scriptNonce?: string;
+    sourceFileList?: string[];
+    supportedFrameworks?: InternalFramework[];
+};
+type DocFrameworkExamples = Record<InternalFramework, DocExamplePage>;
 
 const isQuickBuild = QUICK_BUILD_PAGES && !getIsDev();
 
@@ -20,7 +39,7 @@ export function getDocsPages(pages: DocsPage[]) {
         return getPagesList(pages).map((page) => {
             return {
                 framework,
-                pageName: page.slug,
+                pageName: page.id,
                 page,
             };
         });
@@ -63,7 +82,7 @@ export function getDocsFrameworkPages() {
 }
 
 async function getDocsExampleNameParts({ pages }: { pages: DocsPage[] }): Promise<Example[]> {
-    const internalFrameworkExamples = await getInternalFrameworkExamples({ pages });
+    const internalFrameworkExamples = await getAllInternalFrameworkExamples({ pages });
     const filteredInternalFrameworkExamples = isQuickBuild
         ? internalFrameworkExamples.filter(({ pageName }) => {
               return QUICK_BUILD_PAGES.includes(pageName);
@@ -71,19 +90,17 @@ async function getDocsExampleNameParts({ pages }: { pages: DocsPage[] }): Promis
         : internalFrameworkExamples;
 
     return filteredInternalFrameworkExamples
-        .flatMap((example) => {
-            const frameworkSupported =
-                example.supportedFrameworks === undefined || example.supportedFrameworks.has(example.internalFramework);
-
-            if (!frameworkSupported) {
-                return undefined;
-            }
-
-            return {
-                ...example,
-            };
+        .filter((example) => {
+            return (
+                example.supportedFrameworks === undefined || example.supportedFrameworks.has(example.internalFramework)
+            );
         })
-        .filter((e) => e !== undefined) as Example[];
+        .map(({ internalFramework, pageName, exampleName, supportedFrameworks }) => ({
+            internalFramework,
+            pageName,
+            exampleName,
+            supportedFrameworks: supportedFrameworks ? Array.from(supportedFrameworks) : undefined,
+        }));
 }
 
 export async function getDocsExamplePages({ pages }: { pages: DocsPage[] }) {
@@ -100,6 +117,76 @@ export async function getDocsExamplePages({ pages }: { pages: DocsPage[] }) {
     });
 }
 
+function allPropertiesAreTruthy(entries: [string, DocExamplePage][], property: keyof DocExamplePage) {
+    return entries.every(([_, data]) => {
+        return data[property];
+    });
+}
+
+function flattenDocsExampleContents(data: Record<string, DocFrameworkExamples>) {
+    return Object.values(data).map((frameworkExamples) => {
+        const frameworkEntries = Object.entries(frameworkExamples);
+        const [_, { pageName, exampleName, sourceFileList, scriptNonce, supportedFrameworks }] = frameworkEntries[0];
+        const isEnterprise = allPropertiesAreTruthy(frameworkEntries, 'isEnterprise');
+        const isIntegratedCharts = allPropertiesAreTruthy(frameworkEntries, 'isIntegratedCharts');
+        const isLocale = allPropertiesAreTruthy(frameworkEntries, 'isLocale');
+        const hasExampleConsoleLog = allPropertiesAreTruthy(frameworkEntries, 'hasExampleConsoleLog');
+        const hasSimpleHtml = allPropertiesAreTruthy(frameworkEntries, 'hasSimpleHtml');
+
+        return {
+            id: `${pageName}-${exampleName}`,
+            pageName,
+            exampleName,
+            sourceFileList,
+            isEnterprise,
+            isIntegratedCharts,
+            isLocale,
+            hasExampleConsoleLog,
+            hasSimpleHtml,
+            scriptNonce,
+            supportedFrameworks,
+            frameworkExamples,
+        };
+    });
+}
+
+export async function getDocsExampleContents({ pages }: { pages: DocsPage[] }) {
+    const examples = await getDocsExampleNameParts({ pages });
+
+    const exampleContents: Record<string, DocFrameworkExamples> = {};
+    const examplePromises = examples.map(async (example) => {
+        const { internalFramework, pageName, exampleName, supportedFrameworks } = example;
+        const key = `${pageName}-${exampleName}`;
+        if (!exampleContents[key]) {
+            exampleContents[key] = {} as DocFrameworkExamples;
+        }
+        const generatedExampleParams: GeneratedExampleParams = {
+            type: 'docs',
+            framework: internalFramework,
+            pageName,
+            exampleName,
+        };
+        const contents = await getGeneratedContents(generatedExampleParams);
+
+        exampleContents[key][internalFramework] = {
+            isEnterprise: contents?.isEnterprise,
+            isIntegratedCharts: contents?.isIntegratedCharts,
+            isLocale: contents?.isLocale,
+            hasExampleConsoleLog: contents?.hasExampleConsoleLog,
+            hasSimpleHtml: contents?.hasSimpleHtml,
+            sourceFileList: contents?.sourceFileList,
+            scriptNonce: contents?.scriptNonce,
+            internalFramework,
+            pageName,
+            exampleName,
+            supportedFrameworks,
+        };
+    });
+    await Promise.all(examplePromises);
+
+    return flattenDocsExampleContents(exampleContents);
+}
+
 export async function getDocExampleFiles({ pages }: { pages: DocsPage[] }) {
     const examples = await getDocsExampleNameParts({ pages });
     const exampleFilesPromises = examples.flatMap(async ({ internalFramework, pageName, exampleName }) => {
@@ -110,13 +197,17 @@ export async function getDocExampleFiles({ pages }: { pages: DocsPage[] }) {
                 pageName,
                 exampleName,
             });
-            return filesList.map((fileName) => {
-                return {
+            return filesList.flatMap((fileName) => {
+                const entry = {
                     internalFramework,
                     pageName,
                     exampleName,
                     fileName,
                 };
+
+                return isTransformableModule(fileName)
+                    ? [entry, { ...entry, fileName: toModuleFileName(fileName) }]
+                    : [entry];
             });
         } catch (error) {
             if (SHOW_DEBUG_LOGS) {

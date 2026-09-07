@@ -16,12 +16,12 @@ import { checkAndUpdateExpression, findEndPosition, getSearchString, updateExpre
 class OperatorParser {
     private operators: string[] = [];
     private parsedOperator: 'AND' | 'OR';
-    private operatorStartPositions: number[] = [];
+    private readonly operatorStartPositions: number[] = [];
     private operatorEndPositions: (number | undefined)[] = [];
     private activeOperator: number = 0;
     private validationError: FilterExpressionValidationError | null = null;
 
-    constructor(private params: FilterExpressionParserParams) {}
+    constructor(private readonly params: FilterExpressionParserParams) {}
 
     public parseExpression(i: number): number {
         this.operators.push('');
@@ -173,14 +173,14 @@ class OperatorParser {
 export class JoinFilterExpressionParser {
     private expectingExpression: boolean = true;
     private expectingOperator: boolean = false;
-    private expressionParsers: (JoinFilterExpressionParser | ColFilterExpressionParser)[] = [];
-    private operatorParser: OperatorParser = new OperatorParser(this.params);
+    private readonly expressionParsers: (JoinFilterExpressionParser | ColFilterExpressionParser)[] = [];
+    private readonly operatorParser: OperatorParser = new OperatorParser(this.params);
     private endPosition: number;
     private missingEndBracket: boolean = false;
     private extraEndBracket: boolean = false;
 
     constructor(
-        private params: FilterExpressionParserParams,
+        private readonly params: FilterExpressionParserParams,
         public readonly startPosition: number
     ) {}
 
@@ -269,17 +269,9 @@ export class JoinFilterExpressionParser {
         return null;
     }
 
-    public getFunctionString(params: FilterExpressionFunctionParams): string {
-        const hasMultipleExpressions = this.expressionParsers.length > 1;
-        const expression = this.expressionParsers
-            .map((expressionParser) => expressionParser.getFunctionString(params))
-            .join(` ${this.operatorParser.getFunction()} `);
-        return hasMultipleExpressions ? `(${expression})` : expression;
-    }
-
-    public getFunctionParsed(params: FilterExpressionFunctionParams): FilterExpressionFunction {
+    public getFunction(params: FilterExpressionFunctionParams): FilterExpressionFunction {
         const operator = this.operatorParser.getFunction();
-        const funcs = this.expressionParsers.map((expressionParser) => expressionParser.getFunctionParsed(params));
+        const funcs = this.expressionParsers.map((expressionParser) => expressionParser.getFunction(params));
         const arrayFunc = operator === '&&' ? 'every' : 'some';
         return (expressionProxy, node, p) => funcs[arrayFunc]((func) => func(expressionProxy, node, p));
     }
@@ -308,7 +300,7 @@ export class JoinFilterExpressionParser {
 
         if (!autocompleteType) {
             // beyond the end of the expression
-            if (expressionParserIndex! < this.expressionParsers.length - 1) {
+            if (expressionParserIndex < this.expressionParsers.length - 1) {
                 // in the middle of two expressions
                 return this.operatorParser.getAutocompleteListParams(position, expressionParserIndex);
             }
@@ -341,7 +333,7 @@ export class JoinFilterExpressionParser {
             const updatedValuePart =
                 type === 'column'
                     ? this.params.advFilterExpSvc.getColumnValue(updateEntry)
-                    : updateEntry.displayValue ?? updateEntry.key;
+                    : (updateEntry.displayValue ?? updateEntry.key);
             return updateExpression(expression, this.startPosition, this.startPosition, updatedValuePart, true);
         }
 
@@ -368,15 +360,15 @@ export class JoinFilterExpressionParser {
         return updatedExpression;
     }
 
-    public getModel(): AdvancedFilterModel {
+    public getModel(forBuilder?: boolean): AdvancedFilterModel {
         if (this.expressionParsers.length > 1) {
             return {
                 filterType: 'join',
                 type: this.operatorParser.getModel(),
-                conditions: this.expressionParsers.map((parser) => parser.getModel()),
+                conditions: this.expressionParsers.map((parser) => parser.getModel(forBuilder)),
             };
         } else {
-            return this.expressionParsers[0].getModel();
+            return this.expressionParsers[0].getModel(forBuilder);
         }
     }
 

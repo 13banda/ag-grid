@@ -1,7 +1,10 @@
-import type { BeanCollection, ChartType, SeriesChartType } from 'ag-grid-community';
-import { AgCheckbox, AgSelect, Component, _areEqual, _clearElement } from 'ag-grid-community';
+import { _areEqual, _clearElement } from 'ag-stack';
 
-import { AgGroupComponent } from '../../../../widgets/agGroupComponent';
+import type { BeanCollection, ChartType, GridCheckbox, GridSelect, SeriesChartType } from 'ag-grid-community';
+import { AgCheckbox, AgSelect, Component } from 'ag-grid-community';
+
+import { AgGroupComponent } from '../../../../agStack/agGroupComponent';
+import type { GroupComponent } from '../../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartController } from '../../chartController';
 import type { ColState } from '../../model/chartDataModel';
 import type { ChartTranslationService } from '../../services/chartTranslationService';
@@ -14,10 +17,10 @@ export class SeriesChartTypePanel extends Component {
         this.chartTranslation = beans.chartTranslation as ChartTranslationService;
     }
 
-    private seriesChartTypeGroupComp: AgGroupComponent;
+    private seriesChartTypeGroupComp: GroupComponent;
     private selectedColIds: string[] = [];
-    private chartTypeComps: Map<string, AgSelect> = new Map();
-    private secondaryAxisComps: Map<string, AgCheckbox> = new Map();
+    private readonly chartTypeComps: Map<string, GridSelect> = new Map();
+    private readonly secondaryAxisComps: Map<string, GridCheckbox> = new Map();
 
     constructor(
         private readonly chartController: ChartController,
@@ -71,19 +74,19 @@ export class SeriesChartTypePanel extends Component {
 
         const seriesChartTypes = this.chartController.getSeriesChartTypes();
 
-        columns.forEach((col) => {
+        for (const col of columns) {
             if (!col.selected) {
-                return;
+                continue;
             }
 
             const seriesChartType: SeriesChartType = seriesChartTypes.filter((s) => s.colId === col.colId)[0];
             if (!seriesChartType) {
-                return;
+                continue;
             }
 
             this.selectedColIds.push(col.colId);
 
-            const seriesItemGroup = this.seriesChartTypeGroupComp.createManagedBean(
+            const seriesItemGroup: GroupComponent = this.seriesChartTypeGroupComp.createManagedBean(
                 new AgGroupComponent({
                     title: col.displayName!,
                     enabled: true,
@@ -96,7 +99,7 @@ export class SeriesChartTypePanel extends Component {
             const isSecondaryAxisDisabled = (chartType: ChartType) =>
                 ['groupedColumn', 'stackedColumn', 'stackedArea'].includes(chartType);
 
-            const secondaryAxisComp = this.seriesChartTypeGroupComp.createManagedBean(
+            const secondaryAxisComp = this.seriesChartTypeGroupComp.createManagedBean<GridCheckbox>(
                 new AgCheckbox({
                     label: this.chartTranslation.translate('secondaryAxis'),
                     labelWidth: 'flex',
@@ -116,7 +119,7 @@ export class SeriesChartTypePanel extends Component {
                 })
             );
 
-            const chartTypeComp = seriesItemGroup.createManagedBean(
+            const chartTypeComp = seriesItemGroup.createManagedBean<GridSelect>(
                 new AgSelect({
                     options,
                     value: seriesChartType.chartType,
@@ -130,17 +133,17 @@ export class SeriesChartTypePanel extends Component {
             this.seriesChartTypeGroupComp.addItem(seriesItemGroup);
             this.chartTypeComps.set(col.colId, chartTypeComp);
             this.secondaryAxisComps.set(col.colId, secondaryAxisComp);
-        });
+        }
 
         this.getGui().appendChild(this.seriesChartTypeGroupComp.getGui());
     }
 
     private refreshComps(): void {
         const seriesChartTypes = this.chartController.getSeriesChartTypes();
-        this.selectedColIds.forEach((colId) => {
+        for (const colId of this.selectedColIds) {
             const seriesChartType = seriesChartTypes.find((chartType) => chartType.colId === colId);
             if (!seriesChartType) {
-                return;
+                continue;
             }
             const chartTypeComp = this.chartTypeComps.get(colId);
             const secondaryAxisComp = this.secondaryAxisComps.get(colId);
@@ -148,7 +151,7 @@ export class SeriesChartTypePanel extends Component {
             chartTypeComp?.setValue(seriesChartType.chartType);
             secondaryAxisComp?.setValue(!!seriesChartType.secondaryAxis);
             secondaryAxisComp?.setDisabled(this.isSecondaryAxisDisabled(seriesChartType.chartType));
-        });
+        }
     }
 
     private clearComps(): void {

@@ -1,144 +1,167 @@
+import { _defaultComparator } from 'ag-stack';
+
+import { _csrmFirstLeaf } from '../clientSideRowModel/clientSideRowModelUtils';
+import type { ColumnModel } from '../columns/columnModel';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
+import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
 import type { RowNode } from '../entities/rowNode';
-import { _isColumnsSortingCoupledToGroup, _isGroupUseEntireRow } from '../gridOptionsUtils';
+import { _isClientSideRowModel, _isColumnsSortingCoupledToGroup, _isGroupUseEntireRow } from '../gridOptionsUtils';
+import type { IFormulaService } from '../interfaces/formulas';
 import type { SortOption } from '../interfaces/iSortOption';
-import { _defaultComparator } from '../utils/generic';
-
-export interface SortedRowNode {
-    currentPos: number;
-    rowNode: RowNode;
-}
+import type { ValueService } from '../valueService/valueService';
 
 // this logic is used by both SSRM and CSRM
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class RowNodeSorter extends BeanStub implements NamedBean {
     beanName = 'rowNodeSorter' as const;
 
-    private isAccentedSort: boolean;
-    private primaryColumnsSortGroups: boolean;
+    private accentedSort: boolean = false;
+    private primaryColumnsSortGroups: boolean = false;
+    private pivotActive: boolean = false;
+    private firstLeaf: (row: RowNode) => RowNode | undefined;
+
+    private colModel: ColumnModel;
+    private formula: IFormulaService | undefined;
+    private valueSvc: ValueService;
 
     public postConstruct(): void {
-        const { gos } = this;
-        this.isAccentedSort = gos.get('accentedSort');
-        this.primaryColumnsSortGroups = _isColumnsSortingCoupledToGroup(gos);
+        this.firstLeaf = _isClientSideRowModel(this.gos) ? _csrmFirstLeaf : defaultGetLeaf;
 
-        this.addManagedPropertyListener(
-            'accentedSort',
-            (propChange) => (this.isAccentedSort = propChange.currentValue)
-        );
-        this.addManagedPropertyListener(
-            'autoGroupColumnDef',
-            () => (this.primaryColumnsSortGroups = _isColumnsSortingCoupledToGroup(gos))
-        );
+        const updatePivotModeState = () => {
+            this.pivotActive = this.colModel.isPivotActive();
+        };
+
+        const updateOptions = () => {
+            const gos = this.gos;
+            this.accentedSort = !!gos.get('accentedSort');
+            this.primaryColumnsSortGroups = _isColumnsSortingCoupledToGroup(gos);
+        };
+
+        this.addManagedPropertyListeners(['accentedSort', 'autoGroupColumnDef', 'treeData'], updateOptions);
+
+        this.addManagedEventListeners({
+            columnPivotModeChanged: updatePivotModeState,
+            columnPivotChanged: updatePivotModeState,
+        });
+
+        updateOptions();
+        updatePivotModeState();
     }
 
-    public doFullSort(rowNodes: RowNode[], sortOptions: SortOption[]): RowNode[] {
-        const sortedRowNodes = rowNodes.map((rowNode, currentPos) => ({
-            currentPos,
-            rowNode,
-        }));
-
-        sortedRowNodes.sort(this.compareRowNodes.bind(this, sortOptions));
-
-        return sortedRowNodes.map((item) => item.rowNode);
+    public wireBeans(beans: BeanCollection): void {
+        this.colModel = beans.colModel;
+        this.formula = beans.formula;
+        this.valueSvc = beans.valueSvc;
     }
 
-    public compareRowNodes(sortOptions: SortOption[], sortedNodeA: SortedRowNode, sortedNodeB: SortedRowNode): number {
-        const nodeA: RowNode = sortedNodeA.rowNode;
-        const nodeB: RowNode = sortedNodeB.rowNode;
+    public doFullSortInPlace(rowNodes: RowNode[], sortOptions: SortOption[]): RowNode[] {
+        // This relies on stable sorting, present since ECMAScript 2019 - all browser within AG Grid's support matrix
+        return rowNodes.sort((a, b) => this.compareRowNodes(sortOptions, a, b));
+    }
 
-        // Iterate columns, return the first that doesn't match
-        for (let i = 0, len = sortOptions.length; i < len; i++) {
+    public compareRowNodes(sortOptions: SortOption[], nodeA: RowNode, nodeB: RowNode): number {
+        const accentedCompare = this.accentedSort;
+
+        // Iterate columns, return the first that doesn't match. Comparators are resolved up front
+        // (see _resolveSortOptions): a col comparator applies to every row; a row-group display col falls back
+        // to its primary column's comparator for leaf rows only; otherwise the grid's default comparator is used.
+        for (let i = 0, len = sortOptions.length; i < len; ++i) {
             const sortOption = sortOptions[i];
-            const isDescending = sortOption.sort === 'desc';
+            const column = sortOption.column as AgColumn;
+            const descending = sortOption.descending;
+            const valueA = this.getValue(nodeA, column);
+            const valueB = this.getValue(nodeB, column);
 
-            const valueA = this.getValue(nodeA, sortOption.column as AgColumn);
-            const valueB = this.getValue(nodeB, sortOption.column as AgColumn);
-
-            let comparatorResult: number;
-            const providedComparator = this.getComparator(sortOption, nodeA);
-            if (providedComparator) {
-                //if comparator provided, use it
-                comparatorResult = providedComparator(valueA, valueB, nodeA, nodeB, isDescending);
+            const comparator = sortOption.colComparator ?? (nodeA.group ? undefined : sortOption.leafComparator);
+            let result: number;
+            if (comparator) {
+                result = comparator(valueA, valueB, nodeA, nodeB, descending);
+            } else if (sortOption.absolute) {
+                result = _defaultComparator(
+                    absoluteValueTransformer(valueA),
+                    absoluteValueTransformer(valueB),
+                    accentedCompare
+                );
             } else {
-                //otherwise do our own comparison
-                comparatorResult = _defaultComparator(valueA, valueB, this.isAccentedSort);
+                result = _defaultComparator(valueA, valueB, accentedCompare);
             }
 
-            // user provided comparators can return 'NaN' if they don't correctly handle 'undefined' values, this
-            // typically occurs when the comparator is used on a group row
-            const validResult = !isNaN(comparatorResult);
-
-            if (validResult && comparatorResult !== 0) {
-                return sortOption.sort === 'asc' ? comparatorResult : comparatorResult * -1;
+            // user comparators can return NaN for unhandled undefined values; NaN is falsy → treated as equal.
+            if (result) {
+                return descending ? -result : result;
             }
         }
-        // All matched, we make is so that the original sort order is kept:
-        return sortedNodeA.currentPos - sortedNodeB.currentPos;
-    }
 
-    private getComparator(
-        sortOption: SortOption,
-        rowNode: RowNode
-    ): ((valueA: any, valueB: any, nodeA: RowNode, nodeB: RowNode, isDescending: boolean) => number) | undefined {
-        const column = sortOption.column;
-
-        // comparator on col get preference over everything else
-        const comparatorOnCol = column.getColDef().comparator;
-        if (comparatorOnCol != null) {
-            return comparatorOnCol;
-        }
-
-        if (!column.getColDef().showRowGroup) {
-            return;
-        }
-
-        // if a 'field' is supplied on the autoGroupColumnDef we need to use the associated column comparator
-        const groupLeafField = !rowNode.group && column.getColDef().field;
-        if (!groupLeafField) {
-            return;
-        }
-
-        const primaryColumn = this.beans.colModel.getColDefCol(groupLeafField);
-        if (!primaryColumn) {
-            return;
-        }
-
-        return primaryColumn.getColDef().comparator;
+        return 0;
     }
 
     private getValue(node: RowNode, column: AgColumn): any {
-        const { valueSvc, colModel, showRowGroupCols, gos } = this.beans;
-        if (!this.primaryColumnsSortGroups) {
-            return valueSvc.getValue(column, node, false);
-        }
-
-        const isNodeGroupedAtLevel = node.rowGroupColumn === column;
-        if (isNodeGroupedAtLevel) {
-            const isGroupRows = _isGroupUseEntireRow(gos, colModel.isPivotActive());
-            // because they're group rows, no display cols exist, so groupData never populated.
-            // instead delegate to getting value from leaf child.
-            if (isGroupRows) {
-                const leafChild = node.allLeafChildren?.[0];
-                if (leafChild) {
-                    return valueSvc.getValue(column, leafChild, false);
-                }
-                return undefined;
+        if (this.primaryColumnsSortGroups) {
+            if (node.rowGroupColumn === column) {
+                return this.getGroupDataValue(node, column);
             }
 
-            const displayCol = showRowGroupCols?.getShowRowGroupCol(column.getId());
-            if (!displayCol) {
+            if (node.group && column.showRowGroup) {
                 return undefined;
             }
-            return node.groupData?.[displayCol.getId()];
         }
 
-        if (node.group && column.getColDef().showRowGroup) {
-            return undefined;
+        const value = this.valueSvc.getValueFromData(column, node);
+        if (column.allowFormula) {
+            const formula = this.formula;
+            if (formula?.isFormula(value)) {
+                return formula.resolveValue(column, node);
+            }
+        }
+        return value;
+    }
+
+    private getGroupDataValue(node: RowNode, column: AgColumn): any {
+        // because they're group rows, no display cols exist, so groupData never populated.
+        // instead delegate to getting value from leaf child.
+        // Formulas are currently not supported on row-group columns, so no formula resolution is needed here.
+        if (_isGroupUseEntireRow(this.gos, this.pivotActive)) {
+            const leafChild = this.firstLeaf(node);
+            return leafChild && this.valueSvc.getValueFromData(column, leafChild);
         }
 
-        return valueSvc.getValue(column, node, false);
+        const displayCol = column.showRowGroupCol;
+        return displayCol ? node.groupData?.[displayCol.colId] : undefined;
     }
 }
+
+/**
+ * _csrmFirstLeaf gets the first lead child of the row node for CSRM,
+ * it uses sourceRowIndex to identify if the row comes from row data or transaction or not.
+ * Groups and filler nodes have negative sourceRowIndex.
+ *
+ * For SSRM and other view model however we don't have any other way to identify
+ * if the row comes from data or not, so we simply check if data exists on the node.
+ */
+const defaultGetLeaf = (row: RowNode): RowNode | undefined => {
+    if (row.data) {
+        return row;
+    }
+    let childrenAfterGroup = row.childrenAfterGroup;
+    while (childrenAfterGroup?.length) {
+        const node = childrenAfterGroup[0];
+        if (node.data) {
+            return node;
+        }
+        childrenAfterGroup = node.childrenAfterGroup;
+    }
+};
+
+const absoluteValueTransformer = (value: any): number | bigint | null => {
+    if (!value) {
+        return value;
+    }
+    if (typeof value === 'bigint') {
+        return value < 0n ? -value : value;
+    }
+    const numberValue = Number(value);
+    return isNaN(numberValue) ? value : Math.abs(numberValue);
+};

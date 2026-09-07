@@ -10,10 +10,15 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, MasterDetailModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -23,12 +28,11 @@ ModuleRegistry.registerModules([
     MasterDetailModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
-let gridApi: GridApi;
+let gridApi: GridApi<IAccount>;
 
-const gridOptions: GridOptions = {
+const gridOptions: GridOptions<IAccount> = {
     masterDetail: true,
     isRowMaster: (dataItem: any) => {
         return dataItem ? dataItem.callRecords.length > 0 : false;
@@ -73,14 +77,15 @@ function onFirstDataRendered(params: FirstDataRenderedEvent) {
 
 function onBtClearMilaCalls() {
     const milaSmithRowNode = gridApi!.getRowNode('177001')!;
-    const milaSmithData = milaSmithRowNode.data;
+    const milaSmithData = milaSmithRowNode.data!;
     milaSmithData.callRecords = [];
+    milaSmithData.calls = milaSmithData.callRecords.length;
     gridApi!.applyTransaction({ update: [milaSmithData] });
 }
 
 function onBtSetMilaCalls() {
     const milaSmithRowNode = gridApi!.getRowNode('177001')!;
-    const milaSmithData = milaSmithRowNode.data;
+    const milaSmithData = milaSmithRowNode.data!;
     milaSmithData.callRecords = [
         {
             name: 'susan',
@@ -99,6 +104,7 @@ function onBtSetMilaCalls() {
             number: '(02) 32367069',
         },
     ];
+    milaSmithData.calls = milaSmithData.callRecords.length;
     gridApi!.applyTransaction({ update: [milaSmithData] });
 }
 

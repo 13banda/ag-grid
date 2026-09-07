@@ -12,9 +12,7 @@ Framework specific Getting Started guides:
 
 This is not free software, this software is covered by copyright and to use you need a commercial license.
 
-Please see files:
-LICENSE.md
-SUPPORT_AND_MAINTENANCE.md
+See the [LICENSE file](https://www.ag-grid.com/eula/AG-Grid-Enterprise-License-Latest.html) for more info.
 
 # Issue Reporting
 

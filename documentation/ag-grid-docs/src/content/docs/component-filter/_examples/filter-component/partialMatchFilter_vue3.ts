@@ -1,59 +1,44 @@
 export default {
     template: `
-      <div style="border-radius: 5px; width: 200px; height: 50px; padding: 10px">
-        Partial Match Filter: <input style="height: 20px" :ref="'input'" v-model="text">
+      <div class="partial-match-filter">
+        <div>Partial Match Filter</div>
+        <div>
+            <input type="text" ref="eFilterText" v-model="filterText" v-on:input="updateFilter($event)" />
+        </div>
       </div>
     `,
-    data() {
+    data: function () {
         return {
-            text: '',
+            filterText: null,
         };
     },
     methods: {
-        isFilterActive() {
-            return this.text !== null && this.text !== undefined && this.text !== '';
+        updateFilter(event) {
+            const value = event?.target?.value;
+            this.params.onModelChange(value == null || value === '' ? null : value);
         },
 
-        doesFilterPass(params) {
-            const { node } = params;
-            const value = this.params.getValue(node).toString().toLowerCase();
-
-            return (
-                !this.text ||
-                this.text
-                    .toLowerCase()
-                    .split(' ')
-                    .every((filterWord) => {
-                        return value.indexOf(filterWord) >= 0;
-                    })
-            );
-        },
-
-        getModel() {
-            if (!this.isFilterActive()) {
-                return null;
+        refresh(newParams): boolean {
+            const currentValue = this.filterText;
+            const newValue = newParams.model ?? '';
+            if (newValue !== currentValue) {
+                this.filterText = newValue;
             }
-
-            return { value: this.text };
+            return true;
         },
 
-        setModel(model) {
-            this.text = model == null ? null : model.value;
-        },
-
-        afterGuiAttached() {
-            this.$refs.input.focus();
+        afterGuiAttached(params) {
+            if (!params || !params.suppressFocus) {
+                // focus the input element for keyboard navigation
+                this.$refs.eFilterText.focus();
+            }
         },
 
         componentMethod(message) {
-            alert(`Alert from PartialMatchFilterComponent ${message}`);
+            console.log(`Alert from PartialMatchFilterComponent ${message}`);
         },
     },
-    watch: {
-        text: function (val, oldVal) {
-            if (val !== oldVal) {
-                this.params.filterChangedCallback();
-            }
-        },
+    mounted: function () {
+        this.refresh(this.params);
     },
 };

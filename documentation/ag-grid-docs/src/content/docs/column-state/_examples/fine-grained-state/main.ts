@@ -3,10 +3,15 @@ import {
     ClientSideRowModelModule,
     ColumnApiModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnsToolPanelModule, PivotModule, RowGroupingPanelModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnApiModule,
@@ -14,7 +19,6 @@ ModuleRegistry.registerModules([
     ColumnsToolPanelModule,
     PivotModule,
     RowGroupingPanelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -49,7 +53,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     pivotPanelShow: 'always',
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 function onBtSortAthlete() {

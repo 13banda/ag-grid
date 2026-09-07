@@ -1,23 +1,22 @@
+import { _exists, _setAriaColSpan } from 'ag-stack';
+
 import { BeanStub } from '../../context/beanStub';
 import type { BeanCollection } from '../../context/context';
 import type { AgColumn } from '../../entities/agColumn';
 import type { AgColumnGroup } from '../../entities/agColumnGroup';
 import { isColumnGroup } from '../../entities/agColumnGroup';
 import { _isDomLayout } from '../../gridOptionsUtils';
-import { _setAriaColSpan } from '../../utils/aria';
-import { _last } from '../../utils/array';
-import { _exists } from '../../utils/generic';
+import { applyHorizontalPosition, getResolvedHorizontalOffset } from './horizontalPositionUtils';
 
 export class SetLeftFeature extends BeanStub {
-    private ariaEl: HTMLElement;
+    private readonly ariaEl: HTMLElement;
 
     private actualLeft: number;
 
     constructor(
         private readonly columnOrGroup: AgColumn | AgColumnGroup,
-        private eCell: HTMLElement,
-        beans: BeanCollection,
-        private colsSpanning?: AgColumn[]
+        private readonly eCell: HTMLElement,
+        beans: BeanCollection
     ) {
         super();
         this.columnOrGroup = columnOrGroup;
@@ -25,22 +24,18 @@ export class SetLeftFeature extends BeanStub {
         this.beans = beans;
     }
 
-    public setColsSpanning(colsSpanning: AgColumn[]): void {
-        this.colsSpanning = colsSpanning;
-        this.onLeftChanged();
-    }
-
     public getColumnOrGroup(): AgColumn | AgColumnGroup {
-        const { beans, colsSpanning } = this;
-        if (beans.gos.get('enableRtl') && colsSpanning) {
-            return _last(colsSpanning);
-        }
+        // column.getLeft() is "distance from start edge" — in both LTR and RTL,
+        // this.columnOrGroup is the start-edge column/group of any col-spanning range.
         return this.columnOrGroup;
     }
 
     public postConstruct(): void {
         const onLeftChanged = this.onLeftChanged.bind(this);
         this.addManagedListeners(this.columnOrGroup, { leftChanged: onLeftChanged });
+        if (isColumnGroup(this.columnOrGroup)) {
+            this.addManagedListeners(this.columnOrGroup, { displayedChildrenChanged: onLeftChanged });
+        }
         this.setLeftFirstTime();
 
         // when in print layout, the left position is also dependent on the width of the pinned sections.
@@ -65,11 +60,30 @@ export class SetLeftFeature extends BeanStub {
 
     private animateInLeft(): void {
         const colOrGroup = this.getColumnOrGroup();
+        const { gos, visibleCols } = this.beans;
+        const isRtl = gos.get('enableRtl');
+        const isPrintLayout = _isDomLayout(gos, 'print');
+        const width = colOrGroup.getActualWidth();
 
-        const oldActualLeft = this.modifyLeftForPrintLayout(colOrGroup, colOrGroup.getOldLeft()!);
-        const actualLeft = this.modifyLeftForPrintLayout(colOrGroup, colOrGroup.getLeft()!);
+        const oldActualLeft = getResolvedHorizontalOffset({
+            left: colOrGroup.getOldLeft()!,
+            pinned: colOrGroup.getPinned(),
+            width,
+            isPrintLayout,
+            isRtl,
+            visibleCols,
+        })!;
 
-        this.setLeft(oldActualLeft!);
+        const actualLeft = getResolvedHorizontalOffset({
+            left: colOrGroup.getLeft()!,
+            pinned: colOrGroup.getPinned(),
+            width,
+            isPrintLayout,
+            isRtl,
+            visibleCols,
+        })!;
+
+        this.setLeft(oldActualLeft);
 
         // we must keep track of the left we want to set to, as this would otherwise lead to a race
         // condition, if the user changed the left value many times in one VM turn, then we want to make
@@ -88,32 +102,17 @@ export class SetLeftFeature extends BeanStub {
 
     private onLeftChanged(): void {
         const colOrGroup = this.getColumnOrGroup();
-        const left = colOrGroup.getLeft();
-        this.actualLeft = this.modifyLeftForPrintLayout(colOrGroup, left!);
-        this.setLeft(this.actualLeft);
-    }
-
-    private modifyLeftForPrintLayout(colOrGroup: AgColumn | AgColumnGroup, leftPosition: number): number {
         const { gos, visibleCols } = this.beans;
-        const printLayout = _isDomLayout(gos, 'print');
-
-        if (!printLayout) {
-            return leftPosition;
-        }
-
-        if (colOrGroup.getPinned() === 'left') {
-            return leftPosition;
-        }
-
-        const leftWidth = visibleCols.getColsLeftWidth();
-
-        if (colOrGroup.getPinned() === 'right') {
-            const bodyWidth = visibleCols.bodyWidth;
-            return leftWidth + bodyWidth + leftPosition;
-        }
-
-        // is in body
-        return leftWidth + leftPosition;
+        const left = colOrGroup.getLeft();
+        this.actualLeft = getResolvedHorizontalOffset({
+            left,
+            pinned: colOrGroup.getPinned(),
+            width: colOrGroup.getActualWidth(),
+            isPrintLayout: _isDomLayout(gos, 'print'),
+            isRtl: gos.get('enableRtl'),
+            visibleCols,
+        })!;
+        this.setLeft(this.actualLeft);
     }
 
     private setLeft(value: number): void {
@@ -121,7 +120,8 @@ export class SetLeftFeature extends BeanStub {
         // displayed. there is logic in the rendering to fade these columns
         // out, so we don't try and change their left positions.
         if (_exists(value)) {
-            this.eCell.style.left = `${value}px`;
+            const colOrGroup = this.getColumnOrGroup();
+            this.setHorizontalPosition(colOrGroup, value);
         }
 
         if (isColumnGroup(this.columnOrGroup)) {
@@ -135,5 +135,17 @@ export class SetLeftFeature extends BeanStub {
                 _setAriaColSpan(this.ariaEl, children.length);
             }
         }
+    }
+
+    private setHorizontalPosition(colOrGroup: AgColumn | AgColumnGroup, left: number): void {
+        const { gos, visibleCols } = this.beans;
+        applyHorizontalPosition(this.eCell, {
+            offset: left,
+            pinned: colOrGroup.getPinned(),
+            width: colOrGroup.getActualWidth(),
+            isPrintLayout: _isDomLayout(gos, 'print'),
+            isRtl: gos.get('enableRtl'),
+            visibleCols,
+        });
     }
 }

@@ -5,12 +5,23 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule } from 'ag-grid-enterprise';
+import {
+    CalculatedColumnsModule,
+    ColumnMenuModule,
+    ColumnsToolPanelModule,
+    ContextMenuModule,
+} from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
+    CalculatedColumnsModule,
     TextFilterModule,
     NumberFilterModule,
     ClientSideRowModelModule,
@@ -18,7 +29,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     ColumnAutoSizeModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -34,6 +44,7 @@ const gridOptions: GridOptions<IOlympicData> = {
     defaultColDef: {
         minWidth: 100,
     },
+    calculatedColumns: true,
 };
 
 // setup the grid after the page has finished loading

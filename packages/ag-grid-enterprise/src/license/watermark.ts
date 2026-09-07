@@ -1,10 +1,17 @@
-import type { BeanCollection, ComponentSelector } from 'ag-grid-community';
-import { Component, RefPlaceholder } from 'ag-grid-community';
+import { RefPlaceholder } from 'ag-stack';
+
+import type { BeanCollection, ComponentSelector, ElementParams } from 'ag-grid-community';
+import { Component } from 'ag-grid-community';
 
 import type { GridLicenseManager as LicenseManager } from './gridLicenseManager';
-import { watermarkCSS } from './watermark.css-GENERATED';
+import watermarkCSS from './watermark.css';
 
-export class AgWatermark extends Component {
+const WatermarkElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-watermark',
+    children: [{ tag: 'div', ref: 'eLicenseTextRef', cls: 'ag-watermark-text' }],
+};
+class AgWatermark extends Component {
     licenseManager: LicenseManager;
 
     public wireBeans(beans: BeanCollection): void {
@@ -14,12 +21,7 @@ export class AgWatermark extends Component {
     private readonly eLicenseTextRef: HTMLElement = RefPlaceholder;
 
     constructor() {
-        super(
-            /* html*/
-            `<div class="ag-watermark">
-                <div data-ref="eLicenseTextRef" class="ag-watermark-text"></div>
-            </div>`
-        );
+        super(WatermarkElement);
         this.registerCSS(watermarkCSS);
     }
 
@@ -28,9 +30,9 @@ export class AgWatermark extends Component {
         this.setDisplayed(show);
 
         if (show) {
-            this.eLicenseTextRef.innerText = this.licenseManager.getWatermarkMessage();
+            this.eLicenseTextRef.textContent = this.licenseManager.getWatermarkMessage();
 
-            window.setTimeout(() => this.addCssClass('ag-opacity-zero'), 0);
+            window.setTimeout(() => this.addCss('ag-opacity-zero'), 0);
             window.setTimeout(() => this.setDisplayed(false), 5000);
         }
     }
@@ -40,7 +42,7 @@ export class AgWatermark extends Component {
     }
 }
 
-export const AgWatermarkSelector: ComponentSelector = {
+export const AgWatermarkSelector: ComponentSelector<Component> = {
     selector: 'AG-WATERMARK',
     component: AgWatermark,
 };

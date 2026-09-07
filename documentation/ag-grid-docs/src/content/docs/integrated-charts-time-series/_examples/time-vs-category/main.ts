@@ -12,12 +12,17 @@ import {
     ClientSideRowModelModule,
     ColumnApiModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, IntegratedChartsModule, RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnApiModule,
@@ -26,7 +31,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -40,6 +44,7 @@ const gridOptions: GridOptions = {
     columnDefs: getColumnDefs(),
     defaultColDef: { flex: 1 },
     cellSelection: true,
+    popupParent: document.body,
     enableCharts: true,
     chartThemeOverrides: {
         line: {
@@ -74,15 +79,6 @@ const gridOptions: GridOptions = {
                             // charts typings
                             return params.value + '°C';
                         },
-                    },
-                },
-            },
-            series: {
-                tooltip: {
-                    renderer: ({ datum, xKey, yKey }) => {
-                        return {
-                            content: `${formatDate(datum[xKey])}: ${Math.round(datum[yKey])}°C`,
-                        };
                     },
                 },
             },

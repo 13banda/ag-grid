@@ -1,6 +1,7 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "exclude": ["dist/**/*", ".astro/**/*"],
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist"],
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "react",
@@ -30,14 +31,7 @@
       "@utils/*": ["src/utils/*"],
       "@constants": ["src/constants.ts"],
       "@ag-website-shared/*": ["../../external/ag-website-shared/src/*"],
-
-      // Get auto completion in _examples
-      "ag-grid-community": ["../../packages/ag-grid-community/src/main.ts"],
-      "ag-grid-enterprise": ["../../packages/ag-grid-enterprise/src/main.ts"],
-
-      "ag-grid-react": ["../../packages/ag-grid-react/src/index.ts"],
-      "ag-grid-angular": ["../../packages/ag-grid-angular/projects/ag-grid-angular/src/public-api.ts"],
-      "ag-grid-vue3": ["../../packages/ag-grid-vue3/src/main.ts"]
+      "@generated-reference/*": ["../../dist/documentation/reference/*"]
     },
     "types": ["vitest/globals"]
   }

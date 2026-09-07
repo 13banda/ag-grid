@@ -1,0 +1,190 @@
+@use 'design-system' as *;
+
+$trial-licence-xs: 400px;
+$trial-licence-small: 680px;
+
+.trialForm {
+    display: flex;
+    flex-direction: column;
+    container-type: inline-size;
+}
+
+.inputs {
+    display: flex;
+    justify-content: space-between;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: $spacing-size-4;
+
+    @container (max-width: #{$trial-licence-xs}) {
+        flex-direction: column;
+        gap: $spacing-size-2;
+
+        .companyField {
+            margin-bottom: $spacing-size-2;
+        }
+    }
+
+    :global(.input-field) {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .companyField {
+        flex: 0 0 100%;
+    }
+
+    .emailField {
+        flex: 2;
+    }
+
+    input {
+        width: 100%;
+    }
+
+    @container (min-width: #{$trial-licence-small}) {
+        flex-wrap: nowrap;
+
+        .companyField {
+            flex: 2;
+        }
+
+        .emailField {
+            flex: 1;
+        }
+    }
+}
+
+.emailInputOuter {
+    position: relative;
+
+    input[type='email'] {
+        width: 100%;
+        padding: 0.375em 0.75em 0.375em 2.75em;
+    }
+
+    :global(.icon) {
+        --icon-size: #{$spacing-size-6};
+        --icon-color: var(--color-util-gray-400);
+
+        position: absolute;
+        top: 7px;
+        left: $spacing-size-3;
+    }
+}
+
+.consents {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-size-2;
+    margin-bottom: $spacing-size-4;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: $spacing-size-4;
+
+    p {
+        width: fit-content;
+    }
+
+    button {
+        width: 100%;
+
+        @container (min-width: #{$trial-licence-small}) {
+            width: fit-content;
+        }
+    }
+
+    @container (max-width: #{$trial-licence-small}) {
+        margin-top: $spacing-size-2;
+    }
+}
+
+.submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-size-2;
+}
+
+.submitSpinner {
+    flex-shrink: 0;
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: trial-form-spinner 0.7s linear infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation-duration: 2.4s;
+    }
+}
+
+@keyframes trial-form-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.statusMessage {
+    display: flex;
+    gap: $spacing-size-2;
+    align-items: center;
+    padding: $spacing-size-2 $spacing-size-3;
+    font-size: var(--text-fs-sm) !important;
+    line-height: var(--text-lh-sm) !important;
+    color: var(--color-gray-600);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-sm);
+
+    #{$selector-darkmode} & {
+        color: var(--color-gray-400);
+    }
+
+    &.errorMessage {
+        border-color: var(--color-util-warning-500);
+    }
+}
+
+.statusIconSuccess {
+    --icon-size: #{$spacing-size-6};
+    --icon-color: var(--color-bg-primary);
+
+    flex-shrink: 0;
+    padding: $spacing-size-1;
+    background-color: var(--color-success);
+    border-radius: 50%;
+}
+
+.statusIconError {
+    --icon-size: #{$spacing-size-6};
+    --icon-color: var(--color-util-warning-500);
+
+    flex-shrink: 0;
+}
+
+// Pricing page form changes
+:global(.trial-licence-form) {
+    .trialForm {
+        @media screen and (min-width: $breakpoint-pricing-large) {
+            padding-left: 18%;
+        }
+    }
+
+    .inputs {
+        flex-wrap: wrap;
+        gap: 0 $spacing-size-4;
+    }
+
+    .emailField {
+        width: 100%;
+    }
+
+    .actions {
+        margin-top: $spacing-size-4;
+    }
+}

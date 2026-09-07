@@ -1,25 +1,33 @@
+import { RefPlaceholder, _isVisible } from 'ag-stack';
+
 import type { GridBodyComp } from '../gridBodyComp/gridBodyComp';
 import { GridBodySelector } from '../gridBodyComp/gridBodyComp';
 import type { FocusableContainer } from '../interfaces/iFocusableContainer';
 import type { ISideBar } from '../interfaces/iSideBar';
 import type { UpdateLayoutClassesParams } from '../styling/layoutFeature';
 import { LayoutCssClasses } from '../styling/layoutFeature';
-import { _isVisible } from '../utils/dom';
-import { _logIfDebug } from '../utils/function';
-import type { ComponentSelector } from '../widgets/component';
-import { RefPlaceholder } from '../widgets/component';
-import type { Component } from '../widgets/component';
+import type { ElementParams } from '../utils/element';
+import { _logIfDebug } from '../utils/log';
+import type { Component, ComponentSelector } from '../widgets/component';
 import { TabGuardComp } from '../widgets/tabGuardComp';
 import type { IGridComp, OptionalGridComponents } from './gridCtrl';
 import { GridCtrl } from './gridCtrl';
 
+interface HeaderDropZonesComp extends Component {
+    getFocusableContainers?(): FocusableContainer[];
+}
+
 export class GridComp extends TabGuardComp {
     private readonly gridBody: GridBodyComp = RefPlaceholder;
-    private readonly sideBar: ISideBar & Component = RefPlaceholder;
-    private readonly pagination: TabGuardComp = RefPlaceholder;
+    private readonly toolbar: Component & FocusableContainer = RefPlaceholder;
+    private readonly gridHeaderDropZones: HeaderDropZonesComp = RefPlaceholder;
+    private readonly sideBar: ISideBar & Component & FocusableContainer = RefPlaceholder;
+    private readonly statusBar: Component & FocusableContainer = RefPlaceholder;
+    private readonly pagination: TabGuardComp & FocusableContainer = RefPlaceholder;
     private readonly rootWrapperBody: HTMLElement = RefPlaceholder;
+    private readonly ariaDescription: HTMLElement = RefPlaceholder;
 
-    private eGridDiv: HTMLElement;
+    private readonly eGridDiv: HTMLElement;
 
     constructor(eGridDiv: HTMLElement) {
         super();
@@ -29,8 +37,9 @@ export class GridComp extends TabGuardComp {
     public postConstruct(): void {
         const compProxy: IGridComp = {
             destroyGridUi: () => this.destroyBean(this),
-            setRtlClass: (cssClass: string) => this.addCssClass(cssClass),
             forceFocusOutOfContainer: this.forceFocusOutOfContainer.bind(this),
+            focusNextElementOutsideContainer: (up, eExcludeContainers) =>
+                this.focusNextElementOutsideContainer(up, [this.getGui(), ...eExcludeContainers]),
             updateLayoutClasses: this.updateLayoutClasses.bind(this),
             getFocusableContainers: this.getFocusableContainers.bind(this),
             setUserSelect: (value) => {
@@ -48,7 +57,7 @@ export class GridComp extends TabGuardComp {
         const requiredComps = [GridBodySelector, ...Object.values(comps).filter((c) => !!c)] as ComponentSelector[];
         this.setTemplate(template, requiredComps);
 
-        ctrl.setComp(compProxy, this.eGridDiv, this.getGui());
+        ctrl.setComp(compProxy, this.getGui(), this.ariaDescription);
 
         this.insertGridIntoDom();
 
@@ -57,6 +66,7 @@ export class GridComp extends TabGuardComp {
             onTabKeyDown: () => undefined,
             focusInnerElement: (fromBottom) => ctrl.focusInnerElement(fromBottom),
             forceFocusOutWhenTabGuardsAreEmpty: true,
+            isEmpty: () => !ctrl.isFocusable(),
         });
     }
 
@@ -64,7 +74,7 @@ export class GridComp extends TabGuardComp {
         const eGui = this.getGui();
         this.eGridDiv.appendChild(eGui);
         this.addDestroyFunc(() => {
-            this.eGridDiv.removeChild(eGui);
+            eGui.remove();
             _logIfDebug(this.gos, 'Grid removed from DOM');
         });
     }
@@ -77,34 +87,55 @@ export class GridComp extends TabGuardComp {
         eRootWrapperBodyClassList.toggle(NORMAL, normal);
         eRootWrapperBodyClassList.toggle(PRINT, print);
 
-        this.addOrRemoveCssClass(AUTO_HEIGHT, autoHeight);
-        this.addOrRemoveCssClass(NORMAL, normal);
-        this.addOrRemoveCssClass(PRINT, print);
+        this.toggleCss(AUTO_HEIGHT, autoHeight);
+        this.toggleCss(NORMAL, normal);
+        this.toggleCss(PRINT, print);
     }
 
-    private createTemplate(params: OptionalGridComponents): string {
-        const dropZones = params.gridHeaderDropZonesSelector
-            ? '<ag-grid-header-drop-zones></ag-grid-header-drop-zones>'
-            : '';
-        const sideBar = params.sideBarSelector ? '<ag-side-bar data-ref="sideBar"></ag-side-bar>' : '';
-        const statusBar = params.statusBarSelector ? '<ag-status-bar></ag-status-bar>' : '';
-        const watermark = params.watermarkSelector ? '<ag-watermark></ag-watermark>' : '';
-        const pagination = params.paginationSelector ? '<ag-pagination data-ref="pagination"></ag-pagination>' : '';
+    private createTemplate(params: OptionalGridComponents): ElementParams {
+        const toolbar: ElementParams | null = params.toolbarSelector ? { tag: 'ag-toolbar', ref: 'toolbar' } : null;
+        const dropZones: ElementParams | null = params.gridHeaderDropZonesSelector
+            ? { tag: 'ag-grid-header-drop-zones', ref: 'gridHeaderDropZones' }
+            : null;
+        const sideBar: ElementParams | null = params.sideBarSelector
+            ? {
+                  tag: 'ag-side-bar',
+                  ref: 'sideBar',
+              }
+            : null;
+        const statusBar: ElementParams | null = params.statusBarSelector
+            ? { tag: 'ag-status-bar', ref: 'statusBar' }
+            : null;
+        const watermark: ElementParams | null = params.watermarkSelector ? { tag: 'ag-watermark' } : null;
+        const pagination: ElementParams | null = params.paginationSelector
+            ? { tag: 'ag-pagination', ref: 'pagination' }
+            : null;
+        const ariaDescription: ElementParams = {
+            tag: 'div',
+            ref: 'ariaDescription',
+            cls: 'ag-aria-description-container',
+        };
 
-        const template =
-            /* html */
-            `<div class="ag-root-wrapper" role="presentation">
-                ${dropZones}
-                <div class="ag-root-wrapper-body" data-ref="rootWrapperBody" role="presentation">
-                    <ag-grid-body data-ref="gridBody"></ag-grid-body>
-                    ${sideBar}
-                </div>
-                ${statusBar}
-                ${pagination}
-                ${watermark}
-            </div>`;
-
-        return template;
+        return {
+            tag: 'div',
+            cls: 'ag-root-wrapper',
+            role: 'presentation',
+            children: [
+                toolbar,
+                dropZones,
+                ariaDescription,
+                {
+                    tag: 'div',
+                    ref: 'rootWrapperBody',
+                    cls: 'ag-root-wrapper-body',
+                    role: 'presentation',
+                    children: [{ tag: 'ag-grid-body', ref: 'gridBody' }, sideBar],
+                },
+                statusBar,
+                pagination,
+                watermark,
+            ],
+        };
     }
 
     public override getFocusableElement(): HTMLElement {
@@ -120,13 +151,19 @@ export class GridComp extends TabGuardComp {
     }
 
     protected getFocusableContainers(): FocusableContainer[] {
-        const focusableContainers: FocusableContainer[] = [this.gridBody];
+        const focusableContainers: FocusableContainer[] = [];
 
-        [this.sideBar, this.pagination].forEach((comp) => {
+        if (this.toolbar) {
+            focusableContainers.push(this.toolbar);
+        }
+
+        focusableContainers.push(...(this.gridHeaderDropZones?.getFocusableContainers?.() ?? []), this.gridBody);
+
+        for (const comp of [this.sideBar, this.statusBar, this.pagination]) {
             if (comp) {
                 focusableContainers.push(comp);
             }
-        });
+        }
 
         return focusableContainers.filter((el) => _isVisible(el.getGui()));
     }

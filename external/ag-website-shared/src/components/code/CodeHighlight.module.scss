@@ -1,0 +1,51 @@
+@use 'design-system' as *;
+
+.shikiPre {
+    overflow: auto !important;
+
+    :global(.line) {
+        -webkit-font-smoothing: subpixel-antialiased;
+    }
+}
+
+// Bash/shell: suppress Shiki token colours so all text renders as plain foreground
+.shikiPre:global(.language-bash),
+.shikiPre:global(.language-shell) {
+    .shikiCode :global(span) {
+        color: var(--color-fg-primary) !important;
+    }
+}
+
+.lineNumbers .shikiCode {
+    // Stretch the code element to fill a height-constrained container (e.g. the example
+    // runner code viewer) so its horizontal scrollbar sits at the container's bottom edge
+    // rather than directly under the last line of code.
+    height: 100%;
+    overflow: auto;
+    padding-left: 3.8em;
+    padding-top: 1.5em;
+    padding-bottom: 1.5em;
+    position: relative;
+
+    :global(.line) {
+        display: block;
+        counter-increment: shiki-line;
+        line-height: 0.1em; // hack for line number spacing
+
+        &::before {
+            content: counter(shiki-line);
+            display: inline-block;
+            width: 2em;
+            margin-left: -3.5em;
+            margin-right: 1em;
+            text-align: right;
+            // Overridable by blocks that paint their own palette.
+            color: var(--color-code-line-number, var(--color-util-brand-500));
+            opacity: var(--color-code-line-number-opacity, 0.33);
+
+            #{$selector-darkmode} & {
+                color: var(--color-code-line-number, var(--color-fg-primary));
+            }
+        }
+    }
+}

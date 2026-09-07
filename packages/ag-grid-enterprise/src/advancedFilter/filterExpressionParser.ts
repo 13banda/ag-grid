@@ -13,7 +13,7 @@ export class FilterExpressionParser {
     private joinExpressionParser: JoinFilterExpressionParser;
     private valid: boolean = false;
 
-    constructor(private params: FilterExpressionParserParams) {}
+    constructor(private readonly params: FilterExpressionParserParams) {}
 
     public parseExpression(): string {
         this.joinExpressionParser = new JoinFilterExpressionParser(this.params, 0);
@@ -31,7 +31,10 @@ export class FilterExpressionParser {
         if (!error) {
             return null;
         }
-        const { message, startPosition, endPosition } = error;
+        const { message, startPosition, endPosition, selfContained } = error;
+        if (selfContained) {
+            return this.params.advFilterExpSvc.translate('advancedFilterValidationMessageOnly', [message]);
+        }
         return startPosition < this.params.expression.length
             ? this.params.advFilterExpSvc.translate('advancedFilterValidationMessage', [
                   message,
@@ -40,26 +43,38 @@ export class FilterExpressionParser {
             : this.params.advFilterExpSvc.translate('advancedFilterValidationMessageAtEnd', [message]);
     }
 
-    public getFunctionString(): {
-        functionString: string;
-        params: FilterExpressionFunctionParams;
-    } {
-        const params = this.createFunctionParams();
-        return {
-            functionString: `return ${this.joinExpressionParser.getFunctionString(params)};`,
-            params,
-        };
-    }
-
-    public getFunctionParsed(): {
+    public getFunction(): {
         expressionFunction: FilterExpressionFunction;
         params: FilterExpressionFunctionParams;
     } {
         const params = this.createFunctionParams();
         return {
-            expressionFunction: this.joinExpressionParser.getFunctionParsed(params),
+            expressionFunction: this.joinExpressionParser.getFunction(params),
             params,
         };
+    }
+
+    /**
+     * The expression without the separators the parse found redundant, or null where it keeps them all.
+     * Only a list the caret has left is tidied: before its end bracket another value may still follow.
+     */
+    public stripRedundantSeparators(caretPosition: number): string | null {
+        const separators = this.params.redundantSeparators;
+        if (!separators) {
+            return null;
+        }
+        let expression = this.params.expression;
+        let stripped = false;
+        // Backwards, so removing one span cannot move the next one still to be removed.
+        for (let i = separators.length - 1; i >= 0; --i) {
+            const { startPosition, endPosition } = separators[i];
+            // The end bracket is the character after the span, so a caret past it has left the list.
+            if (caretPosition > endPosition + 1) {
+                expression = expression.slice(0, startPosition) + expression.slice(endPosition + 1);
+                stripped = true;
+            }
+        }
+        return stripped ? expression : null;
     }
 
     public getAutocompleteListParams(position: number): AutocompleteListParams {
@@ -70,8 +85,8 @@ export class FilterExpressionParser {
         return this.joinExpressionParser.updateExpression(position, updateEntry, type)!;
     }
 
-    public getModel(): AdvancedFilterModel | null {
-        return this.isValid() ? this.joinExpressionParser.getModel() : null;
+    public getModel(forBuilder?: boolean): AdvancedFilterModel | null {
+        return this.isValid() ? this.joinExpressionParser.getModel(forBuilder) : null;
     }
 
     private createFunctionParams(): FilterExpressionFunctionParams {

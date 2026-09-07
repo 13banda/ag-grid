@@ -1,5 +1,6 @@
+import type { AgSingletonBean } from 'ag-stack';
+
 import type { BeanCollection, BeanName } from './context';
-import type { GenericBean } from './genericBean';
 
 /**
  * We know that there is a risk in a change of behaviour if beans are registered in a different order due to the way
@@ -11,6 +12,9 @@ import type { GenericBean } from './genericBean';
  * We have not included beans from modules as they will be registered after the core beans in the order they are provided.
  */
 const orderedCoreBeans: BeanName[] = [
+    // Wire the logging bean first so its grid id is captured before any other bean can emit a diagnostic
+    // (e.g. from wireBeans), ensuring the diagnostic is attributed rather than falling back to untied.
+    'log',
     // Validate license first
     'licenseManager',
     // core beans only
@@ -40,6 +44,7 @@ const orderedCoreBeans: BeanName[] = [
     'pageBounds',
     'pagination',
     'pageBoundsListener',
+    'rowSpanSvc',
     'stickyRowSvc',
     'rowRenderer',
     'expressionSvc',
@@ -83,7 +88,6 @@ const orderedCoreBeans: BeanName[] = [
     'pivotColsSvc',
     'valueColsSvc',
     'rowGroupColsSvc',
-    'funcColsSvc',
     'colNames',
     'colViewport',
     'pivotResultCols',
@@ -96,8 +100,8 @@ const beanNamePosition: { [key in BeanName]?: number } = Object.fromEntries(
 );
 
 export function gridBeanInitComparator(
-    bean1: GenericBean<BeanName, BeanCollection>,
-    bean2: GenericBean<BeanName, BeanCollection>
+    bean1: AgSingletonBean<BeanCollection>,
+    bean2: AgSingletonBean<BeanCollection>
 ): number {
     // if the beans are not in the ordered list, just ensure they are after the ordered beans and stable to provided order
     const index1 = (bean1.beanName ? beanNamePosition[bean1.beanName] : undefined) ?? Number.MAX_SAFE_INTEGER;
@@ -106,9 +110,14 @@ export function gridBeanInitComparator(
 }
 
 export function gridBeanDestroyComparator(
-    bean1: GenericBean<BeanName, BeanCollection>,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    bean2: GenericBean<BeanName, BeanCollection>
+    bean1: AgSingletonBean<BeanCollection>,
+    bean2: AgSingletonBean<BeanCollection>
 ): number {
-    return bean1?.beanName === 'gridDestroySvc' ? -1 : 0;
+    if (bean1?.beanName === 'gridDestroySvc') {
+        return -1;
+    }
+    if (bean2?.beanName === 'gridDestroySvc') {
+        return 1;
+    }
+    return 0;
 }

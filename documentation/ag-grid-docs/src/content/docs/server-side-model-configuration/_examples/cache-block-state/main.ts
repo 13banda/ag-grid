@@ -1,5 +1,5 @@
 import type { GridApi, GridOptions, IServerSideDatasource, IServerSideGetRowsRequest } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -7,13 +7,12 @@ import {
     ServerSideRowModelModule,
 } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ColumnsToolPanelModule,
-    ColumnMenuModule,
-    ContextMenuModule,
-    ServerSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnsToolPanelModule, ColumnMenuModule, ContextMenuModule, ServerSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicDataWithId>;
 
@@ -38,7 +37,7 @@ const gridOptions: GridOptions<IOlympicDataWithId> = {
     // use the server-side row model
     rowModelType: 'serverSide',
 
-    // only keep 4 blocks of rows (default is keep all rows)
+    // only keep 2 blocks of rows (default is keep all rows)
     maxBlocksInCache: 2,
     debug: true,
 };

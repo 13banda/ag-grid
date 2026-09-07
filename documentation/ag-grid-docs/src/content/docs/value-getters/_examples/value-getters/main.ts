@@ -1,7 +1,12 @@
 import type { GridApi, GridOptions, ValueGetterParams } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 function hashValueGetter(params: ValueGetterParams) {
     return params.node ? Number(params.node.id) : null;
@@ -17,11 +22,8 @@ function a1000ValueGetter(params: ValueGetterParams) {
 function b137ValueGetter(params: ValueGetterParams) {
     return params.data.b * 137;
 }
-function randomValueGetter() {
-    return Math.floor(Math.random() * 1000);
-}
 function chainValueGetter(params: ValueGetterParams) {
-    return params.getValue('a&b') * 1000;
+    return params.getValue('aPlusB') * 1000;
 }
 function constValueGetter() {
     return 99999;
@@ -38,7 +40,7 @@ const gridOptions: GridOptions = {
         { field: 'b' },
         {
             headerName: 'A + B',
-            colId: 'a&b',
+            colId: 'aPlusB',
             valueGetter: abValueGetter,
         },
         {
@@ -50,11 +52,6 @@ const gridOptions: GridOptions = {
             headerName: 'B * 137',
             minWidth: 90,
             valueGetter: b137ValueGetter,
-        },
-        {
-            headerName: 'Random',
-            minWidth: 90,
-            valueGetter: randomValueGetter,
         },
         {
             headerName: 'Chain',

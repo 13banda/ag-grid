@@ -16,13 +16,18 @@ import {
     RenderApiModule,
     RowApiModule,
     TextEditorModule,
-    ValidationModule,
     ValueCacheModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -35,7 +40,6 @@ ModuleRegistry.registerModules([
     CellStyleModule,
     ClientSideRowModelModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let callCount = 1;

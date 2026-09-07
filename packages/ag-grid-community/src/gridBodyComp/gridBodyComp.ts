@@ -1,162 +1,243 @@
+import {
+    RefPlaceholder,
+    _setAriaColCount,
+    _setAriaMultiSelectable,
+    _setAriaRole,
+    _setAriaRowCount,
+    _setDisplayed,
+} from 'ag-stack';
+
 import { _isCellSelectionEnabled, _isMultiRowSelection } from '../gridOptionsUtils';
-import { GridHeaderSelector } from '../headerRendering/gridHeaderComp';
+import { GridHeaderComp } from '../headerRendering/gridHeaderComp';
+import type { FocusableContainer } from '../interfaces/iFocusableContainer';
+import type { VerticalSection, VerticalSectionMap } from '../interfaces/iGridSection';
 import { LayoutCssClasses } from '../styling/layoutFeature';
-import { _setAriaColCount, _setAriaMultiSelectable, _setAriaRole, _setAriaRowCount } from '../utils/aria';
-import { _observeResize } from '../utils/dom';
+import type { ElementParams } from '../utils/element';
 import type { ComponentSelector } from '../widgets/component';
-import { Component, RefPlaceholder } from '../widgets/component';
+import { Component } from '../widgets/component';
 import { FakeHScrollSelector } from './fakeHScrollComp';
 import { FakeVScrollSelector } from './fakeVScrollComp';
-import type { IGridBodyComp, RowAnimationCssClasses } from './gridBodyCtrl';
-import { CSS_CLASS_FORCE_VERTICAL_SCROLL, GridBodyCtrl } from './gridBodyCtrl';
+import type { IGridBodyComp, PinnedSectionState } from './gridBodyCtrl';
+import { GridBodyCtrl } from './gridBodyCtrl';
+import type { RowContainerComp } from './rowContainer/rowContainerComp';
 import { RowContainerSelector } from './rowContainer/rowContainerComp';
 import type { RowContainerName } from './rowContainer/rowContainerCtrl';
 
-function makeRowContainers(paramsMap: Record<string, { name: string }>, names: RowContainerName[]): string {
-    return names
-        .map((name) => {
-            const refName = `e${name[0].toUpperCase() + name.substring(1)}RowContainer`;
-            paramsMap[refName] = { name };
-            return /* html */ `<ag-row-container name="${name}" data-ref="${refName}"></ag-row-container>`;
-        })
-        .join('');
+function makeRowContainers(paramsMap: Record<string, { name: string }>, names: RowContainerName[]): ElementParams[] {
+    return names.map((name) => {
+        const refName = `e${name[0].toUpperCase() + name.substring(1)}RowContainer`;
+        paramsMap[refName] = { name };
+        return {
+            tag: 'ag-row-container',
+            ref: refName,
+            attrs: { name },
+        };
+    });
 }
 
 function getGridBodyTemplate(includeOverlay?: boolean): {
     paramsMap: Record<string, { name: string }>;
-    template: string;
+    elementParams: ElementParams;
 } {
     const paramsMap: Record<string, { name: string }> = {};
-    const template = /* html */ `<div class="ag-root ag-unselectable" data-ref="eGridRoot">
-        <ag-header-root></ag-header-root>
-        <div class="ag-floating-top" data-ref="eTop" role="presentation">
-            ${makeRowContainers(paramsMap, ['topLeft', 'topCenter', 'topRight', 'topFullWidth'])}
-        </div>
-        <div class="ag-body" data-ref="eBody" role="presentation">
-            <div class="ag-body-viewport" data-ref="eBodyViewport" role="presentation">
-            ${makeRowContainers(paramsMap, ['left', 'center', 'right', 'fullWidth'])}
-            </div>
-            <ag-fake-vertical-scroll></ag-fake-vertical-scroll>
-        </div>
-        <div class="ag-sticky-top" data-ref="eStickyTop" role="presentation">
-            ${makeRowContainers(paramsMap, ['stickyTopLeft', 'stickyTopCenter', 'stickyTopRight', 'stickyTopFullWidth'])}
-        </div>
-        <div class="ag-sticky-bottom" data-ref="eStickyBottom" role="presentation">
-            ${makeRowContainers(paramsMap, ['stickyBottomLeft', 'stickyBottomCenter', 'stickyBottomRight', 'stickyBottomFullWidth'])}
-        </div>
-        <div class="ag-floating-bottom" data-ref="eBottom" role="presentation">
-            ${makeRowContainers(paramsMap, ['bottomLeft', 'bottomCenter', 'bottomRight', 'bottomFullWidth'])}
-        </div>
-        <ag-fake-horizontal-scroll></ag-fake-horizontal-scroll>
-        ${includeOverlay ? /* html */ `<ag-overlay-wrapper></ag-overlay-wrapper>` : ''}
-    </div>`;
-    return { paramsMap, template };
+
+    const elementParams: ElementParams = {
+        tag: 'div',
+        cls: 'ag-root ag-unselectable',
+        role: 'presentation',
+        children: [
+            {
+                tag: 'div',
+                ref: 'eGridViewport',
+                cls: 'ag-grid-viewport',
+                role: 'presentation',
+                children: [
+                    {
+                        tag: 'div',
+                        ref: 'eGridScrollableArea',
+                        cls: 'ag-grid-scrollable-area',
+                        role: 'rowgroup',
+                        children: [
+                            {
+                                tag: 'div',
+                                ref: 'eTop',
+                                cls: 'ag-grid-pinned-top-rows',
+                                role: 'presentation',
+                                children: [
+                                    {
+                                        tag: 'div',
+                                        ref: 'eTopExtraRows',
+                                        cls: 'ag-extra-rows-container',
+                                        role: 'presentation',
+                                    },
+                                    ...makeRowContainers(paramsMap, ['pinnedTop', 'stickyTop']),
+                                ],
+                            },
+                            {
+                                tag: 'div',
+                                ref: 'eBody',
+                                cls: 'ag-grid-scrolling-rows',
+                                role: 'presentation',
+                                children: makeRowContainers(paramsMap, ['scrolling']),
+                            },
+                            {
+                                tag: 'div',
+                                ref: 'eBottom',
+                                cls: 'ag-grid-pinned-bottom-rows',
+                                role: 'presentation',
+                                children: makeRowContainers(paramsMap, ['stickyBottom', 'pinnedBottom']),
+                            },
+                        ],
+                    },
+                ],
+            },
+            { tag: 'ag-fake-horizontal-scroll' },
+            { tag: 'ag-fake-vertical-scroll' },
+            includeOverlay ? { tag: 'ag-overlay-wrapper' } : null,
+        ],
+    };
+    return { paramsMap, elementParams };
 }
 
-export class GridBodyComp extends Component {
-    private readonly eGridRoot: HTMLElement = RefPlaceholder;
-    private readonly eBodyViewport: HTMLElement = RefPlaceholder;
-    private readonly eStickyTop: HTMLElement = RefPlaceholder;
-    private readonly eStickyBottom: HTMLElement = RefPlaceholder;
+export class GridBodyComp extends Component implements FocusableContainer {
+    private readonly eGridViewport: HTMLElement = RefPlaceholder;
+    private readonly eGridScrollableArea: HTMLElement = RefPlaceholder;
     private readonly eTop: HTMLElement = RefPlaceholder;
+    private readonly eTopExtraRows: HTMLElement = RefPlaceholder;
     private readonly eBottom: HTMLElement = RefPlaceholder;
     private readonly eBody: HTMLElement = RefPlaceholder;
+    private readonly eScrollingRowContainer: RowContainerComp = RefPlaceholder;
+    private readonly ePinnedTopRowContainer: RowContainerComp = RefPlaceholder;
+    private readonly ePinnedBottomRowContainer: RowContainerComp = RefPlaceholder;
 
     private ctrl: GridBodyCtrl;
+    private pinnedSectionState: VerticalSectionMap<PinnedSectionState> = {
+        top: { height: 0, invisible: true },
+        bottom: { height: 0, invisible: true },
+    };
+    private stickyBottomRowsHeight = 0;
 
     public postConstruct() {
         const { overlays, rangeSvc } = this.beans;
         const overlaySelector = overlays?.getOverlayWrapperSelector();
 
-        const { paramsMap, template } = getGridBodyTemplate(!!overlaySelector);
+        const { paramsMap, elementParams } = getGridBodyTemplate(!!overlaySelector);
 
         this.setTemplate(
-            template,
+            elementParams,
             [
                 ...(overlaySelector ? [overlaySelector] : []),
                 FakeHScrollSelector,
                 FakeVScrollSelector,
-                GridHeaderSelector,
                 RowContainerSelector,
             ],
             paramsMap
         );
 
-        const setHeight = (height: number, element: HTMLElement) => {
-            const heightString = `${height}px`;
-            element.style.minHeight = heightString;
-            element.style.height = heightString;
-        };
-
         const compProxy: IGridBodyComp = {
-            setRowAnimationCssOnBodyViewport: (cssClass, animate) =>
-                this.setRowAnimationCssOnBodyViewport(cssClass, animate),
-            setColumnCount: (count) => _setAriaColCount(this.getGui(), count),
-            setRowCount: (count) => _setAriaRowCount(this.getGui(), count),
-            setTopHeight: (height) => setHeight(height, this.eTop),
-            setBottomHeight: (height) => setHeight(height, this.eBottom),
-            setTopDisplay: (display) => (this.eTop.style.display = display),
-            setBottomDisplay: (display) => (this.eBottom.style.display = display),
-            setStickyTopHeight: (height) => (this.eStickyTop.style.height = height),
-            setStickyTopTop: (top) => (this.eStickyTop.style.top = top),
-            setStickyTopWidth: (width) => (this.eStickyTop.style.width = width),
-            setStickyBottomHeight: (height) => {
-                this.eStickyBottom.style.height = height;
-                this.eStickyBottom.classList.toggle('ag-invisible', height === '0px');
+            setRowAnimationCssOnScrollableArea: (animate) => {
+                this.toggleClassForContainers('ag-row-animation', !!animate);
+                this.toggleClassForContainers('ag-row-no-animation', !animate);
             },
-            setStickyBottomBottom: (bottom) => (this.eStickyBottom.style.bottom = bottom),
-            setStickyBottomWidth: (width) => (this.eStickyBottom.style.width = width),
-            setColumnMovingCss: (cssClass, flag) => this.addOrRemoveCssClass(cssClass, flag),
+            setPreventRowAnimationCssOnContainers: (prevent) => {
+                this.toggleClassForContainers('ag-prevent-animation', prevent);
+            },
+            setColumnCount: (count) => _setAriaColCount(this.eGridViewport, count),
+            setRowCount: (count) => _setAriaRowCount(this.eGridViewport, count),
+            setPinnedSection: (section, state) => this.setPinnedSection(section, state),
+            setStickyBottomHeight: (height) => {
+                this.stickyBottomRowsHeight = Number.parseFloat(height) || 0;
+                this.refreshBottomSectionHeight();
+            },
+            setStickyBottomWidth: (width) => (this.eBottom.style.width = width),
+            setColumnMovingCss: (cssClass, flag) => this.toggleCss(cssClass, flag),
             updateLayoutClasses: (cssClass, params) => {
-                const classLists = [this.eBodyViewport.classList, this.eBody.classList];
+                const classLists = [this.eGridViewport.classList, this.eBody.classList];
 
-                classLists.forEach((classList) => {
+                for (const classList of classLists) {
                     classList.toggle(LayoutCssClasses.AUTO_HEIGHT, params.autoHeight);
                     classList.toggle(LayoutCssClasses.NORMAL, params.normal);
                     classList.toggle(LayoutCssClasses.PRINT, params.print);
-                });
+                }
 
-                this.addOrRemoveCssClass(LayoutCssClasses.AUTO_HEIGHT, params.autoHeight);
-                this.addOrRemoveCssClass(LayoutCssClasses.NORMAL, params.normal);
-                this.addOrRemoveCssClass(LayoutCssClasses.PRINT, params.print);
+                this.toggleCss(LayoutCssClasses.AUTO_HEIGHT, params.autoHeight);
+                this.toggleCss(LayoutCssClasses.NORMAL, params.normal);
+                this.toggleCss(LayoutCssClasses.PRINT, params.print);
             },
-            setAlwaysVerticalScrollClass: (cssClass, on) =>
-                this.eBodyViewport.classList.toggle(CSS_CLASS_FORCE_VERTICAL_SCROLL, on),
-            registerBodyViewportResizeListener: (listener) => {
-                const unsubscribeFromResize = _observeResize(this.beans, this.eBodyViewport, listener);
-                this.addDestroyFunc(() => unsubscribeFromResize());
+            setCellSelectableCss: (cssClass: string | null, selectable: boolean) => {
+                if (!cssClass) {
+                    return;
+                }
+                for (const ct of [this.eTop, this.eBody, this.eBottom]) {
+                    ct.classList.toggle(cssClass, selectable);
+                }
             },
-            setPinnedTopBottomOverflowY: (overflow) =>
-                (this.eTop.style.overflowY = this.eBottom.style.overflowY = overflow),
-            setCellSelectableCss: (cssClass: string, selectable: boolean) => {
-                [this.eTop, this.eBodyViewport, this.eBottom].forEach((ct) =>
-                    ct.classList.toggle(cssClass, selectable)
-                );
+            setGridScrollableAreaWidth: (width) => (this.eGridScrollableArea.style.width = width),
+            setPinnedColumnsOverflowing: (overflowing) => {
+                this.eGridViewport.classList.toggle('ag-pinned-columns-overflow', overflowing);
             },
-            setBodyViewportWidth: (width) => (this.eBodyViewport.style.width = width),
-            setGridRootRole: (role: 'grid' | 'treegrid') => _setAriaRole(this.eGridRoot, role),
+            setGridRole: (role: 'grid' | 'treegrid') => _setAriaRole(this.eGridViewport, role),
         };
 
         this.ctrl = this.createManagedBean(new GridBodyCtrl());
         this.ctrl.setComp(
             compProxy,
             this.getGui(),
-            this.eBodyViewport,
+            this.eGridViewport,
+            this.eBody,
             this.eTop,
-            this.eBottom,
-            this.eStickyTop,
-            this.eStickyBottom
+            this.eTopExtraRows,
+            this.eBottom
         );
 
+        this.createManagedBean(new GridHeaderComp(this.eTop, this.eGridViewport));
+
         if ((rangeSvc && _isCellSelectionEnabled(this.gos)) || _isMultiRowSelection(this.gos)) {
-            _setAriaMultiSelectable(this.getGui(), true);
+            _setAriaMultiSelectable(this.eGridViewport, true);
         }
     }
 
-    private setRowAnimationCssOnBodyViewport(cssClass: RowAnimationCssClasses, animateRows: boolean): void {
-        const bodyViewportClassList = this.eBodyViewport.classList;
-        bodyViewportClassList.toggle('ag-row-animation' as RowAnimationCssClasses, animateRows);
-        bodyViewportClassList.toggle('ag-row-no-animation' as RowAnimationCssClasses, !animateRows);
+    private toggleClassForContainers(cssClass: string, toggle: boolean): void {
+        for (const eContainer of [
+            this.eScrollingRowContainer,
+            this.ePinnedTopRowContainer,
+            this.ePinnedBottomRowContainer,
+        ]) {
+            const eGui = eContainer.getGui();
+            eGui.classList.toggle(cssClass, toggle);
+        }
+    }
+
+    private setPinnedSection(section: VerticalSection, state: PinnedSectionState): void {
+        this.pinnedSectionState[section] = state;
+        const { height, invisible } = state;
+        const eGridScrollableArea = this.eGridScrollableArea;
+        if (section === 'top') {
+            const eTop = this.eTop;
+            const topSectionHeight = `calc(var(--ag-header-rows-height, 0px) + ${height}px)`;
+            eTop.style.setProperty('--ag-top-rows-height', `${height}px`);
+            eTop.style.minHeight = topSectionHeight;
+            eTop.style.height = topSectionHeight;
+            eGridScrollableArea.classList.toggle('ag-has-top-pinned-rows', !invisible);
+        } else {
+            this.eBottom.style.setProperty('--ag-bottom-rows-height', `${height}px`);
+            eGridScrollableArea.classList.toggle('ag-has-bottom-pinned-rows', !invisible);
+            this.refreshBottomSectionHeight();
+        }
+    }
+
+    private refreshBottomSectionHeight(): void {
+        const bottomSection = this.pinnedSectionState.bottom;
+        const totalHeight = bottomSection.height + this.stickyBottomRowsHeight;
+        const heightString = `${totalHeight}px`;
+        const eBottom = this.eBottom;
+        eBottom.style.minHeight = heightString;
+        eBottom.style.height = heightString;
+        _setDisplayed(eBottom, totalHeight > 0, { skipAriaHidden: true });
+    }
+
+    public getFocusableContainerName(): 'gridBody' {
+        return 'gridBody';
     }
 }
 export const GridBodySelector: ComponentSelector = {

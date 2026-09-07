@@ -1,5 +1,5 @@
 import type { WrappableInterface } from 'ag-grid-community';
-import { BaseComponentWrapper, _warn } from 'ag-grid-community';
+import { BaseComponentWrapper, _warnForGrid } from 'ag-grid-community';
 
 import { VueComponentFactory } from './VueComponentFactory';
 
@@ -9,7 +9,7 @@ interface VueWrappableInterface extends WrappableInterface {
 
 export class VueFrameworkComponentWrapper extends BaseComponentWrapper<WrappableInterface> {
     private parent: any | null;
-    private provides: any | null;
+    private readonly provides: any | null;
 
     constructor(parent: any, provides?: any) {
         super();
@@ -19,7 +19,6 @@ export class VueFrameworkComponentWrapper extends BaseComponentWrapper<Wrappable
     }
 
     protected createWrapper(component: any): WrappableInterface {
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
         const that = this;
 
         class DynamicComponent extends VueComponent<any> implements WrappableInterface {
@@ -60,7 +59,8 @@ export class VueFrameworkComponentWrapper extends BaseComponentWrapper<Wrappable
 
             public processMethod(methodName: string, args: IArguments): any {
                 if (methodName === 'refresh') {
-                    this.getFrameworkComponentInstance().params = args[0];
+                    // Freeze params to prevent components from accidentally mutating shared objects
+                    this.getFrameworkComponentInstance().params = Object.freeze(args[0]);
                 }
 
                 if (this.hasMethod(methodName)) {
@@ -80,7 +80,13 @@ export class VueFrameworkComponentWrapper extends BaseComponentWrapper<Wrappable
     }
 
     public createComponent(component: any, params: any): any {
-        return VueComponentFactory.createAndMountComponent(component, params, this.parent!, this.provides!);
+        return VueComponentFactory.createAndMountComponent(
+            component,
+            params,
+            this.parent!,
+            this.provides!,
+            this.gridId
+        );
     }
 
     protected override createMethodProxy(
@@ -88,6 +94,8 @@ export class VueFrameworkComponentWrapper extends BaseComponentWrapper<Wrappable
         methodName: string,
         mandatory: boolean
     ): () => any {
+        // Grid ID is always set at this point
+        const gridId = this.gridId!;
         return function () {
             if (wrapper.hasMethod(methodName)) {
                 // eslint-disable-next-line prefer-rest-params
@@ -95,7 +103,7 @@ export class VueFrameworkComponentWrapper extends BaseComponentWrapper<Wrappable
             }
 
             if (mandatory) {
-                _warn(233, { methodName });
+                _warnForGrid(gridId, 233, { methodName });
             }
             return null;
         };
@@ -122,7 +130,7 @@ abstract class VueComponent<P> {
         ) {
             this.getFrameworkComponentInstance().destroy();
         }
-        this.unmount();
+        this.unmount?.();
     }
 
     public getFrameworkComponentInstance(): any {

@@ -2,7 +2,7 @@
    slightly more specific than screen styles to ensure that customers don't break
    print while overriding screen styles */
 .ag-layout-print {
-    &.ag-body {
+    &.ag-grid-scrolling-rows {
         display: block;
         height: unset;
     }
@@ -12,6 +12,7 @@
         the viewport (AG-5616) and other values like `inline-flex` will add a
         small gap at the top (AG-9296) */
         display: inline-block;
+        container-type: normal;
     }
 
     .ag-body-vertical-scroll {
@@ -21,21 +22,16 @@
     .ag-body-horizontal-scroll {
         display: none;
     }
-
-    &.ag-force-vertical-scroll {
-        overflow-y: visible !important;
-    }
 }
 
 @media print {
     .ag-root-wrapper.ag-layout-print {
         display: table;
+        container-type: normal;
 
         .ag-root-wrapper-body,
         .ag-root,
-        .ag-body-viewport,
-        .ag-center-cols-container,
-        .ag-center-cols-viewport,
+        .ag-grid-scrolling-container,
         .ag-body-horizontal-scroll-viewport,
         .ag-virtual-list-viewport {
             /* Need auto height because 100% height elements with overflow hidden

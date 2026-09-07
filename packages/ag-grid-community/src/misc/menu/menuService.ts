@@ -1,19 +1,22 @@
+import { _isIOSUserAgent, _requestAnimationFrame } from 'ag-stack';
+
 import type { NamedBean } from '../../context/bean';
 import { BeanStub } from '../../context/beanStub';
+import type { BeanCollection } from '../../context/context';
 import type { AgColumn } from '../../entities/agColumn';
-import { isColumn } from '../../entities/agColumn';
 import type { AgProvidedColumnGroup } from '../../entities/agProvidedColumnGroup';
 import type { ColumnEventType } from '../../events';
 import { _isLegacyMenuEnabled } from '../../gridOptionsUtils';
 import type { HeaderCellCtrl } from '../../headerRendering/cells/column/headerCellCtrl';
 import type { ContainerType } from '../../interfaces/iAfterGuiAttachedParams';
 import type { Column } from '../../interfaces/iColumn';
-import type { IMenuFactory } from '../../interfaces/iMenuFactory';
-import { _isIOSUserAgent } from '../../utils/browser';
-import { _requestAnimationFrame } from '../animationFrameService';
+import type { IMenuFactory, ShowMenuAfterButtonClickOptions } from '../../interfaces/iMenuFactory';
+
+const OPEN_MENU_CLASS = 'ag-has-menu-open';
 
 interface BaseShowColumnMenuParams {
     column?: Column;
+    onClosedCallback?: () => void;
 }
 
 interface BaseShowFilterMenuParams {
@@ -35,20 +38,43 @@ interface AutoShowMenuParams {
     positionBy: 'auto';
 }
 
-export type ShowColumnMenuParams = (MouseShowMenuParams | ButtonShowMenuParams | AutoShowMenuParams) &
+type ShowColumnMenuParams = (MouseShowMenuParams | ButtonShowMenuParams | AutoShowMenuParams) &
     BaseShowColumnMenuParams;
 
-export type ShowFilterMenuParams = (MouseShowMenuParams | ButtonShowMenuParams | AutoShowMenuParams) &
+type ShowFilterMenuParams = (MouseShowMenuParams | ButtonShowMenuParams | AutoShowMenuParams) &
     BaseShowFilterMenuParams;
 
+type ToggleColumnMenuParams = ButtonShowMenuParams & BaseShowColumnMenuParams;
+type ToggleFilterMenuParams = ButtonShowMenuParams & BaseShowFilterMenuParams;
+type ButtonMenuParams = {
+    buttonElement: HTMLElement;
+    column?: Column;
+    onClosedCallback?: () => void;
+};
+
+export type PopupToggleResult = 'opened' | 'closed' | 'declined';
+
+interface ActiveButtonMenu {
+    buttonElement: HTMLElement;
+    menuFactory: IMenuFactory;
+    token: object;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class MenuService extends BeanStub implements NamedBean {
     beanName = 'menuSvc' as const;
 
     private activeMenuFactory?: IMenuFactory;
+    private activeButtonMenu?: ActiveButtonMenu;
 
     public postConstruct(): void {
         const { enterpriseMenuFactory, filterMenuFactory } = this.beans;
         this.activeMenuFactory = enterpriseMenuFactory ?? filterMenuFactory;
+    }
+
+    public override destroy(): void {
+        this.setActiveButtonMenu();
+        super.destroy();
     }
 
     public showColumnMenu(params: ShowColumnMenuParams): void {
@@ -56,10 +82,15 @@ export class MenuService extends BeanStub implements NamedBean {
     }
 
     public showFilterMenu(params: ShowFilterMenuParams): void {
-        const { enterpriseMenuFactory, filterMenuFactory } = this.beans;
-        const menuFactory =
-            enterpriseMenuFactory && _isLegacyMenuEnabled(this.gos) ? enterpriseMenuFactory : filterMenuFactory;
-        this.showColumnMenuCommon(menuFactory, params, params.containerType, true);
+        this.showColumnMenuCommon(getFilterMenuFactory(this.beans), params, params.containerType, true);
+    }
+
+    public toggleColumnMenu(params: ToggleColumnMenuParams): PopupToggleResult {
+        return this.toggleMenu(this.activeMenuFactory, params, 'columnMenu');
+    }
+
+    public toggleFilterMenu(params: ToggleFilterMenuParams): PopupToggleResult {
+        return this.toggleMenu(getFilterMenuFactory(this.beans), params, params.containerType, true);
     }
 
     public showHeaderContextMenu(
@@ -67,6 +98,7 @@ export class MenuService extends BeanStub implements NamedBean {
         mouseEvent?: MouseEvent,
         touchEvent?: TouchEvent
     ): void {
+        this.setActiveButtonMenu();
         this.activeMenuFactory?.showMenuAfterContextMenuEvent(column, mouseEvent, touchEvent);
     }
 
@@ -77,8 +109,87 @@ export class MenuService extends BeanStub implements NamedBean {
         this.activeMenuFactory?.hideActiveMenu();
     }
 
+    public hideFilterMenu(): void {
+        getFilterMenuFactory(this.beans)?.hideActiveMenu();
+    }
+
+    private toggleMenu(
+        menuFactory: IMenuFactory | undefined,
+        params: ToggleColumnMenuParams | ToggleFilterMenuParams,
+        containerType: ContainerType,
+        filtersOnly?: boolean
+    ): PopupToggleResult {
+        if (!menuFactory) {
+            return 'declined';
+        }
+
+        const { activeButtonMenu } = this;
+        const { buttonElement } = params;
+        if (activeButtonMenu?.menuFactory === menuFactory && activeButtonMenu.buttonElement === buttonElement) {
+            this.setActiveButtonMenu();
+            menuFactory.hideActiveMenu();
+            return 'closed';
+        }
+
+        this.setActiveButtonMenu();
+        this.hidePopupMenu();
+        this.hideFilterMenu();
+
+        return this.showButtonMenu(menuFactory, params, containerType, {
+            filtersOnly,
+            suppressCloseOnEventSource: true,
+        })
+            ? 'opened'
+            : 'declined';
+    }
+
+    private showButtonMenu(
+        menuFactory: IMenuFactory | undefined,
+        params: ButtonMenuParams,
+        containerType: ContainerType,
+        options: ShowMenuAfterButtonClickOptions
+    ): boolean {
+        if (!menuFactory) {
+            return false;
+        }
+
+        const { buttonElement } = params;
+        const token = {};
+        let closed = false;
+        const onClosedCallback = (event?: Event) => {
+            closed = true;
+            if (this.activeButtonMenu?.token === token) {
+                this.setActiveButtonMenu();
+            }
+            if (event instanceof KeyboardEvent && buttonElement.isConnected) {
+                buttonElement.focus({ preventScroll: true });
+            }
+            params.onClosedCallback?.();
+        };
+        const opened = menuFactory.showMenuAfterButtonClick(
+            params.column as AgColumn | undefined,
+            buttonElement,
+            containerType,
+            onClosedCallback,
+            options
+        );
+
+        if (!opened || closed) {
+            return false;
+        }
+
+        this.setActiveButtonMenu({ buttonElement, menuFactory, token });
+        return true;
+    }
+
+    private setActiveButtonMenu(activeButtonMenu?: ActiveButtonMenu): void {
+        this.activeButtonMenu?.buttonElement.classList.remove(OPEN_MENU_CLASS);
+        this.activeButtonMenu = activeButtonMenu;
+        activeButtonMenu?.buttonElement.classList.add(OPEN_MENU_CLASS);
+    }
+
     public isColumnMenuInHeaderEnabled(column: AgColumn): boolean {
-        const { suppressHeaderMenuButton } = column.getColDef();
+        const { suppressHeaderMenuButton } = column.colDef;
         return (
             !suppressHeaderMenuButton &&
             !!this.activeMenuFactory?.isMenuEnabled(column) &&
@@ -87,11 +198,11 @@ export class MenuService extends BeanStub implements NamedBean {
     }
 
     public isFilterMenuInHeaderEnabled(column: AgColumn): boolean {
-        return !column.getColDef().suppressHeaderFilterButton && !!this.beans.filterManager?.isFilterAllowed(column);
+        return !column.colDef.suppressHeaderFilterButton && !!this.beans.filterManager?.isFilterAllowed(column);
     }
 
     public isHeaderContextMenuEnabled(column?: AgColumn | AgProvidedColumnGroup): boolean {
-        const colDef = column && isColumn(column) ? column.getColDef() : column?.getColGroupDef();
+        const colDef = column?.isColumn ? column.colDef : column?.getColGroupDef();
         return !colDef?.suppressHeaderContextMenu && this.gos.get('columnMenu') === 'new';
     }
 
@@ -152,31 +263,40 @@ export class MenuService extends BeanStub implements NamedBean {
         containerType: ContainerType,
         filtersOnly?: boolean
     ): void {
-        const { positionBy } = params;
+        const { positionBy, onClosedCallback } = params;
         const column = params.column as AgColumn | undefined;
         if (positionBy === 'button') {
-            const { buttonElement } = params;
-            menuFactory?.showMenuAfterButtonClick(column, buttonElement, containerType, filtersOnly);
+            this.setActiveButtonMenu();
+            this.showButtonMenu(menuFactory, params, containerType, {
+                filtersOnly,
+                suppressCloseOnEventSource: true,
+            });
         } else if (positionBy === 'mouse') {
+            this.setActiveButtonMenu();
             const { mouseEvent } = params;
-            menuFactory?.showMenuAfterMouseEvent(column, mouseEvent, containerType, filtersOnly);
+            menuFactory?.showMenuAfterMouseEvent(column, mouseEvent, containerType, onClosedCallback, filtersOnly);
         } else if (column) {
+            this.setActiveButtonMenu();
             const beans = this.beans;
             const ctrlsSvc = beans.ctrlsSvc;
             // auto
             ctrlsSvc.getScrollFeature().ensureColumnVisible(column, 'auto');
             // make sure we've finished scrolling into view before displaying the menu
             _requestAnimationFrame(beans, () => {
-                const headerCellCtrl = ctrlsSvc
-                    .getHeaderRowContainerCtrl(column.getPinned())
-                    ?.getHeaderCtrlForColumn(column) as HeaderCellCtrl | undefined;
+                const headerCellCtrl = ctrlsSvc.getHeaderRowContainerCtrl()?.getHeaderCtrlForColumn(column) as
+                    | HeaderCellCtrl
+                    | undefined;
 
                 if (headerCellCtrl) {
-                    menuFactory?.showMenuAfterButtonClick(
-                        column,
-                        headerCellCtrl.getAnchorElementForMenu(filtersOnly),
+                    this.showButtonMenu(
+                        menuFactory,
+                        {
+                            column,
+                            buttonElement: headerCellCtrl.getAnchorElementForMenu(filtersOnly),
+                            onClosedCallback,
+                        },
                         containerType,
-                        true
+                        { filtersOnly, suppressCloseOnEventSource: true }
                     );
                 }
             });
@@ -184,9 +304,15 @@ export class MenuService extends BeanStub implements NamedBean {
     }
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function _setColMenuVisible(column: AgColumn, visible: boolean, source: ColumnEventType): void {
     if (column.menuVisible !== visible) {
         column.menuVisible = visible;
         column.dispatchColEvent('menuVisibleChanged', source);
     }
+}
+
+function getFilterMenuFactory(beans: BeanCollection): IMenuFactory | undefined {
+    const { enterpriseMenuFactory, filterMenuFactory, gos } = beans;
+    return enterpriseMenuFactory && _isLegacyMenuEnabled(gos) ? enterpriseMenuFactory : filterMenuFactory;
 }

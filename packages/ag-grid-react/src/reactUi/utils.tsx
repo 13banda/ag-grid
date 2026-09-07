@@ -11,9 +11,9 @@ export class CssClasses {
     private classesMap: { [name: string]: boolean } = {};
 
     constructor(...initialClasses: string[]) {
-        initialClasses.forEach((className) => {
+        for (const className of initialClasses) {
             this.classesMap[className] = true;
-        });
+        }
     }
 
     public setClass(className: string, on: boolean): CssClasses {
@@ -54,9 +54,6 @@ const reactVersion = React.version?.split('.')[0];
 // We only want to disable flushSync and change rendering behaviour for React 16 and 17
 const isReactVersion17Minus = reactVersion === '16' || reactVersion === '17';
 
-export function isReact17Minus(): boolean {
-    return isReactVersion17Minus;
-}
 export function isReact19(): boolean {
     return reactVersion === '19';
 }
@@ -86,6 +83,33 @@ export const agFlushSync = (useFlushSync: boolean, fn: () => void) => {
         fn();
     }
 };
+
+/**
+ * Wrapper around startTransition to provide backwards compatibility with React 16-17
+ */
+export const agStartTransition = (fn: () => void) => {
+    if (!isReactVersion17Minus) {
+        (React as any).startTransition(fn);
+    } else {
+        fn();
+    }
+};
+
+/**
+ * Wrapper around useSyncExternalStore to provide backwards compatibility with React 16-17
+ */
+export function agUseSyncExternalStore<T>(
+    subscribe: (onStoreChange: () => void) => () => void,
+    getSnapshot: () => T,
+    defaultSnapshot: T
+): T {
+    if ((React as any).useSyncExternalStore) {
+        return React.useSyncExternalStore(subscribe, getSnapshot);
+    } else {
+        // Do nothing as this value cannot be used
+        return defaultSnapshot;
+    }
+}
 
 /**
  * The aim of this function is to maintain references to prev or next values where possible.

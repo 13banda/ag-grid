@@ -1,72 +1,69 @@
-import type { IFilterOptionDef } from '../../interfaces/iFilter';
-import { _warn } from '../../validation/logging';
-import type { ScalarFilterParams } from './iScalarFilter';
-import type { SimpleFilterParams } from './iSimpleFilter';
+import type { LogService } from '../../validation/logService';
+import type { IFilterOptionDef, ISimpleFilterParams } from './iSimpleFilter';
+import { _classifyFilterOptions } from './simpleFilterUtils';
 
 /* Common logic for options, used by both filters and floating filters. */
 export class OptionsFactory {
-    protected customFilterOptions: { [name: string]: IFilterOptionDef } = {};
+    private customFilterOptions: Map<string, IFilterOptionDef>;
+    /** As configured, so a refresh compares what it was given rather than what it kept. */
+    private configuredOptions: (IFilterOptionDef | string)[];
+    /** What the dropdown offers: the configured list minus its malformed entries, or the built-ins if none survive. */
     public filterOptions: (IFilterOptionDef | string)[];
-    public defaultOption: string;
+    private offeredOptions: Map<string, IFilterOptionDef | string>;
+    public defaultOption?: string;
 
-    public init(params: ScalarFilterParams, defaultOptions: string[]): void {
-        this.filterOptions = params.filterOptions || defaultOptions;
-        this.mapCustomOptions();
-        this.selectDefaultItem(params);
+    public init(log: LogService, params: ISimpleFilterParams, defaultOptions: string[]): void {
+        this.configuredOptions = params.filterOptions ?? defaultOptions;
+        this.buildOptions(log, defaultOptions);
+        this.defaultOption = this.getDefaultItem(log, params.defaultOption);
     }
 
-    private mapCustomOptions(): void {
-        const { filterOptions } = this;
-        if (!filterOptions) {
-            return;
+    public refresh(log: LogService, params: ISimpleFilterParams, defaultOptions: string[]): void {
+        const filterOptions = params.filterOptions ?? defaultOptions;
+        if (this.configuredOptions !== filterOptions) {
+            this.configuredOptions = filterOptions;
+            this.buildOptions(log, defaultOptions);
         }
-
-        filterOptions.forEach((filterOption) => {
-            if (typeof filterOption === 'string') {
-                return;
-            }
-
-            const requiredProperties = [['displayKey'], ['displayName'], ['predicate', 'test']];
-            const propertyCheck = (keys: [keyof IFilterOptionDef]) => {
-                if (!keys.some((key) => filterOption[key] != null)) {
-                    _warn(72, { keys });
-                    return false;
-                }
-
-                return true;
-            };
-
-            if (!requiredProperties.every(propertyCheck)) {
-                this.filterOptions = filterOptions.filter((v) => v === filterOption) || [];
-                return;
-            }
-
-            this.customFilterOptions[filterOption.displayKey] = filterOption;
-        });
+        this.defaultOption = this.getDefaultItem(log, params.defaultOption);
     }
 
-    private selectDefaultItem(params: SimpleFilterParams): void {
-        const { filterOptions } = this;
-        if (params.defaultOption) {
-            this.defaultOption = params.defaultOption;
-        } else if (filterOptions.length >= 1) {
-            const firstFilterOption = filterOptions[0];
-
-            if (typeof firstFilterOption === 'string') {
-                this.defaultOption = firstFilterOption;
-            } else if (firstFilterOption.displayKey) {
-                this.defaultOption = firstFilterOption.displayKey;
-            } else {
-                // invalid FilterOptionDef supplied as it doesn't contain a 'displayKey
-                _warn(73);
-            }
-        } else {
-            //no filter options for filter
-            _warn(74);
+    /** Rebuilt wholesale, so a `predicate` the previous list carried cannot survive into this one. */
+    private buildOptions(log: LogService, defaultOptions: string[]): void {
+        this.collectUsableOptions(log, this.configuredOptions);
+        // A column with nothing to offer cannot open its filter at all, so a list that keeps none falls back.
+        if (!this.filterOptions.length) {
+            log.warn(74);
+            this.collectUsableOptions(log, defaultOptions);
         }
+    }
+
+    private collectUsableOptions(log: LogService, configuredOptions: (IFilterOptionDef | string)[]): void {
+        const { offered, customOptions } = _classifyFilterOptions(configuredOptions, (keys) => log.warn(72, { keys }));
+        this.offeredOptions = offered;
+        this.filterOptions = [...offered.values()];
+        this.customFilterOptions = customOptions;
+    }
+
+    private getDefaultItem(log: LogService, defaultOption?: string): string | undefined {
+        const firstFilterOption = this.filterOptions[0];
+        if (firstFilterOption == null) {
+            return undefined;
+        }
+        // Only an option the dropdown lists can be selected into it.
+        if (defaultOption != null) {
+            if (this.hasOption(defaultOption)) {
+                return defaultOption;
+            }
+            log.warn(326, { defaultOption });
+        }
+        return typeof firstFilterOption === 'string' ? firstFilterOption : firstFilterOption.displayKey;
+    }
+
+    public hasOption(key?: string | null): boolean {
+        return key != null && this.offeredOptions.has(key);
     }
 
     public getCustomOption(name?: string | null): IFilterOptionDef | undefined {
-        return this.customFilterOptions[name!];
+        return name == null ? undefined : this.customFilterOptions.get(name);
     }
 }

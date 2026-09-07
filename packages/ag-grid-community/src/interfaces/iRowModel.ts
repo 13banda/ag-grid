@@ -1,4 +1,5 @@
 import type { RowNode } from '../entities/rowNode';
+import type { OverlayType } from '../rendering/overlays/overlayComponent';
 
 export interface RowBounds {
     rowTop: number;
@@ -8,7 +9,22 @@ export interface RowBounds {
 
 export type RowModelType = 'infinite' | 'viewport' | 'clientSide' | 'serverSide';
 
+export type ForEachNodeCallback<TData = any> = (node: RowNode<TData>, index: number) => void;
+
 export interface IRowModel {
+    /**
+     * The root row.
+     * - in Client Side Row Model and Server Side Row Model, this is the top level node above all groups and rows.
+     * - in Infinite Row Model and Viewport Row Model, this is a dummy empty node with no children as these row models do not have a concept of hierarchy.
+     */
+    readonly rootNode: RowNode | null;
+
+    /** True when grouping or tree data is active (i.e. there may be group nodes below root). */
+    readonly hierarchical: boolean;
+
+    /** True while a CSRM row-data update and its pipeline refresh are in flight; unset on other models. */
+    readonly refreshingData?: boolean;
+
     /** Returns the rowNode at the given index. */
     getRow(index: number): RowNode | undefined;
 
@@ -20,6 +36,7 @@ export interface IRowModel {
 
     getTopLevelRowCount(): number;
     getTopLevelRowDisplayedIndex(topLevelIndex: number): number;
+    getTopLevelIndexFromDisplayedIndex?(displayedIndex: number): number;
 
     /** Returns the row index at the given pixel */
     getRowIndexAtPixel(pixel: number): number;
@@ -36,13 +53,19 @@ export interface IRowModel {
      * uses to know if there are rows to render or not. */
     isRowsToRender(): boolean;
 
+    getOverlayType(): OverlayType | null;
+
     /** Returns all rows in range that should be selected. If there is a gap in range (non ClientSideRowModel) then
      *  then no rows should be returned  */
     getNodesInRangeForSelection(first: RowNode, last: RowNode): RowNode[] | null;
 
     /** Iterate through each node. What this does depends on the model type. For clientSide, goes through
      * all nodes. For serverSide, goes through what's loaded in memory. */
-    forEachNode(callback: (rowNode: RowNode, index: number) => void, includeFooterNodes?: boolean): void;
+    forEachNode(callback: ForEachNodeCallback, includeFooterNodes?: boolean): void;
+
+    /** Iterate through each each flattened node, appearing as the grid does when scrolled
+     * Used for spanning */
+    forEachDisplayedNode?(callback: ForEachNodeCallback): void;
 
     /** The base class returns the type. We use this instead of 'instanceof' as the client might provide
      * their own implementation of the models in the future. */
@@ -65,4 +88,14 @@ export interface IRowModel {
     /** Gets called after grid is initialised. What happens depends on row model. Client Side will take rowData
      * from gridOptions, the other row models will start calling their datasources. */
     start(): void;
+
+    /**
+     * Tells the grid to recalculate the row heights.
+     */
+    resetRowHeights(): void;
+
+    /**
+     * Tells the grid to reposition the rows after their heights have changed.
+     */
+    onRowHeightChanged(): void;
 }

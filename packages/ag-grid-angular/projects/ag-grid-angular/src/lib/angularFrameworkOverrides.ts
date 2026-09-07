@@ -1,22 +1,21 @@
 import { Injectable, NgZone } from '@angular/core';
+import { FrameworkOverridesIncomingSource, LocalEventService } from 'ag-stack';
 
-import type {
-    FrameworkOverridesIncomingSource,
-    IFrameworkEventListenerService,
-    LocalEventService,
-} from 'ag-grid-community';
+import type { IFrameworkEventListenerService } from 'ag-grid-community';
 import { VanillaFrameworkOverrides } from 'ag-grid-community';
 
 import { AngularFrameworkEventListenerService } from './angularFrameworkEventListenerService';
 
 @Injectable()
 export class AngularFrameworkOverrides extends VanillaFrameworkOverrides {
+    public override readonly batchFrameworkComps: boolean = true;
+
     // Flag used to control Zone behaviour when running tests as many test features rely on Zone.
-    private isRunningWithinTestZone: boolean = false;
+    private readonly isRunningWithinTestZone: boolean = false;
 
-    private runOutside: <T>(callback: () => T, source?: FrameworkOverridesIncomingSource) => T;
+    private readonly runOutside: <T>(callback: () => T, source?: FrameworkOverridesIncomingSource) => T;
 
-    constructor(private _ngZone: NgZone) {
+    constructor(private readonly _ngZone: NgZone) {
         super('angular');
 
         this.isRunningWithinTestZone =
@@ -69,10 +68,16 @@ export class AngularFrameworkOverrides extends VanillaFrameworkOverrides {
         existingFrameworkEventListenerService: IFrameworkEventListenerService<any, any> | undefined,
         localEventService: LocalEventService<any>
     ): IFrameworkEventListenerService<any, any> | undefined {
-        if (this.shouldWrapOutgoing && !existingFrameworkEventListenerService) {
-            localEventService.setFrameworkOverrides(this);
-            return new AngularFrameworkEventListenerService(this);
+        if (this.shouldWrapOutgoing) {
+            return (
+                existingFrameworkEventListenerService ??
+                (() => {
+                    localEventService.setFrameworkOverrides(this);
+                    return new AngularFrameworkEventListenerService(this);
+                })()
+            );
         }
+
         return undefined;
     }
 
@@ -85,13 +90,16 @@ export class AngularFrameworkOverrides extends VanillaFrameworkOverrides {
             return false;
         }
         const prototype = comp.prototype;
-        const isAngularComp = prototype && 'agInit' in prototype;
-        return isAngularComp;
+        return prototype && 'agInit' in prototype;
     }
 
     runInsideAngular<T>(callback: () => T): T {
+        if (!this._ngZone || NgZone.isInAngularZone()) {
+            return callback();
+        }
+
         // Check for _ngZone existence as it is not present when Zoneless
-        return this._ngZone ? this._ngZone.run(callback) : callback();
+        return this._ngZone.run(callback);
     }
 
     runOutsideAngular<T>(callback: () => T, source?: FrameworkOverridesIncomingSource): T {

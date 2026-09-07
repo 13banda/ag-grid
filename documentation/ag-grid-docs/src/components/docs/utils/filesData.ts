@@ -6,6 +6,7 @@ import {
     getExampleRootFileUrl,
 } from '@utils/pages';
 import type { ImageMetadata } from 'astro';
+import { existsSync } from 'fs';
 import fs, { readFile, readdir } from 'fs/promises';
 import path from 'path';
 
@@ -24,7 +25,7 @@ interface PageImages {
 }
 
 function ignoreUnderscoreFiles(page: DocsPage) {
-    const pageFolders = page.slug.split('/');
+    const pageFolders = page.id.split('/');
     const pageName = pageFolders[pageFolders.length - 1];
     return pageName && !pageName.startsWith('_');
 }
@@ -51,34 +52,65 @@ export const getFolderPath = ({ pageName, exampleName }: { pageName: string; exa
     return new URL(exampleFolderPath, import.meta.url);
 };
 
-export const getInternalFrameworkExamples = async ({
+export const hasExampleFolder = ({ pageName, exampleName }: { pageName: string; exampleName: string }): boolean => {
+    const exampleFolderPath = getFolderPath({ pageName, exampleName });
+
+    return existsSync(exampleFolderPath);
+};
+
+const getExampleDirFile = async ({
+    pageName,
+    exampleName,
+    fileName,
+}: {
+    pageName: string;
+    exampleName: string;
+    fileName: string;
+}): Promise<undefined | string> => {
+    if (!hasExampleFolder({ pageName, exampleName })) {
+        return undefined;
+    }
+    const exampleDir = await readdir(getFolderPath({ pageName, exampleName }));
+    const hasFile = exampleDir.includes(fileName);
+
+    if (!hasFile) {
+        return undefined;
+    }
+
+    return await readFile(path.join(getExamplesPath({ pageName }), exampleName, fileName), 'utf-8');
+};
+
+export const getSupportedFrameworks = async ({ pageName, exampleName }: { pageName: string; exampleName: string }) => {
+    const exampleConfig = await getExampleDirFile({
+        pageName,
+        exampleName,
+        fileName: 'exampleConfig.json',
+    });
+    let supportedFrameworks: Set<InternalFramework> | undefined = undefined;
+    if (exampleConfig) {
+        const exampleConfigJson = JSON.parse(exampleConfig);
+        supportedFrameworks = exampleConfigJson.supportedFrameworks
+            ? new Set(exampleConfigJson.supportedFrameworks)
+            : undefined;
+    }
+
+    return supportedFrameworks;
+};
+
+export const getAllInternalFrameworkExamples = async ({
     pages,
 }: {
     pages: DocsPage[];
 }): Promise<InternalFrameworkExample[]> => {
     const examplePromises = pages.map(async (page) => {
-        const pageName = page.slug;
+        const pageName = page.id;
         const docsExamplesPath = getExamplesPath({
             pageName,
         });
         const examples = await getFolders(docsExamplesPath);
 
         const exampleDirs = examples.flatMap(async (exampleName) => {
-            //const exampleDir = existsSync(path.join(docsExamplesPath, exampleName, 'exampleConfig.json'));
-            const exampleDir = await readdir(path.join(docsExamplesPath, exampleName));
-            const hasExampleConfig = exampleDir.includes('exampleConfig.json');
-
-            let supportedFrameworks: Set<InternalFramework> | undefined = undefined;
-            if (hasExampleConfig) {
-                const exampleConfig = await readFile(
-                    path.join(docsExamplesPath, exampleName, 'exampleConfig.json'),
-                    'utf-8'
-                );
-                const exampleConfigJson = JSON.parse(exampleConfig);
-                supportedFrameworks = exampleConfigJson.supportedFrameworks
-                    ? new Set(exampleConfigJson.supportedFrameworks)
-                    : undefined;
-            }
+            const supportedFrameworks = await getSupportedFrameworks({ pageName, exampleName });
 
             return INTERNAL_FRAMEWORKS.map((internalFramework) => {
                 return {
@@ -154,11 +186,11 @@ export const getPageImages = async ({
     // NOTE: Can't use variable in glob parameter. Need to use a string literal as it
     // is compiled before runtime. Should be the same as `docsPath` variable
     const images = import.meta.glob<{ default: ImageMetadata }>(
-        '../../../content/docs/**/*.{jpeg,jpg,png,gif,svg,mp4}'
+        '../../../content/docs/**/*.{jpeg,jpg,png,gif,svg,mp4,webp}'
     );
 
     if (!images[fullImagePath]) {
-        const errorMsg = `Page "${pageName}" image "${imagePath}" does not exist in glob: "${docsPath}**/*.{jpeg,jpg,png,gif,svg,mp4}" (fullImagePath = ${fullImagePath})`;
+        const errorMsg = `Page "${pageName}" image "${imagePath}" does not exist in glob: "${docsPath}**/*.{jpeg,jpg,png,gif,svg,mp4,webp}" (fullImagePath = ${fullImagePath})`;
         if (getIsDev()) {
             // eslint-disable-next-line no-console
             console.error(errorMsg);

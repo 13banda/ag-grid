@@ -1,16 +1,14 @@
 import type { Group } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { accumulateData } from '../miniChartHelpers';
 import { MiniChartWithPolarAxes } from '../miniChartWithPolarAxes';
 
-export class MiniNightingale extends MiniChartWithPolarAxes {
-    static chartType: ChartType = 'nightingale';
+export class MiniNightingaleClass extends MiniChartWithPolarAxes {
     private readonly series: Group[];
 
-    private data = [
+    private readonly data = [
         [6, 10, 9, 8, 7, 8],
         [4, 6, 5, 4, 5, 5],
         [3, 5, 4, 3, 4, 7],
@@ -29,7 +27,7 @@ export class MiniNightingale extends MiniChartWithPolarAxes {
 
         const radius = (size - padding * 2) / 2;
 
-        const angleScale = new _Scene.BandScale();
+        const angleScale = new _Scene.CategoryScale();
         angleScale.domain = data[0].map((_, index) => index);
         angleScale.range = [-Math.PI, Math.PI];
         angleScale.paddingInner = 0;
@@ -85,3 +83,8 @@ export class MiniNightingale extends MiniChartWithPolarAxes {
         });
     }
 }
+
+export const MiniNightingale: MiniChartSelector = {
+    chartType: 'nightingale',
+    miniChart: MiniNightingaleClass,
+};

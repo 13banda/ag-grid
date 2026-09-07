@@ -24,7 +24,7 @@
         "feature": "[Row Filtering](./filtering)",
         "clientSide": "client",
         "infinite": "server",
-        "serverSide": "client OR server",
+        "serverSide": "server",
         "viewport": "server"
     },
     {
@@ -114,9 +114,9 @@
     {
         "feature": "[Row Spanning](./row-spanning)",
         "clientSide": true,
-        "infinite": true,
+        "infinite": false,
         "serverSide": true,
-        "viewport": true
+        "viewport": false
     },
     {
         "feature": "[Column Pinning](./column-pinning)",
@@ -204,6 +204,13 @@
     },
     {
         "feature": "[Excel Export](./excel-export)",
+        "clientSide": true,
+        "infinite": "data on screen",
+        "serverSide": "data on screen",
+        "viewport": "data on screen"
+    },
+    {
+        "feature": "[PDF Export](./pdf-export)",
         "clientSide": true,
         "infinite": "data on screen",
         "serverSide": "data on screen",

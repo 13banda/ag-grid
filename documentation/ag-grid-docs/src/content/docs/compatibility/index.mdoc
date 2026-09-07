@@ -9,43 +9,51 @@ There are no version compatibility requirements for AG Grid when using the JavaS
 {% /if %}
 
 {% if isFramework("vue") %}
+
 ## AG Grid & Vue Compatibility Chart
 
 The table below gives the ranges of compatible versions of AG Grid with Vue versions.
 
-| Vue   | AG Grid    |
-| ----- | ---------- |
-| 3.5+  | 33+        |
-| 3     | 18 - 32    |
-| 2     | 18 - 31    |
+| Vue  | AG Grid  |
+| ---- | -------- |
+| 3.5+ | 33 - 35+ |
+| 3    | 18 - 32  |
+| 2    | 18 - 31  |
 
-{% note %}If you're using the Composition API then upgrading to version 33+ is highly recommended as significant improvements around this area was introduced in 33.{% /note %}
+{% note %}If you use the Composition API, we highly recommend upgrading to version 33 or later, as it introduces significant improvements in this area.{% /note %}
 
 {% /if %}
 
 {% if isFramework("angular") %}
+
 ## AG Grid & Angular Compatibility Chart
 
 The table below gives the ranges of compatible versions of AG Grid with Angular versions.
 
-| Angular | AG Grid   |
-| --------| --------- |
-| 17 - 19 | 28 - 33   |
-| 16      | 28 - 32   |
-| 14 - 15 | 25 - 31   |
-| 12 - 13 | 25 - 30   |
-| 10 - 11 | 24 - 27   |
-| 9       | 23 - 27   |
-| 8       | 18 - 27   |
-| 6 - 7   | 18 - 22   |
+| Angular | AG Grid  |
+| ------- | -------- |
+| 20 - 22 | 28 - 36+ |
+| 18 - 19 | 28 - 35  |
+| 17      | 28 - 34  |
+| 16      | 28 - 32  |
+| 14 - 15 | 25 - 31  |
+| 12 - 13 | 25 - 30  |
+| 10 - 11 | 24 - 27  |
+| 9       | 23 - 27  |
+| 8       | 18 - 27  |
+| 6 - 7   | 18 - 22  |
 
 ## Future Support of Angular versions
 
 Future AG Grid versions will provide support for the lowest Angular Long-term (LTS) version at the time of release. See [Angular Support policy and schedule](https://angular.dev/reference/releases#support-policy-and-schedule).
 
-### Migration to AG Grid v28+
+## Zoneless Support
 
-#### Angular v12+
+AG Grid is fully compatible with [Zoneless](https://angular.dev/guide/zoneless) Angular applications with no additional configuration. If migrating to Zoneless and using custom components then these must meet the [requirements for Zoneless compatibility](https://angular.dev/guide/zoneless#requirements-for-zoneless-compatibility).
+
+## Migration to AG Grid v28+
+
+### Angular v12+
 
 To migrate applications on Angular v12+ to AG Grid v28+ requires no dependency changes. There are [breaking changes](https://www.ag-grid.com/changelog/?fixVersion=28.0.0), notably `AgGridModule` no longer supports `.withComponents()` as it is not required any more.
 
@@ -58,9 +66,7 @@ To migrate applications on Angular v12+ to AG Grid v28+ requires no dependency c
 })
 ```
 
-## Notes on Angular 12+
-
-If using Angular 12+ and versions of AG Grid up to v27 the following warning may be present in the build output. To avoid this, upgrade to at least v28 of AG Grid which is published as an Ivy distribution.
+If using Angular v12+ and versions of AG Grid up to v27 the following warning may be present in the build output. To avoid this, upgrade to at least v28 of AG Grid which is published as an Ivy distribution.
 
 ```bash
 Generating browser application bundles (phase: setup)...
@@ -72,22 +78,36 @@ Encourage the library authors to publish an Ivy distribution.
 {% /if %}
 
 {% if isFramework("react") %}
+
 ## AG Grid & React Compatibility Chart
 
 The table below gives the ranges of compatible versions of AG Grid with React versions.
 
-| React Version  | AG Grid Versions |
-|----------------| ---------------- |
-| 19+            | 32.2 - 33        |
-| 18+            | 27.2 - 33        |
-| 16.8 - 17.x    | 22 - 33          |
-| 15.x           | 18 - 21.2        |
-
-
-{% note %}(*) Note that for versions 32.2.0 - 32.3.1, React 19 is supported, but not listed as a peer dependency.{% /note %} 
+| React | AG Grid    |
+| ----- | ---------- |
+| 19+   | 32.3 - 35+ |
+| 18+   | 27.2 - 35+ |
+| 17+   | 22 - 35+   |
+| 16.8  | 22 - 35+   |
+| 15.x  | 18 - 21.2  |
 
 {% /if %}
 
+## TypeScript Compatibility
+
+The table below gives the minimum TypeScript version for each AG Grid version.
+
+| AG Grid | Typescript |
+| ------- | ---------- |
+| 36+     | >= 5.8.3   |
+| 35      | >= 5.4.5   |
+| 33 - 34 | >= 5.2.0   |
+| 32      | >= 5.1.6   |
+| 31      | >= 4.7.4   |
+| 30      | >= 4.3.5   |
+| 29      | >= 4.0.8   |
+| 28 - 27 | >= 3.7.7   |
+| 26 - 25 | >= 3.6.5   |
 
 ## Documentation Archive
 

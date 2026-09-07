@@ -1,8 +1,13 @@
 import type { GridApi, GridOptions, IServerSideDatasource, IServerSideGetRowsRequest } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([ServerSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ServerSideRowModelModule, RowGroupingModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -73,7 +78,7 @@ function getServerSideDatasource(server: any): IServerSideDatasource {
 function getFakeServer(allData: any[]): any {
     return {
         getResponse: (request: IServerSideGetRowsRequest) => {
-            console.log('asking for rows: ' + request.startRow + ' to ' + request.endRow);
+            console.log('[Datasource] asking for rows: ' + request.startRow + ' to ' + request.endRow);
 
             // take a slice of the total rows
             const rowsThisPage = allData.slice(request.startRow, request.endRow);

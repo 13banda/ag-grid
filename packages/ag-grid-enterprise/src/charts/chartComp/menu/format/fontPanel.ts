@@ -1,9 +1,12 @@
-import type { AgSelectParams, BeanCollection } from 'ag-grid-community';
-import { AgSelectSelector, Component, RefPlaceholder, _removeFromParent } from 'ag-grid-community';
+import { RefPlaceholder, _defaultComparator, _removeFromParent } from 'ag-stack';
 
-import type { AgGroupComponent, AgGroupComponentParams } from '../../../../widgets/agGroupComponent';
-import { AgGroupComponentSelector } from '../../../../widgets/agGroupComponent';
-import { AgColorPickerSelector } from '../../../widgets/agColorPicker';
+import type { AgComponentSelectorType, AgSelectParams, BeanCollection } from 'ag-grid-community';
+import { AgSelectSelector, Component } from 'ag-grid-community';
+
+import { AgGroupComponentSelector } from '../../../../agStack/agGroupComponent';
+import type { GroupComponent, GroupComponentParams } from '../../../../widgets/gridEnterpriseWidgetTypes';
+import type { ColorPickerParams } from '../../../widgets/colorPicker';
+import { ColorPickerSelector } from '../../../widgets/colorPicker';
 import type { ChartOptionsProxy } from '../../services/chartOptionsService';
 import type { ChartTranslationService } from '../../services/chartTranslationService';
 import type { ChartMenuParamsFactory } from '../chartMenuParamsFactory';
@@ -24,10 +27,8 @@ export interface FontPanelParams {
     chartMenuParamsFactory: ChartMenuParamsFactory;
     keyMapper: (key: string) => string;
     cssIdentifier?: string;
-}
-
-function _capitalise(str: string): string {
-    return str[0].toUpperCase() + str.substring(1).toLowerCase();
+    /** Where the effective value for a font key lives when the label itself holds none. */
+    fontValueWhenUnset?: <K extends keyof Font>(fontKey: K) => Font[K];
 }
 
 export class FontPanel extends Component {
@@ -37,10 +38,10 @@ export class FontPanel extends Component {
         this.chartTranslation = beans.chartTranslation as ChartTranslationService;
     }
 
-    private readonly fontGroup: AgGroupComponent = RefPlaceholder;
+    private readonly fontGroup: GroupComponent = RefPlaceholder;
 
     private readonly chartOptions: ChartOptionsProxy;
-    private activeComps: Component[] = [];
+    private readonly activeComps: Component[] = [];
 
     constructor(private readonly params: FontPanelParams) {
         super();
@@ -54,10 +55,8 @@ export class FontPanel extends Component {
             enabled,
             onEnableChange,
             suppressEnabledCheckbox,
-            chartMenuParamsFactory,
-            keyMapper,
         } = this.params;
-        const fontGroupParams: AgGroupComponentParams = {
+        const fontGroupParams: GroupComponentParams = {
             cssIdentifier,
             direction: 'vertical',
             suppressOpenCloseIcons: true,
@@ -82,16 +81,16 @@ export class FontPanel extends Component {
             </div>
         </ag-group-component>
     </div>`,
-            [AgGroupComponentSelector, AgSelectSelector, AgColorPickerSelector],
+            [AgGroupComponentSelector, AgSelectSelector, ColorPickerSelector],
             {
                 fontGroup: fontGroupParams,
                 familySelect: this.getFamilySelectParams(),
                 weightStyleSelect: this.getWeightStyleSelectParams(),
                 sizeSelect: this.getSizeSelectParams(),
-                colorPicker: chartMenuParamsFactory.getDefaultColorPickerParams(keyMapper('color')),
+                colorPicker: this.getColorPickerParams(),
             }
         );
-        this.addOrRemoveCssClass('ag-font-panel-no-header', !title);
+        this.toggleCss('ag-font-panel-no-header', !title);
     }
 
     public addItem(comp: Component<any>, prepend?: boolean) {
@@ -107,7 +106,27 @@ export class FontPanel extends Component {
         this.fontGroup.setEnabled(enabled);
     }
 
-    private getFamilySelectParams(): AgSelectParams {
+    private getColorPickerParams(): ColorPickerParams {
+        const { chartMenuParamsFactory, keyMapper, fontValueWhenUnset } = this.params;
+        const params = chartMenuParamsFactory.getDefaultColorPickerParams(keyMapper('color'));
+        params.value ??= fontValueWhenUnset?.('color');
+        // Series labels have no `color` of their own - the effective colour is resolved onto
+        // `insideStyle` / `outsideStyle` according to the label placement. Read the style matching the
+        // current placement so the picker has a value to show. Writes still go to `color`, which the
+        // chart applies to both styles.
+        if (params.value == null) {
+            const placement = this.chartOptions.getValue<string | undefined>(keyMapper('placement'));
+            if (typeof placement === 'string') {
+                // Mirrors the charts-side predicate: everything that is not `inside-*` is an outside
+                // label, including bar series' `beside-*` placements.
+                const styleKey = placement.startsWith('inside') ? 'insideStyle' : 'outsideStyle';
+                params.value = this.chartOptions.getValue(keyMapper(`${styleKey}.color`));
+            }
+        }
+        return params;
+    }
+
+    private getFamilySelectParams(): AgSelectParams<AgComponentSelectorType> {
         const families = [
             'Arial, sans-serif',
             'Aria Black, sans-serif',
@@ -130,28 +149,32 @@ export class FontPanel extends Component {
             'Times, serif',
             'Verdana, sans-serif',
         ];
+        const options = families.map((value) => ({ value, text: value }));
 
         const family = this.getInitialFontValue('fontFamily');
         let initialValue = families[0];
 
         if (family) {
+            const familyDisplayName = parseChartFontFamily(family);
             // check for known values using lowercase
             const lowerCaseValues = families.map((f) => f.toLowerCase());
-            const valueIndex = lowerCaseValues.indexOf(family.toLowerCase());
+            const valueIndex = lowerCaseValues.indexOf(familyDisplayName.toLowerCase());
 
             if (valueIndex >= 0) {
                 initialValue = families[valueIndex];
             } else {
                 // add user provided value to list
-                const capitalisedFontValue = _capitalise(family);
+                options.push({
+                    value: family,
+                    text: familyDisplayName,
+                });
 
-                families.push(capitalisedFontValue);
-
-                initialValue = capitalisedFontValue;
+                initialValue = family;
             }
         }
 
-        const options = families.sort().map((value) => ({ value, text: value }));
+        // NOSONAR
+        options.sort(({ text: a }, { text: b }) => _defaultComparator(a, b));
 
         return this.params.chartMenuParamsFactory.getDefaultSelectParamsWithoutValueParams(
             'font',
@@ -161,12 +184,12 @@ export class FontPanel extends Component {
         );
     }
 
-    private getSizeSelectParams(): AgSelectParams {
+    private getSizeSelectParams(): AgSelectParams<AgComponentSelectorType> {
         const sizes = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36];
         const size = this.getInitialFontValue('fontSize');
 
-        if (!sizes.includes(size!)) {
-            sizes.push(size!);
+        if (size != null && !sizes.includes(size)) {
+            sizes.push(size);
         }
 
         const options = sizes.sort((a, b) => a - b).map((value) => ({ value: `${value}`, text: `${value}` }));
@@ -174,12 +197,12 @@ export class FontPanel extends Component {
         return this.params.chartMenuParamsFactory.getDefaultSelectParamsWithoutValueParams(
             'size',
             options,
-            `${size}`,
-            (newValue) => this.setFont({ fontSize: parseInt(newValue!, 10) })
+            size == null ? undefined : `${size}`,
+            (newValue) => this.setFont({ fontSize: parseInt(newValue, 10) })
         );
     }
 
-    private getWeightStyleSelectParams(): AgSelectParams {
+    private getWeightStyleSelectParams(): AgSelectParams<AgComponentSelectorType> {
         const weight = this.getInitialFontValue('fontWeight') ?? 'normal';
         const style = this.getInitialFontValue('fontStyle') ?? 'normal';
 
@@ -219,10 +242,10 @@ export class FontPanel extends Component {
     }
 
     private destroyActiveComps(): void {
-        this.activeComps.forEach((comp) => {
+        for (const comp of this.activeComps) {
             _removeFromParent(comp.getGui());
             this.destroyBean(comp);
-        });
+        }
     }
 
     public override destroy(): void {
@@ -232,15 +255,37 @@ export class FontPanel extends Component {
 
     private setFont(font: Font): void {
         const { keyMapper } = this.params;
-        Object.entries(font).forEach(([fontKey, value]: [keyof Font, any]) => {
+        for (const fontKey of Object.keys(font)) {
+            const value = font[fontKey as keyof Font];
             if (value) {
                 this.chartOptions.setValue(keyMapper(fontKey), value);
             }
-        });
+        }
     }
 
     private getInitialFontValue<K extends keyof Font>(fontKey: K): Font[K] {
-        const { keyMapper } = this.params;
-        return this.chartOptions.getValue(keyMapper(fontKey));
+        const { keyMapper, fontValueWhenUnset } = this.params;
+        return this.chartOptions.getValue<Font[K]>(keyMapper(fontKey)) ?? fontValueWhenUnset?.(fontKey);
     }
+}
+
+// charts returns a CSS list of font families. We will just show the first one
+function parseChartFontFamily(family: string) {
+    const values = family.split(',');
+    if (values.length === 1) {
+        return family;
+    }
+    const firstValue = values[0];
+    if (!firstValue.startsWith('"') && !firstValue.startsWith(`'`)) {
+        return firstValue;
+    }
+    const quote = firstValue[0];
+    const parts: string[] = [];
+    for (const value of values) {
+        parts.push(value);
+        if (value.trim().endsWith(quote)) {
+            return parts.join(',').slice(1, -1);
+        }
+    }
+    return family;
 }

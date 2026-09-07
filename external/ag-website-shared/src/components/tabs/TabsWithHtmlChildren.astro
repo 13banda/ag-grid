@@ -112,7 +112,16 @@ const { tabItemIdPrefix, headerLinks, snippetTabs } = Astro.props as Props;
                     this.updateTabs();
 
                     const tabId = getTabId({ id: this.selected.id, prefix: this.tabItemIdPrefix });
-                    navigate(`#${tabId}`);
+                    // Pass the whole location: a bare hash is resolved against the `history`
+                    // package's cached location, which Astro's `<ClientRouter />` never
+                    // refreshes, leaving the pathname on whichever page loaded first. Keep
+                    // `navigate` rather than `replaceHistoryUrl` - the `browserHistory`
+                    // listener above syncs sibling tab groups, and only a push fires it.
+                    navigate({
+                        pathname: window.location.pathname,
+                        search: window.location.search,
+                        hash: tabId,
+                    });
                 });
             });
         }
@@ -130,7 +139,7 @@ const { tabItemIdPrefix, headerLinks, snippetTabs } = Astro.props as Props;
                 (selectedTab as HTMLElement).style.display = 'block';
             }
 
-            // Nav content labeledby
+            // Nav content labelledby
             const label = `${this.selected.label} tab`;
             this.querySelector(TABS_CONTENT_SELECTOR)?.setAttribute('aria-labelledby', label);
         }

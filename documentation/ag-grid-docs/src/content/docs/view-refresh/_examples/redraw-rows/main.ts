@@ -4,19 +4,19 @@ import {
     ModuleRegistry,
     RowApiModule,
     RowStyleModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    RowApiModule,
-    RowStyleModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, RowStyleModule, ClientSideRowModelModule]);
 
 let colorIndex = 0;
-const colors = ['#99999944', '#CC333344', '#33CC3344', '#2244CC44'];
+const colors = ['#99999944', '#cc333344', '#33cc3344', '#2244cc44'];
 
 let gridApi: GridApi;
 

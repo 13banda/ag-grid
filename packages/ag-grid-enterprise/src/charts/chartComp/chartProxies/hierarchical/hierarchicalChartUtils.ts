@@ -1,7 +1,7 @@
 export type CATEGORY_LABEL_KEY = 'AG-GRID-DEFAULT-LABEL-KEY';
 export const CATEGORY_LABEL_KEY: CATEGORY_LABEL_KEY = 'AG-GRID-DEFAULT-LABEL-KEY';
 
-export type CategoryItem<T extends object> = {
+type CategoryItem<T extends object> = {
     [CATEGORY_LABEL_KEY]: string | null;
     children?: Array<CategoryItem<T>>;
 } & T;
@@ -21,7 +21,9 @@ export function createCategoryHierarchy<T extends object>(data: T[], categoryKey
     }
 
     function getCategoryLabel(value: unknown): string | null {
-        if (value == null) return null;
+        if (value == null) {
+            return null;
+        }
         return String(value);
     }
 }
@@ -39,10 +41,7 @@ export function createAutoGroupHierarchy<T extends object>(
 
     function getItemGroupLabel(item: T, groupIndex: number): string | null {
         const labels = getItemLabels(item);
-        if (!labels) return null;
-        // Autogroup label values are ordered from the leaf outwards
-        const labelIndex = labels.length - 1 - groupIndex;
-        return labels[labelIndex];
+        return labels ? labels[groupIndex] : labels;
     }
 }
 
@@ -94,10 +93,10 @@ function buildNestedHierarchy<V extends object>(
     getItemGroupKey: (item: V, depthIndex: number) => string | null
 ): Tree<V> {
     const hierarchy: Tree<V> = { depth: 0, children: new Map() };
-    data.forEach((item) => {
+    for (const item of data) {
         const itemDepth = getItemDepth(item);
         createNestedItemHierarchy(item, itemDepth, getItemGroupKey, 0, hierarchy);
-    });
+    }
     return hierarchy;
 
     function createNestedItemHierarchy(

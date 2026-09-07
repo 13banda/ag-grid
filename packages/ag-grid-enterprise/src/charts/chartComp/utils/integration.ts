@@ -1,9 +1,9 @@
 import type {
     AgCartesianAxisType,
-    AgChartCaptionOptions,
     AgChartInstance,
     AgChartInstanceOptions,
-    AgPolarAxisOptions,
+    AgChartOptions,
+    AgPolarAxisType,
 } from 'ag-charts-types';
 
 export function deproxy(chartOrProxy: AgChartInstance<AgChartInstanceOptions>): AgChartActual {
@@ -19,7 +19,7 @@ export function deproxy(chartOrProxy: AgChartInstance<AgChartInstanceOptions>): 
 // AVOID ADDING MORE DEPENDENCIES ON THESE PRIVATE APIS.
 
 export interface AgChartActual extends AgChartInstance {
-    title?: AgChartCaptionOptions;
+    title: { node: { getPlainText: () => string } };
     width: number;
     height: number;
     series: {
@@ -31,15 +31,24 @@ export interface AgChartActual extends AgChartInstance {
             toJson(): any;
         };
     }[];
-    axes?: {
-        type: AgCartesianAxisType | AgPolarAxisOptions['type'];
-        direction: 'x' | 'y';
-    }[];
+    axes?: Record<
+        string,
+        {
+            type: AgCartesianAxisType | AgPolarAxisType;
+            direction: 'x' | 'y';
+        }
+    >;
+    ctx: {
+        legendManager: {
+            getData(): { symbol?: { marker?: { strokeWidth?: number } } }[];
+        };
+    };
     canvasElement: HTMLCanvasElement;
     getCanvasDataURL(type?: string): string;
     addEventListener(type: 'click', cb: (even: any) => void): void;
     waitForUpdate(): Promise<void>;
+    chartOptions: { processedOptions: AgChartOptions };
 }
 
-export type AgChartAxis = NonNullable<AgChartActual['axes']>[number];
+type AgChartAxis = NonNullable<AgChartActual['axes']>[string];
 export type AgChartAxisType = AgChartAxis['type'];

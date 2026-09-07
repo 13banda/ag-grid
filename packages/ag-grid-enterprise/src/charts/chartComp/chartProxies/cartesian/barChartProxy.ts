@@ -1,32 +1,26 @@
 import type { AgBarSeriesOptions, AgCartesianAxisOptions } from 'ag-charts-types';
 
-import { hexToRGBA } from '../../utils/color';
 import { isStacked } from '../../utils/seriesTypeMapper';
-import type { ChartProxyParams, UpdateParams } from '../chartProxy';
+import type { UpdateParams } from '../chartProxy';
 import { CartesianChartProxy } from './cartesianChartProxy';
 
 const HORIZONTAL_CHART_TYPES = new Set(['bar', 'groupedBar', 'stackedBar', 'normalizedBar']);
 
 export class BarChartProxy extends CartesianChartProxy<'bar'> {
-    public constructor(params: ChartProxyParams) {
-        super(params);
-    }
-
-    protected override getAxes(params: UpdateParams): AgCartesianAxisOptions[] {
-        const axes: AgCartesianAxisOptions[] = [
-            {
+    protected override getAxes(params: UpdateParams): Record<string, AgCartesianAxisOptions> {
+        const axes: Record<string, AgCartesianAxisOptions> = {
+            x: {
                 type: this.getXAxisType(params),
                 position: this.isHorizontal() ? 'left' : 'bottom',
             },
-            {
+            y: {
                 type: 'number',
                 position: this.isHorizontal() ? 'bottom' : 'left',
             },
-        ];
+        };
         // Add a default label formatter to show '%' for normalized charts if none is provided
         if (this.isNormalised()) {
-            const numberAxis = axes[1];
-            numberAxis.label = { ...numberAxis.label, formatter: (params) => Math.round(params.value) + '%' };
+            axes.y.label = { ...axes.y.label, formatter: (params) => Math.round(params.value) + '%' };
         }
 
         return axes;
@@ -52,39 +46,26 @@ export class BarChartProxy extends CartesianChartProxy<'bar'> {
     }
 
     private extractCrossFilterSeries(series: AgBarSeriesOptions[]): AgBarSeriesOptions[] {
-        const palette = this.getChartPalette();
-
-        const updatePrimarySeries = (seriesOptions: AgBarSeriesOptions, index: number) => {
-            return {
-                ...seriesOptions,
-                highlightStyle: { item: { fill: undefined } },
-                fill: palette?.fills?.[index],
-                stroke: palette?.strokes?.[index],
-                listeners: {
-                    nodeClick: this.crossFilterCallback,
-                },
-            };
-        };
-
-        const updateFilteredOutSeries = (seriesOptions: AgBarSeriesOptions): AgBarSeriesOptions => {
-            const yKey = seriesOptions.yKey + '-filtered-out';
-            return {
-                ...seriesOptions,
-                yKey,
-                fill: hexToRGBA(seriesOptions.fill!, '0.3'),
-                stroke: hexToRGBA(seriesOptions.stroke!, '0.3'),
-                showInLegend: false,
-            };
-        };
-
         const allSeries: AgBarSeriesOptions[] = [];
         for (let i = 0; i < series.length; i++) {
-            const originalSeries = series[i];
-            // update primary series
-            allSeries.push(updatePrimarySeries(originalSeries, i));
+            const commonSeries = series[i];
 
-            // add 'filtered-out' series
-            allSeries.push(updateFilteredOutSeries(updatePrimarySeries(originalSeries, i)));
+            const primarySeries = {
+                ...commonSeries,
+                listeners: {
+                    seriesNodeClick: this.crossFilterCallback,
+                },
+            };
+
+            const filteredOutSeries = {
+                ...primarySeries,
+                yKey: `${primarySeries.yKey}-filtered-out`,
+                showInLegend: false,
+            };
+
+            // for bar/column charts, proportion of whole is achieved as a stacked bar/column
+            allSeries.push(primarySeries);
+            allSeries.push(filteredOutSeries as unknown as AgBarSeriesOptions);
         }
         return allSeries;
     }

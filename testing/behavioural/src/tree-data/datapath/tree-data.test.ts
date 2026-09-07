@@ -1,11 +1,20 @@
+import { waitFor } from '@testing-library/dom';
+import {
+    GridColumns,
+    GridRows,
+    TestGridsManager,
+    applyTransactionChecked,
+    asyncSetTimeout,
+    getRowsSnapshot,
+    setRowDataChecked,
+} from 'ag-test-utils';
+import type { RowSnapshot } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
 import { ClientSideRowModelModule } from 'ag-grid-community';
 import type { GridOptions } from 'ag-grid-community';
 import { TreeDataModule } from 'ag-grid-enterprise';
 
-import { GridRows, TestGridsManager, asyncSetTimeout, getRowsSnapshot } from '../../test-utils';
-import type { GridRowsOptions, RowSnapshot } from '../../test-utils';
 import { simpleHierarchyRowsSnapshot } from './simpleHierarchyRowsSnapshot';
 
 const getDataPath = (data: any) => data.orgHierarchy;
@@ -15,7 +24,7 @@ describe('ag-grid tree data', () => {
         modules: [ClientSideRowModelModule, TreeDataModule],
     });
 
-    let consoleWarnSpy: MockInstance;
+    let consoleWarnSpy: MockInstance | undefined;
 
     function hasLoadingOverlay() {
         return !!document.querySelector('.ag-overlay-loading-center');
@@ -64,22 +73,26 @@ describe('ag-grid tree data', () => {
         expect(hasLoadingOverlay()).toBe(true);
         expect(hasNoRowsOverlay()).toBe(false);
 
-        api.setGridOption('rowData', []);
+        setRowDataChecked(api, []);
 
         expect(hasLoadingOverlay()).toBe(false);
         expect(hasNoRowsOverlay()).toBe(true);
 
-        api.setGridOption('rowData', rowData);
+        setRowDataChecked(api, rowData);
 
         expect(hasLoadingOverlay()).toBe(false);
         expect(hasNoRowsOverlay()).toBe(false);
 
-        api.setGridOption('rowData', []);
+        setRowDataChecked(api, []);
 
-        await asyncSetTimeout(10);
-
+        await waitFor(() => expect(hasNoRowsOverlay()).toBe(true));
         expect(hasLoadingOverlay()).toBe(false);
-        expect(hasNoRowsOverlay()).toBe(true);
+
+        await new GridColumns(api, 'columns').checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "Organisation Hierarchy" width:200
+            └── groupType "Group Type" width:200
+        `);
     });
 
     test('ag-grid tree data', async () => {
@@ -110,21 +123,17 @@ describe('ag-grid tree data', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            checkDom: true,
-        };
-
-        const gridRows = new GridRows(api, 'data', gridRowsOptions);
+        const gridRows = new GridRows(api, 'data');
         await gridRows.check(`
-            ROOT id:ROOT_NODE_ID
-            ├─┬ A GROUP id:0
-            │ └── B LEAF id:1
-            ├─┬ C filler id:row-group-0-C
-            │ └── D LEAF id:2
-            └─┬ E filler id:row-group-0-E
-            · └─┬ F filler id:row-group-0-E-1-F
-            · · └─┬ G filler id:row-group-0-E-1-F-2-G
-            · · · └── H LEAF id:3
+            ROOT id:ROOT_NODE_ID groupType:"Filler"
+            ├─┬ A GROUP id:0 ag-Grid-AutoColumn:"A" groupType:"Provided"
+            │ └── B LEAF id:1 ag-Grid-AutoColumn:"B" groupType:"Provided"
+            ├─┬ C filler id:row-group-0-C ag-Grid-AutoColumn:"C" groupType:"Filler"
+            │ └── D LEAF id:2 ag-Grid-AutoColumn:"D" groupType:"Provided"
+            └─┬ E filler id:row-group-0-E ag-Grid-AutoColumn:"E" groupType:"Filler"
+            · └─┬ F filler id:row-group-0-E-1-F ag-Grid-AutoColumn:"F" groupType:"Filler"
+            · · └─┬ G filler id:row-group-0-E-1-F-2-G ag-Grid-AutoColumn:"G" groupType:"Filler"
+            · · · └── H LEAF id:3 ag-Grid-AutoColumn:"H" groupType:"Provided"
         `);
 
         const rows = gridRows.rowNodes;
@@ -139,6 +148,12 @@ describe('ag-grid tree data', () => {
 
         const rowsSnapshot = getRowsSnapshot(rows);
         expect(rowsSnapshot).toMatchObject(simpleHierarchyRowsSnapshot());
+
+        await new GridColumns(api, 'columns').checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "Organisation Hierarchy" width:200
+            └── groupType "Group Type" width:200
+        `);
     });
 
     test('ag-grid tree data with inverted order', async () => {
@@ -169,18 +184,14 @@ describe('ag-grid tree data', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            checkDom: true,
-        };
-
-        const gridRows = new GridRows(api, 'data', gridRowsOptions);
+        const gridRows = new GridRows(api, 'data');
         await gridRows.check(`
-            ROOT id:ROOT_NODE_ID
-            ├─┬ A GROUP id:2
-            │ └── B LEAF id:0
-            └─┬ C filler id:row-group-0-C
-            · └─┬ D GROUP id:3
-            · · └── E LEAF id:1
+            ROOT id:ROOT_NODE_ID groupType:"Filler"
+            ├─┬ A GROUP id:2 ag-Grid-AutoColumn:"A" groupType:"Provided"
+            │ └── B LEAF id:0 ag-Grid-AutoColumn:"B" groupType:"Provided"
+            └─┬ C filler id:row-group-0-C ag-Grid-AutoColumn:"C" groupType:"Filler"
+            · └─┬ D GROUP id:3 ag-Grid-AutoColumn:"D" groupType:"Provided"
+            · · └── E LEAF id:1 ag-Grid-AutoColumn:"E" groupType:"Provided"
         `);
 
         const rows = gridRows.rowNodes;
@@ -198,7 +209,7 @@ describe('ag-grid tree data', () => {
     });
 
     test('ag-grid override tree data is insensitive to updateGridOptions object order', async () => {
-        // see https://ag-grid.atlassian.net/browse/AG-13089 - Order of grouped property listener changed is not deterministic
+        // see https://ag-grid.atlassian.net/browse/AG-13089 and https://ag-grid.atlassian.net/browse/AG-13498 - Order of grouped property listener changed is not deterministic
         const rowData0 = [
             { orgHierarchy: ['A', 'B'], x: 'B' },
             { orgHierarchy: ['C', 'D', 'E'], x: 'E' },
@@ -222,19 +233,12 @@ describe('ag-grid tree data', () => {
             rowData: rowData0,
         });
 
-        console.log('\nUPDATE rowData and treeData together\n');
-
         api.updateGridOptions({
             rowData: rowData1,
             treeData: true,
         });
 
-        const gridRowsOptions: GridRowsOptions = {
-            checkDom: true,
-            columns: true,
-        };
-
-        const gridRows = new GridRows(api, 'update 1', gridRowsOptions);
+        const gridRows = new GridRows(api, 'update 1');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             ├─┬ A GROUP id:2 ag-Grid-AutoColumn:"A" x:"a"
@@ -242,6 +246,202 @@ describe('ag-grid tree data', () => {
             └─┬ C filler id:row-group-0-C ag-Grid-AutoColumn:"C"
             · └─┬ D GROUP id:3 ag-Grid-AutoColumn:"D" x:"d"
             · · └── E LEAF id:1 ag-Grid-AutoColumn:"E" x:"e"
+        `);
+    });
+
+    test('initializing columns after rowData with tree data', async () => {
+        let rowDataUpdated = 0;
+        let modelUpdated = 0;
+        const gridOptions: GridOptions = {
+            groupDefaultExpanded: -1,
+            treeData: true,
+            getDataPath: (data) => data.orgHierarchy,
+            getRowId: (params) => params.data.id,
+            onRowDataUpdated: () => ++rowDataUpdated,
+            onModelUpdated: () => ++modelUpdated,
+        };
+
+        const api = gridsManager.createGrid('myGrid', gridOptions);
+
+        // Single-tick yield: the assertion is negative (the events must NOT have fired yet), so
+        // this is an observation window rather than a wait for state to appear.
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(0);
+        expect(modelUpdated).toBe(0);
+
+        setRowDataChecked(api, [
+            { id: 'a', orgHierarchy: ['A'] },
+            { id: 'b', orgHierarchy: ['A', 'B'] },
+            { id: 'd', orgHierarchy: ['C', 'D'] },
+            { id: 'h', orgHierarchy: ['E', 'F', 'G', 'H'] },
+        ]);
+
+        // Single-tick yield: the assertion is negative (the events must NOT have fired yet), so
+        // this is an observation window rather than a wait for state to appear.
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(0);
+        expect(modelUpdated).toBe(0);
+
+        await new GridRows(api, 'empty').check('empty');
+
+        api.setGridOption('columnDefs', [
+            { field: 'groupType', valueGetter: (params) => (params.data ? 'Provided' : 'Filler') },
+        ]);
+
+        // Poll for the update, then yield one macrotask so a later duplicate would also be
+        // counted, before asserting the exact counts.
+        await waitFor(() => expect(rowDataUpdated).toBeGreaterThanOrEqual(1));
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(1);
+        expect(modelUpdated).toBe(1);
+
+        await new GridRows(api, 'data').check(`
+            ROOT id:ROOT_NODE_ID groupType:"Filler"
+            ├─┬ A GROUP id:a ag-Grid-AutoColumn:"A" groupType:"Provided"
+            │ └── B LEAF id:b ag-Grid-AutoColumn:"B" groupType:"Provided"
+            ├─┬ C filler id:row-group-0-C ag-Grid-AutoColumn:"C" groupType:"Filler"
+            │ └── D LEAF id:d ag-Grid-AutoColumn:"D" groupType:"Provided"
+            └─┬ E filler id:row-group-0-E ag-Grid-AutoColumn:"E" groupType:"Filler"
+            · └─┬ F filler id:row-group-0-E-1-F ag-Grid-AutoColumn:"F" groupType:"Filler"
+            · · └─┬ G filler id:row-group-0-E-1-F-2-G ag-Grid-AutoColumn:"G" groupType:"Filler"
+            · · · └── H LEAF id:h ag-Grid-AutoColumn:"H" groupType:"Provided"
+        `);
+    });
+
+    test('initializing columns after transactions initialization with tree data', async () => {
+        let rowDataUpdated = 0;
+        let modelUpdated = 0;
+        const gridOptions: GridOptions = {
+            groupDefaultExpanded: -1,
+            treeData: true,
+            getDataPath: (data) => data.orgHierarchy,
+            getRowId: (params) => params.data.id,
+            onRowDataUpdated: () => ++rowDataUpdated,
+            onModelUpdated: () => ++modelUpdated,
+        };
+
+        const api = gridsManager.createGrid('myGrid', gridOptions);
+
+        // Single-tick yield: the assertion is negative (the events must NOT have fired yet), so
+        // this is an observation window rather than a wait for state to appear.
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(0);
+        expect(modelUpdated).toBe(0);
+
+        applyTransactionChecked(api, {
+            add: [
+                { id: 'a', orgHierarchy: ['A'] },
+                { id: 'b', orgHierarchy: ['A', 'B'] },
+            ],
+        });
+
+        applyTransactionChecked(api, {
+            add: [
+                { id: 'd', orgHierarchy: ['C', 'D'] },
+                { id: 'h', orgHierarchy: ['E', 'F', 'G', 'H'] },
+            ],
+        });
+
+        // Single-tick yield: the assertion is negative (the events must NOT have fired yet), so
+        // this is an observation window rather than a wait for state to appear.
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(0);
+        expect(modelUpdated).toBe(0);
+
+        await new GridRows(api, 'empty').check('empty');
+
+        api.setGridOption('columnDefs', [
+            { field: 'groupType', valueGetter: (params) => (params.data ? 'Provided' : 'Filler') },
+        ]);
+
+        // Poll for the update, then yield one macrotask so a later duplicate would also be
+        // counted, before asserting the exact counts.
+        await waitFor(() => expect(rowDataUpdated).toBeGreaterThanOrEqual(1));
+        await asyncSetTimeout(0);
+        expect(rowDataUpdated).toBe(1);
+        expect(modelUpdated).toBe(1);
+
+        await new GridRows(api, 'data').check(`
+            ROOT id:ROOT_NODE_ID groupType:"Filler"
+            ├─┬ A GROUP id:a ag-Grid-AutoColumn:"A" groupType:"Provided"
+            │ └── B LEAF id:b ag-Grid-AutoColumn:"B" groupType:"Provided"
+            ├─┬ C filler id:row-group-0-C ag-Grid-AutoColumn:"C" groupType:"Filler"
+            │ └── D LEAF id:d ag-Grid-AutoColumn:"D" groupType:"Provided"
+            └─┬ E filler id:row-group-0-E ag-Grid-AutoColumn:"E" groupType:"Filler"
+            · └─┬ F filler id:row-group-0-E-1-F ag-Grid-AutoColumn:"F" groupType:"Filler"
+            · · └─┬ G filler id:row-group-0-E-1-F-2-G ag-Grid-AutoColumn:"G" groupType:"Filler"
+            · · · └── H LEAF id:h ag-Grid-AutoColumn:"H" groupType:"Provided"
+        `);
+    });
+
+    test('changing group columns updates the row groups', async () => {
+        const rowData = [
+            { id: 'A', x: 'a', z: 1, path: ['A'] },
+            { id: 'B', x: 'a-b', z: 2, path: ['A', 'B'] },
+            { id: 'C', x: 'c', z: 3, path: ['C'] },
+            { id: 'D', x: 'c-d', z: 4, path: ['C', 'D'] },
+            { id: 'E', x: 'e', z: 5, path: ['E'] },
+            { id: 'F', x: 'e-f', z: 6, path: ['E', 'F'] },
+            { id: 'G', x: 'e-f-g', z: 7, path: ['E', 'F', 'G'] },
+            { id: 'H', x: 'e-f-g-h', z: 8, path: ['E', 'F', 'G', 'H'] },
+        ];
+
+        const api = gridsManager.createGrid('myGrid', {
+            columnDefs: [{ field: 'x' }],
+            animateRows: false,
+            groupDefaultExpanded: -1,
+            rowData,
+            autoGroupColumnDef: { headerName: 'H' },
+            getRowId: (params) => params.data.id,
+            treeData: true,
+            getDataPath: (data) => data.path,
+        });
+
+        const gridRows = new GridRows(api, 'data');
+
+        await gridRows.check(`
+            ROOT id:ROOT_NODE_ID
+            ├─┬ A GROUP id:A ag-Grid-AutoColumn:"A" x:"a"
+            │ └── B LEAF id:B ag-Grid-AutoColumn:"B" x:"a-b"
+            ├─┬ C GROUP id:C ag-Grid-AutoColumn:"C" x:"c"
+            │ └── D LEAF id:D ag-Grid-AutoColumn:"D" x:"c-d"
+            └─┬ E GROUP id:E ag-Grid-AutoColumn:"E" x:"e"
+            · └─┬ F GROUP id:F ag-Grid-AutoColumn:"F" x:"e-f"
+            · · └─┬ G GROUP id:G ag-Grid-AutoColumn:"G" x:"e-f-g"
+            · · · └── H LEAF id:H ag-Grid-AutoColumn:"H" x:"e-f-g-h"
+        `);
+
+        api.updateGridOptions({
+            columnDefs: [{ field: 'x' }, { field: 'id' }, { field: 'z' }],
+            autoGroupColumnDef: { headerName: 'X', field: 'x' },
+        });
+
+        await gridRows.check(`
+            ROOT id:ROOT_NODE_ID
+            ├─┬ A GROUP id:A ag-Grid-AutoColumn:"a" x:"a" id:"A" z:1
+            │ └── B LEAF id:B ag-Grid-AutoColumn:"a-b" x:"a-b" id:"B" z:2
+            ├─┬ C GROUP id:C ag-Grid-AutoColumn:"c" x:"c" id:"C" z:3
+            │ └── D LEAF id:D ag-Grid-AutoColumn:"c-d" x:"c-d" id:"D" z:4
+            └─┬ E GROUP id:E ag-Grid-AutoColumn:"e" x:"e" id:"E" z:5
+            · └─┬ F GROUP id:F ag-Grid-AutoColumn:"e-f" x:"e-f" id:"F" z:6
+            · · └─┬ G GROUP id:G ag-Grid-AutoColumn:"e-f-g" x:"e-f-g" id:"G" z:7
+            · · · └── H LEAF id:H ag-Grid-AutoColumn:"e-f-g-h" x:"e-f-g-h" id:"H" z:8
+        `);
+
+        api.updateGridOptions({
+            autoGroupColumnDef: { headerName: 'X', field: 'z' },
+        });
+
+        await gridRows.check(`
+            ROOT id:ROOT_NODE_ID
+            ├─┬ A GROUP id:A ag-Grid-AutoColumn:1 x:"a" id:"A" z:1
+            │ └── B LEAF id:B ag-Grid-AutoColumn:2 x:"a-b" id:"B" z:2
+            ├─┬ C GROUP id:C ag-Grid-AutoColumn:3 x:"c" id:"C" z:3
+            │ └── D LEAF id:D ag-Grid-AutoColumn:4 x:"c-d" id:"D" z:4
+            └─┬ E GROUP id:E ag-Grid-AutoColumn:5 x:"e" id:"E" z:5
+            · └─┬ F GROUP id:F ag-Grid-AutoColumn:6 x:"e-f" id:"F" z:6
+            · · └─┬ G GROUP id:G ag-Grid-AutoColumn:7 x:"e-f-g" id:"G" z:7
+            · · · └── H LEAF id:H ag-Grid-AutoColumn:8 x:"e-f-g-h" id:"H" z:8
         `);
     });
 });
@@ -278,11 +478,11 @@ function hierarchyWithInvertedOrderRowSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: null,
-            allLeafChildren: [],
+            allLeafChildren: null,
             childIndex: 0,
-            childrenAfterFilter: [],
-            childrenAfterGroup: [],
-            childrenAfterSort: [],
+            childrenAfterFilter: null,
+            childrenAfterGroup: null,
+            childrenAfterSort: null,
             detail: undefined,
             displayed: true,
             expanded: false,
@@ -306,7 +506,7 @@ function hierarchyWithInvertedOrderRowSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: 2,
-            allLeafChildren: ['E'],
+            allLeafChildren: ['D', 'E'],
             childIndex: 1,
             childrenAfterFilter: ['D'],
             childrenAfterGroup: ['D'],
@@ -362,11 +562,11 @@ function hierarchyWithInvertedOrderRowSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: null,
-            allLeafChildren: [],
+            allLeafChildren: null,
             childIndex: 0,
-            childrenAfterFilter: [],
-            childrenAfterGroup: [],
-            childrenAfterSort: [],
+            childrenAfterFilter: null,
+            childrenAfterGroup: null,
+            childrenAfterSort: null,
             detail: undefined,
             displayed: true,
             expanded: false,

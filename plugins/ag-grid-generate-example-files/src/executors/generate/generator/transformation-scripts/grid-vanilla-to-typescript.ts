@@ -3,7 +3,10 @@ import {
     addBindingImports,
     addGenericInterfaceImport,
     findLocaleImport,
+    getEnableAGTestIdLogic,
     getIntegratedDarkModeCode,
+    getPropertyInterfaces,
+    wrapTearDownExample,
 } from './parser-utils';
 import { toTitleCase } from './string-utils';
 
@@ -12,49 +15,45 @@ export function getImport(filename: string) {
     return `import { ${toTitleCase(componentName)} } from './${componentName}';`;
 }
 
-function getPropertyInterfaces(properties) {
-    let propTypesUsed = [];
-    properties.forEach((prop) => {
-        if (prop.typings?.typesToInclude?.length > 0) {
-            propTypesUsed = [...propTypesUsed, ...prop.typings.typesToInclude];
-        }
-    });
-    return [...new Set(propTypesUsed)];
-}
-
-function getModuleImports(bindings: ParsedBindings): string[] {
+function getImports(bindings: ParsedBindings, currFile: string): string[] {
     const { imports: bindingImports, properties } = bindings;
-
     const imports = [];
 
-    const propertyInterfaces = getPropertyInterfaces(properties);
+    const localeImport = findLocaleImport(bindingImports);
+    if (localeImport) {
+        imports.push(`import { ${localeImport.imports.join(', ')} } from '@ag-grid-community/locale';`);
+    }
+
     const bImports = [...(bindingImports || [])];
-    bImports.push({
-        module: `'ag-grid-community'`,
-        isNamespaced: false,
-        imports: [...propertyInterfaces],
-    });
+    const propertyInterfaces = getPropertyInterfaces(properties, currFile);
+    if (propertyInterfaces.length > 0) {
+        bImports.push({
+            module: `'ag-grid-community'`,
+            isNamespaced: false,
+            imports: [...propertyInterfaces],
+        });
+    }
 
     if (bImports.length > 0) {
         addBindingImports(bImports, imports, false);
     }
+
+    imports.push(getEnableAGTestIdLogic());
 
     addGenericInterfaceImport(imports, bindings.tData, bindings);
 
     return imports;
 }
 
-function getImports(bindings: ParsedBindings): string[] {
-    const imports = [];
-
-    const localeImport = findLocaleImport(bindings.imports);
-    if (localeImport) {
-        imports.push(`import { ${localeImport.imports[0]} } from '@ag-grid-community/locale';`);
+function getTearDownCode(exampleCode: string): string {
+    const apisPresent = ['gridApi', 'topApi', 'bottomApi', 'leftApi', 'rightApi'].filter((api) =>
+        exampleCode.includes(api)
+    );
+    if (apisPresent.length === 0) {
+        return '';
     }
 
-    imports.push(...getModuleImports(bindings));
-
-    return imports;
+    return `(<any>window).tearDownExample = () => [${apisPresent.join()}].forEach(api => api?.destroy());`;
 }
 
 export function vanillaToTypescript(bindings: ParsedBindings, mainFilePath: string, tsFile: string): () => string {
@@ -69,6 +68,7 @@ export function vanillaToTypescript(bindings: ParsedBindings, mainFilePath: stri
             "if (typeof window !== 'undefined') {",
             '// Attach external event handlers to window so they can be called from index.html',
             ...externalBindings,
+            wrapTearDownExample(getTearDownCode(tsFile)),
             '}',
         ].join('\n');
     }
@@ -78,7 +78,9 @@ export function vanillaToTypescript(bindings: ParsedBindings, mainFilePath: stri
         // (.*DOMContentLoaded.*)\n Match the line with DOMContentLoaded
         // (.|\n)*? Match the shortest number of lines until the next part matches (body of the event handler)
         // (\n}\)) Match a }) on a new line with no indentation
-        .replace(/(.*DOMContentLoaded.*)\n((.|\n)*?)(\n}\))/g, '$2');
+        .replace(/(.*DOMContentLoaded.*)\n((.|\n)*?)(\n}\))/g, '$2')
+        // comment only makes sense with the DOMContentLoaded event
+        .replace('// setup the grid after the page has finished loading', '');
 
     if (unWrapped.includes('DOMContentLoaded')) {
         console.error('DomContentLoaded replace failed for', mainFilePath);
@@ -86,13 +88,19 @@ export function vanillaToTypescript(bindings: ParsedBindings, mainFilePath: stri
     }
 
     return () => {
-        const importStrings = getImports(bindings);
+        const importStrings = getImports(bindings, unWrapped);
         const formattedImports = `${importStrings.join('\n')}\n`;
 
         // Remove the original import statements
         unWrapped = unWrapped.replace(/import ((.|\n)*?)from.*\n/g, '');
 
-        const result = `${formattedImports}${unWrapped} ${toAttach || ''} ${getIntegratedDarkModeCode(bindings.exampleName, true, 'gridApi')}`;
+        let result = `${formattedImports}${unWrapped} ${toAttach || ''} ${getIntegratedDarkModeCode(bindings.exampleName, true, 'gridApi') ?? ''}`;
+
+        // Add test tearDown method
+        if (!result.includes('tearDownExample')) {
+            result += wrapTearDownExample(`if (typeof window !== 'undefined') {${getTearDownCode(result)} }`);
+        }
+
         return result;
     };
 }

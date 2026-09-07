@@ -1,12 +1,12 @@
 export default {
     template: `
         <div>        
-            <button v-on:click="buttonClicked">Launch!</button>
+            <button class="btn-simple" v-on:click="buttonClicked">{{this.params.data?.company ? 'Launch ' + this.params.data.company + '!' : 'Launch!'}}</button>
         </div>
     `,
     methods: {
         buttonClicked() {
-            alert('Software Launched');
+            console.log('Software Launched');
         },
     },
 };

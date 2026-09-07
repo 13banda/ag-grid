@@ -1,10 +1,23 @@
+import type { AgEvent } from 'ag-stack';
+
 import type { ApplyColumnStateParams, ColumnState } from '../columns/columnStateUtils';
-import type { RowDropZoneEvents, RowDropZoneParams } from '../dragAndDrop/rowDragFeature';
-import type { ColDef, ColGroupDef, ColumnChooserParams, HeaderLocation, IAggFunc } from '../entities/colDef';
+import type { RowDropZoneEvents, RowDropZoneParams } from '../dragAndDrop/rowDragTypes';
+import type {
+    RowDropPositionIndicator,
+    SetRowDropPositionIndicatorParams,
+} from '../dragAndDrop/rowDropHighlightService';
+import type {
+    ColAggFunc,
+    ColDef,
+    ColGroupDef,
+    ColKey,
+    ColumnChooserParams,
+    HeaderLocation,
+    IAggFunc,
+} from '../entities/colDef';
 import type { ChartRef, GridOptions, SelectAllMode } from '../entities/gridOptions';
 import type { AgPublicEventType } from '../eventTypes';
 import type {
-    AgEvent,
     AgEventListener,
     AgGlobalEventListener,
     ColumnEventType,
@@ -26,11 +39,21 @@ import type {
 import type { CellRange, CellRangeParams } from '../interfaces/IRangeService';
 import type { ServerSideGroupLevelState } from '../interfaces/IServerSideStore';
 import type { AdvancedFilterModel } from '../interfaces/advancedFilterModel';
-import type { ISizeColumnsToFitParams } from '../interfaces/autoSize';
+import type {
+    ISizeAllColumnsToContentParams,
+    ISizeColumnsToContentParams,
+    ISizeColumnsToFitParams,
+} from '../interfaces/autoSize';
 import type { CsvExportParams } from '../interfaces/exportParams';
-import type { GridState } from '../interfaces/gridState';
+import type { GridState, GridStateKey } from '../interfaces/gridState';
 import type { RenderedRowEvent } from '../interfaces/iCallbackParams';
-import type { GetCellEditorInstancesParams, ICellEditor } from '../interfaces/iCellEditor';
+import type {
+    EditingCellPosition,
+    GetCellEditorInstancesParams,
+    ICellEditor,
+    ICellEditorValidationError,
+    StartEditingCellParams,
+} from '../interfaces/iCellEditor';
 import type { CellPosition } from '../interfaces/iCellPosition';
 import type { FlashCellsParams, RefreshCellsParams } from '../interfaces/iCellsParams';
 import type { ClientSideRowModelStep } from '../interfaces/iClientSideRowModel';
@@ -39,8 +62,11 @@ import type { Column, ColumnGroup, ColumnPinnedType, ProvidedColumnGroup } from 
 import type { IColumnToolPanel } from '../interfaces/iColumnToolPanel';
 import type { IContextMenuParams } from '../interfaces/iContextMenu';
 import type { ExcelExportMultipleSheetParams, ExcelExportParams } from '../interfaces/iExcelCreator';
-import type { FilterModel, IFilter } from '../interfaces/iFilter';
+import type { FilterActionParams, FilterModel, IFilter } from '../interfaces/iFilter';
 import type { IFiltersToolPanel } from '../interfaces/iFiltersToolPanel';
+import type { FindCellParams, FindCellValueParams, FindMatch, FindPart } from '../interfaces/iFind';
+import type { AgModuleName } from '../interfaces/iModule';
+import type { PdfExportParams } from '../interfaces/iPdfCreator';
 import type { RedrawRowsParams } from '../interfaces/iRedrawRowsParams';
 import type { IRowNode, RowPinnedType } from '../interfaces/iRowNode';
 import type { LoadSuccessParams, RefreshServerSideParams } from '../interfaces/iServerSideRowModel';
@@ -48,40 +74,15 @@ import type { IServerSideGroupSelectionState, IServerSideSelectionState } from '
 import type { SideBarDef } from '../interfaces/iSideBar';
 import type { IStatusPanel } from '../interfaces/iStatusPanel';
 import type { IToolPanel } from '../interfaces/iToolPanel';
+import type { IToolbarItem } from '../interfaces/iToolbar';
+import type { DetailGridInfo } from '../interfaces/masterDetail';
+import type { GetNoteParams, Note, RefreshNotesParams, SetNoteParams } from '../interfaces/notes';
 import type { RowDataTransaction } from '../interfaces/rowDataTransaction';
 import type { RowNodeTransaction } from '../interfaces/rowNodeTransaction';
 import type { ServerSideTransaction, ServerSideTransactionResult } from '../interfaces/serverSideTransaction';
+import type { StructuredSchemaParams } from '../interfaces/structuredSchemaParams';
 import type { GetCellRendererInstancesParams, ICellRenderer } from '../rendering/cellRenderers/iCellRenderer';
-
-export interface DetailGridInfo {
-    /**
-     * Id of the detail grid, the format is `detail_{ROW-ID}`,
-     * where `ROW-ID` is the `id` of the parent row.
-     */
-    id: string;
-    /** Grid api of the detail grid. */
-    api?: GridApi;
-}
-
-export interface StartEditingCellParams {
-    /** The row index of the row to start editing */
-    rowIndex: number;
-    /** The column key of the row to start editing */
-    colKey: string | Column;
-    /** Set to `'top'` or `'bottom'` to start editing a pinned row */
-    rowPinned?: RowPinnedType;
-    /** The key to pass to the cell editor */
-    key?: string;
-}
-
-export interface GetCellValueParams<TValue = any> {
-    /** The row node to get the value from */
-    rowNode: IRowNode;
-    /** The column to get the value from */
-    colKey: string | Column<TValue>;
-    /** If `true` formatted value will be returned. */
-    useFormatter?: boolean;
-}
+import type { GetCellValueParams } from '../valueService/cellApi';
 
 export interface _CoreGridApi<TData = any> {
     /** Returns the `gridId` for the current grid as specified via the gridOptions property `gridId` or the auto assigned grid id if none was provided. */
@@ -108,11 +109,20 @@ export interface _CoreGridApi<TData = any> {
      * Updates the provided subset of gridOptions with the provided values. (Cannot be used on `Initial` properties.)
      */
     updateGridOptions<TDataUpdate extends TData>(options: ManagedGridOptions<TDataUpdate>): void;
+
+    /**
+     * Check if a Module is registered with the current grid instance via its equivalent string name.
+     */
+    isModuleRegistered(moduleName: AgModuleName): boolean;
+
+    /** Returns the outermost DOM element created by the grid. This is a direct child of the host element provided by the application. */
+    getGridElement(): Element | undefined;
 }
 
 export interface _RowSelectionGridApi<TData = any> {
     /**
      * Set all of the provided nodes selection state to the provided value.
+     * @agModule `RowSelectionModule`
      */
     setNodesSelected(params: { nodes: IRowNode<TData>[]; newValue: boolean; source?: SelectionEventSourceType }): void;
 
@@ -122,6 +132,8 @@ export interface _RowSelectionGridApi<TData = any> {
      *
      * @param mode SelectAll mode to use. See `SelectAllMode`
      * @param source Source property that will appear in the `selectionChanged` event, defaults to `'apiSelectAll'`
+     *
+     * @agModule `RowSelectionModule`
      */
     selectAll(mode?: SelectAllMode, source?: SelectionEventSourceType): void;
 
@@ -131,6 +143,8 @@ export interface _RowSelectionGridApi<TData = any> {
      *
      * @param mode SelectAll mode to use. See `SelectAllMode`
      * @param source Source property that will appear in the `selectionChanged` event, defaults to `'apiSelectAll'`
+     *
+     * @agModule `RowSelectionModule`
      */
     deselectAll(mode?: SelectAllMode, source?: SelectionEventSourceType): void;
 
@@ -170,34 +184,50 @@ export interface _RowSelectionGridApi<TData = any> {
      * Returns an unsorted list of selected nodes.
      * Getting the underlying node (rather than the data) is useful when working with tree / aggregated data,
      * as the node can be traversed.
+     * @agModule `RowSelectionModule`
      */
     getSelectedNodes(): IRowNode<TData>[];
 
-    /** Returns an unsorted list of selected rows (i.e. row data that you provided). */
+    /**
+     * Returns an unsorted list of selected rows (i.e. row data that you provided).
+     * @agModule `RowSelectionModule`
+     */
     getSelectedRows(): TData[];
 }
 
 export interface _OverlayGridApi {
     /**
      * Show the 'loading' overlay.
-     * @deprecated v32 `showLoadingOverlay` is deprecated. Use the grid option "loading"=true instead or setGridOption("loading", true).
+     * @deprecated v32 `showLoadingOverlay` is deprecated. Use the grid option "loading"=true or setGridOption("loading", true) instead.
      */
     showLoadingOverlay(): void;
 
-    /** Show the no-rows overlay. If `suppressNoRowsOverlay` is set, or if `loading` is true, this will not do anything. */
+    /**
+     * Show the no-rows overlay. If `loading` is true, this will not do anything.
+     *
+     *  - **Prefer  `setGridOption('activeOverlay', 'agNoRowsOverlay')` .**
+     */
     showNoRowsOverlay(): void;
 
-    /** Hide the no-rows overlay if it is showing. */
+    /**
+     * Hide the no-rows overlay if it is showing.
+     *
+     * - **Prefer  `setGridOption('activeOverlay', undefined)` .**
+     */
     hideOverlay(): void;
 }
 
 export interface _RowGridApi<TData> {
-    /** Remove row(s) from the DOM and recreate them again from scratch. */
+    /**
+     * Remove row(s) from the DOM and recreate them again from scratch.
+     * @agModule `RowApiModule`
+     */
     redrawRows(params?: RedrawRowsParams<TData>): void;
 
     /**
      * Expand or collapse a specific row node, optionally expanding/collapsing all of its parent nodes.
-     * By default rows are expanded asynchronously for best performance. Set forceSync: `true` if you need to interact with the expanded row immediately after this function.
+     * By default rows are expanded asynchronously for best performance. Set `forceSync: true` if you need to interact with the expanded row immediately after this function.
+     * @agModule `RowApiModule`
      */
     setRowNodeExpanded(rowNode: IRowNode<TData>, expanded: boolean, expandParents?: boolean, forceSync?: boolean): void;
 
@@ -206,6 +236,13 @@ export interface _RowGridApi<TData> {
      * The row node ID is the one you provide from the callback `getRowId(params)`,
      * otherwise the ID is a number (cast as string) auto-generated by the grid when
      * the row data is set.
+     *
+     * Special IDs for built-in row types (import constants from `ag-grid-community`):
+     * - `ROOT_NODE_ID` — the invisible root node (level -1, always a group)
+     * - `GRAND_TOTAL_ROW_ID` — the grand total footer row (when `grandTotalRow` is enabled)
+     * - `GROUP_TOTAL_ROW_ID_PREFIX + groupId` — a group total footer row for the group with the given ID
+     * - `DETAIL_ROW_ID_PREFIX + masterRowId` — the detail row for the master row with the given ID
+     * @agModule `RowApiModule`
      */
     getRowNode(id: string): IRowNode<TData> | undefined;
 
@@ -215,30 +252,48 @@ export interface _RowGridApi<TData> {
      * Unlike normal events, you do not need to unregister rendered row listeners.
      * When the rendered row is removed from the grid, all associated rendered row listeners will also be removed.
      * listen for this event if your `cellRenderer` needs to do cleanup when the row no longer exists.
+     * @agModule `RowApiModule`
      */
     addRenderedRowListener(eventName: RenderedRowEvent, rowIndex: number, callback: (...args: any[]) => any): void;
 
-    /** Retrieve rendered nodes. Due to virtualisation this will contain only the current visible rows and those in the buffer. */
+    /**
+     * Retrieve rendered nodes. Due to virtualisation this will contain only the current visible rows and those in the buffer.
+     * @agModule `RowApiModule`
+     */
     getRenderedNodes(): IRowNode<TData>[];
 
     /**
      * Iterates through each node (row) in the grid and calls the callback for each node.
      * This works similar to the `forEach` method on a JavaScript array.
      * This is called for every node, ignoring any filtering or sorting applied within the grid.
+     * It is not called on any pinned row nodes.
      * If using the Infinite Row Model, then this gets called for each page loaded in the page cache.
+     * @agModule `RowApiModule`
      */
     forEachNode(callback: (rowNode: IRowNode<TData>, index: number) => void, includeFooterNodes?: boolean): void;
 
-    /** Get the index of the first displayed row due to scrolling (includes invisible rendered rows in the buffer). */
+    /**
+     * Get the index of the first displayed row due to scrolling (includes invisible rendered rows in the buffer).
+     * @agModule `RowApiModule`
+     */
     getFirstDisplayedRowIndex(): number;
 
-    /** Get the index of the last displayed row due to scrolling (includes invisible rendered rows in the buffer). */
+    /**
+     * Get the index of the last displayed row due to scrolling (includes invisible rendered rows in the buffer).
+     * @agModule `RowApiModule`
+     */
     getLastDisplayedRowIndex(): number;
 
-    /** Returns the displayed `RowNode` at the given `index`. */
+    /**
+     * Returns the displayed `RowNode` at the given `index`.
+     * @agModule `RowApiModule`
+     */
     getDisplayedRowAtIndex(index: number): IRowNode<TData> | undefined;
 
-    /** Returns the total number of displayed rows. */
+    /**
+     * Returns the total number of displayed rows.
+     * @agModule `RowApiModule`
+     */
     getDisplayedRowCount(): number;
 }
 
@@ -247,6 +302,7 @@ export interface _ScrollGridApi<TData> {
      * Returns an object with two properties:
      *  - `top`: The top pixel position of the current scroll in the grid
      *  - `bottom`: The bottom pixel position of the current scroll in the grid
+     * @agModule `ScrollApiModule`
      */
     getVerticalPixelRange(): { top: number; bottom: number };
 
@@ -254,6 +310,7 @@ export interface _ScrollGridApi<TData> {
      * Returns an object with two properties:
      * - `left`: The left pixel position of the current scroll in the grid
      * - `right`: The right pixel position of the current scroll in the grid
+     * @agModule `ScrollApiModule`
      */
     getHorizontalPixelRange(): { left: number; right: number };
 
@@ -268,6 +325,7 @@ export interface _ScrollGridApi<TData> {
      * - `start` - Scrolls the column to the start of the viewport.
      * - `middle` - Scrolls the column to the middle of the viewport.
      * - `end` - Scrolls the column to the end of the viewport.
+     * @agModule `ScrollApiModule`
      */
     ensureColumnVisible(key: string | Column, position?: 'auto' | 'start' | 'middle' | 'end'): void;
 
@@ -275,6 +333,7 @@ export interface _ScrollGridApi<TData> {
      * Vertically scrolls the grid until the provided row index is inside the visible viewport.
      * If a position is provided, the grid will attempt to scroll until the row is at the given position within the viewport.
      * This will have no effect before the firstDataRendered event has fired.
+     * @agModule `ScrollApiModule`
      */
     ensureIndexVisible(index: number, position?: 'top' | 'bottom' | 'middle' | null): void;
 
@@ -282,6 +341,7 @@ export interface _ScrollGridApi<TData> {
      * Vertically scrolls the grid until the provided row (or a row matching the provided comparator) is inside the visible viewport.
      * If a position is provided, the grid will attempt to scroll until the row is at the given position within the viewport.
      * This will have no effect before the firstDataRendered event has fired.
+     * @agModule `ScrollApiModule`
      */
     ensureNodeVisible(
         nodeSelector: TData | IRowNode<TData> | ((row: IRowNode<TData>) => boolean),
@@ -315,12 +375,16 @@ export interface _EventGridApi<TData> {
      * Listener will receive the `event` as a single parameter.
      * Listeners will be automatically removed when the grid is destroyed.
      * @example api.addEventListener('rowClicked', (event) => { console.log('Row clicked', event);});
+     * @agModule `EventApiModule`
      */
     addEventListener<TEventType extends AgPublicEventType>(
         eventType: TEventType,
         listener: AgEventListener<TData, any, TEventType>
     ): void;
-    /** Remove an event listener. */
+    /**
+     * Remove an event listener.
+     * @agModule `EventApiModule`
+     */
     removeEventListener<TEventType extends AgPublicEventType>(
         eventType: TEventType,
         listener: AgEventListener<TData, any, TEventType>
@@ -332,25 +396,44 @@ export interface _EventGridApi<TData> {
      * Listeners will be automatically removed when the grid is destroyed.
      * If handling multiple event types it is recommended to use `event.type` to enable TypeScript to infer the event parameters.
      * @example api.addGlobalListener((eventType, event) => { });
+     * @agModule `EventApiModule`
      */
     addGlobalListener<TEventType extends AgPublicEventType>(
         listener: AgGlobalEventListener<TData, any, TEventType>
     ): void;
-    /** Remove a global event listener. */
+    /**
+     * Remove a global event listener.
+     * @agModule `EventApiModule`
+     */
     removeGlobalListener<TEventType extends AgPublicEventType>(
         listener: AgGlobalEventListener<TData, any, TEventType>
     ): void;
 }
 
 export interface _ValueCacheApi {
-    /** Expire the value cache. */
+    /**
+     * Expire the value cache.
+     *  @agModule `ValueCacheModule`
+     */
     expireValueCache(): void;
 }
 
 export interface _ValueApi<TData> {
     /**
-     * Gets the cell value for the given column and `rowNode` (row).
-     * Based on params.useFormatter with either return the value as specified by the `field` or `valueGetter` on the column definition or the formatted value.
+     * Returns the cell value for the given column and row, as it would appear in the grid.
+     *
+     * By default (`from: 'edit'`), returns the live editing value if the cell is being edited,
+     * any pending batch value, or the committed data value. Set `from: 'data'` to always
+     * return the committed data value, ignoring all edit state.
+     *
+     * With `useFormatter: true`, returns the formatted string (via the column's `valueFormatter`).
+     *
+     * For group rows with `showRowGroup` columns, returns the display value handled by the
+     * group column renderer (including `groupHideOpenParents` and `showOpenedGroup` logic).
+     *
+     * To get the raw data value without display logic, use `rowNode.getDataValue()` instead.
+     *
+     * @agModule `CellApiModule`
      */
     getCellValue<TValue = any>(params: {
         rowNode: IRowNode<TData>;
@@ -379,17 +462,20 @@ export interface _SortGridApi {
     onSortChanged(): void;
 }
 
-export interface _ClientSideRowModelGridApi<TData> {
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _ClientSideRowModelGridApi<TData> extends _RowModelSharedApi {
     /**
      * Informs the grid that row group expanded state has changed and it needs to rerender the group nodes.
      * Typically called after updating the row node expanded state explicitly, i.e `rowNode.expanded = false`,
      * across multiple groups and you want to update the grid view in a single rerender instead of on every group change.
+     * @agModule `ClientSideRowModelApiModule`
      */
     onGroupExpandedOrCollapsed(): void;
 
     /**
      * Refresh the Client-Side Row Model, executing the grouping, filtering and sorting again.
      * Optionally provide the step you wish the refresh to apply from. Defaults to `everything`.
+     * @agModule `ClientSideRowModelApiModule`
      */
     refreshClientSideRowModel(step?: ClientSideRowModelStep): void;
 
@@ -398,49 +484,94 @@ export interface _ClientSideRowModelGridApi<TData> {
      * This effectively goes through all the data that you provided to the grid before the grid performed any grouping.
      * If using tree data, goes through all the nodes for the data you provided, including nodes that have children,
      * but excluding groups the grid created where gaps were missing in the hierarchy.
+     * @agModule `ClientSideRowModelApiModule`
      */
     forEachLeafNode(callback: (rowNode: IRowNode<TData>) => void): void;
 
-    /** Similar to `forEachNode`, except skips any filtered out data. */
+    /**
+     * Similar to `forEachNode`, except skips any filtered out data.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     forEachNodeAfterFilter(callback: (rowNode: IRowNode<TData>, index: number) => void): void;
 
-    /** Similar to `forEachNodeAfterFilter`, except the callbacks are called in the order the rows are displayed in the grid. */
+    /**
+     * Similar to `forEachNodeAfterFilter`, except the callbacks are called in the order the rows are displayed in the grid.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     forEachNodeAfterFilterAndSort(callback: (rowNode: IRowNode<TData>, index: number) => void): void;
 
-    /** Tells the grid to recalculate the row heights. */
-    resetRowHeights(): void;
-
-    /** Update row data. Pass a transaction object with lists for `add`, `remove` and `update`. */
+    /**
+     * Update row data. Pass a transaction object with lists for `add`, `remove` and `update`.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     applyTransaction(rowDataTransaction: RowDataTransaction<TData>): RowNodeTransaction<TData> | null | undefined;
 
-    /** Same as `applyTransaction` except executes asynchronously for efficiency. */
+    /**
+     * Same as `applyTransaction` except executes asynchronously for efficiency.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     applyTransactionAsync(
         rowDataTransaction: RowDataTransaction<TData>,
         callback?: (res: RowNodeTransaction<TData>) => void
     ): void;
 
-    /** Executes any remaining asynchronous grid transactions, if any are waiting to be executed. */
+    /**
+     * Executes any remaining asynchronous grid transactions, if any are waiting to be executed.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     flushAsyncTransactions(): void;
 
     /**
      * Returns a list of all selected nodes at 'best cost', a feature to be used with groups / trees.
      * If a group has all its children selected, then the group appears in the result, but not the children.
      * Designed for use with `'children'` as the group selection type, where groups don't actually appear in the selection normally.
+     * @agModule `ClientSideRowModelApiModule`
      */
     getBestCostNodeSelection(): IRowNode<TData>[] | undefined;
 
-    /** Returns `true` if the Client-Side row model has no rows. It is not impacted by filtering and does not include pinned rows. */
+    /**
+     * Returns `true` if the Client-Side row model has no rows. It is not impacted by filtering and does not include pinned rows.
+     * @agModule `ClientSideRowModelApiModule`
+     */
     isRowDataEmpty(): boolean;
 }
 
 export interface _CsrmSsrmSharedGridApi {
-    /** Expand all groups. */
+    /**
+     * Expand all groups.
+     *
+     * @agModule `ClientSideRowModelApiModule / ServerSideRowModelApiModule`
+     */
     expandAll(): void;
 
-    /** Collapse all groups. */
+    /**
+     * Collapse all groups.
+     *
+     * @agModule `ClientSideRowModelApiModule / ServerSideRowModelApiModule`
+     */
     collapseAll(): void;
 
-    /** Tells the grid a row height has changed. To be used after calling `rowNode.setRowHeight(newHeight)`. */
+    /**
+     * Reset all group expansion to defaults, as determined by `groupDefaultExpanded`,
+     * `isGroupOpenByDefault`, or `isServerSideGroupOpenByDefault`.
+     * Any user-initiated expand/collapse overrides are discarded.
+     *
+     * @agModule `ClientSideRowModelApiModule / ServerSideRowModelApiModule`
+     */
+    resetRowGroupExpansion(): void;
+}
+
+export interface _RowModelSharedApi {
+    /**
+     * Tells the grid to recalculate the row heights.
+     *
+     * @agModule `ClientSideRowModelApiModule / ServerSideRowModelApiModule`
+     */
+    resetRowHeights(): void;
+
+    /**
+     * Tells the grid a row height has changed. To be used after calling `rowNode.setRowHeight(newHeight)`.
+     */
     onRowHeightChanged(): void;
 }
 
@@ -451,15 +582,21 @@ export interface _SsrmInfiniteSharedGridApi {
      * Set `rowCount` to adjust the height of the vertical scroll.
      * Set `maxRowFound` to enable / disable searching for more rows.
      * Use this method if you add or remove rows into the dataset and need to reset the number of rows or instruct the grid that the entire row count is no longer known.
+     * @agModule `InfiniteRowModelModule / ServerSideRowModelApiModule`
      */
     setRowCount(rowCount: number, maxRowFound?: boolean): void;
 
     /**
      * Returns an object representing the state of the cache. This is useful for debugging and understanding how the cache is working.
+     * @agModule `InfiniteRowModelModule / ServerSideRowModelApiModule`
      */
     getCacheBlockState(): any;
 
-    /** Returns `false` if grid allows for scrolling past the last row to load more rows, thus providing infinite scroll. */
+    /**
+     * Returns `false` if grid allows for scrolling past the last row to load more rows, thus providing infinite scroll.
+     *
+     * @agModule `InfiniteRowModelModule / ServerSideRowModelApiModule`
+     */
     isLastRowIndexKnown(): boolean | undefined;
 }
 
@@ -475,6 +612,7 @@ export interface _ColumnAutosizeApi {
      * and row data is initially empty or yet to be set,
      * the column sizing will happen asynchronously when row data is added.
      * To always perform this synchronously, set `cellDataType = false` on the default column definition.
+     * @agModule `ColumnAutoSizeModule`
      **/
     sizeColumnsToFit(paramsOrGridWidth?: ISizeColumnsToFitParams | number): void;
 
@@ -483,86 +621,151 @@ export interface _ColumnAutosizeApi {
      * and row data is initially empty or yet to be set,
      * the column sizing will happen asynchronously when row data is added.
      * To always perform this synchronously, set `cellDataType = false` on the default column definition.
+     * @agModule `ColumnAutoSizeModule`
      */
-    autoSizeColumns(keys: (string | ColDef | Column)[], skipHeader?: boolean): void;
+    autoSizeColumns(keys: ColKey[], skipHeader?: boolean): void;
+    /**
+     * Auto-sizes columns based on their contents. If inferring cell data types with custom column types
+     * and row data is initially empty or yet to be set,
+     * the column sizing will happen asynchronously when row data is added.
+     * To always perform this synchronously, set `cellDataType = false` on the default column definition.
+     * @agModule `ColumnAutoSizeModule`
+     */
+    autoSizeColumns(params: ISizeColumnsToContentParams): void;
 
     /**
      * Calls `autoSizeColumns` on all displayed columns. If inferring cell data types with custom column types
      * and row data is initially empty or yet to be set,
      * the column sizing will happen asynchronously when row data is added.
      * To always perform this synchronously, set `cellDataType = false` on the default column definition.
+     * @agModule `ColumnAutoSizeModule`
      */
     autoSizeAllColumns(skipHeader?: boolean): void;
+    /**
+     * Auto-sizes columns based on their contents. If inferring cell data types with custom column types
+     * and row data is initially empty or yet to be set,
+     * the column sizing will happen asynchronously when row data is added.
+     * To always perform this synchronously, set `cellDataType = false` on the default column definition.
+     * @agModule `ColumnAutoSizeModule`
+     */
+    autoSizeAllColumns(params: ISizeAllColumnsToContentParams): void;
 }
 
 export interface _ColumnResizeApi {
     /** Sets the column widths of the columns provided. The finished flag gets included in the resulting event and not used internally by the grid. The finished flag is intended for dragging, where a dragging action will produce many `columnWidth` events, so the consumer of events knows when it receives the last event in a stream. The finished parameter is optional, and defaults to `true`. */
     setColumnWidths(
-        columnWidths: { key: string | ColDef | Column; newWidth: number }[],
+        columnWidths: { key: ColKey; newWidth: number }[],
         finished?: boolean,
         source?: ColumnEventType
     ): void;
 }
 
 export interface _ColumnMoveApi {
-    /** Moves the column at `fromIdex` to `toIndex`. The column is first removed, then added at the `toIndex` location, thus index locations will change to the right of the column after the removal. */
+    /** Moves the column at `fromIndex` to `toIndex`. The column is first removed, then added at the `toIndex` location, thus index locations will change to the right of the column after the removal. */
     moveColumnByIndex(fromIndex: number, toIndex: number): void;
 
     /** Moves columns to `toIndex`. The columns are first removed, then added at the `toIndex` location, thus index locations will change to the right of the column after the removal. */
-    moveColumns(columnsToMoveKeys: (string | ColDef | Column)[], toIndex: number): void;
+    moveColumns(columnsToMoveKeys: ColKey[], toIndex: number): void;
 }
 
 export interface _ColumnHoverApi {
-    /** Returns true if the column is currently hovered. */
+    /**
+     * Returns true if the column is currently hovered.
+     * @agModule `ColumnHoverModule`
+     */
     isColumnHovered(column: Column): boolean;
 }
 
 export interface _ColumnGridApi<TData> {
     /**
      * Returns the current column definitions.
+     * @agModule `ColumnApiModule`
      */
     getColumnDefs(): (ColDef<TData> | ColGroupDef<TData>)[] | undefined;
 
+    /**
+     * Returns the column definition with the given `colKey`, which can either be the `colId` (a string) or the column instance.
+     * @agModule `ColumnApiModule`
+     */
     getColumnDef<TValue = any>(key: string | Column<TValue>): ColDef<TData, TValue> | null;
 
-    /** Returns the display name for a column. Useful if you are doing your own header rendering and want the grid to work out if `headerValueGetter` is used, or if you are doing your own column management GUI, to know what to show as the column name. */
+    /**
+     * Returns the display name for a column. Useful if you are doing your own header rendering and want the grid to work out if `headerValueGetter` is used, or if you are doing your own column management GUI, to know what to show as the column name.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayNameForColumn(column: Column, location: HeaderLocation): string;
 
-    /** Returns the column with the given `colKey`, which can either be the `colId` (a string) or the `colDef` (an object). */
-    getColumn<TValue = any>(key: string | ColDef<TData, TValue> | Column<TValue>): Column<TValue> | null;
+    /**
+     * Returns the column with the given `colKey`, which can either be the `colId` (a string) or the `colDef` (an object).
+     * @agModule `ColumnApiModule`
+     */
+    getColumn<TValue = any>(key: ColKey<TData, TValue>): Column<TValue> | null;
 
-    /** Returns all the columns, regardless of visible or not. */
+    /**
+     * Returns all the columns, regardless of visible or not.
+     * @agModule `ColumnApiModule`
+     */
     getColumns(): Column[] | null;
 
-    /** Applies the state of the columns from a previous state. Returns `false` if one or more columns could not be found. */
+    /**
+     * Applies the state of the columns from a previous state. Returns `false` if one or more columns could not be found.
+     * @agModule `ColumnApiModule`
+     */
     applyColumnState(params: ApplyColumnStateParams): boolean;
 
-    /** Gets the state of the columns. Typically used when saving column state. */
+    /**
+     * Gets the state of the columns. Typically used when saving column state.
+     * @agModule `ColumnApiModule`
+     */
     getColumnState(): ColumnState[];
 
-    /** Sets the state back to match the originally provided column definitions. */
+    /**
+     * Sets the state back to match the originally provided column definitions.
+     * @agModule `ColumnApiModule`
+     */
     resetColumnState(): void;
 
-    /** Returns `true` if pinning left or right, otherwise `false`. */
+    /**
+     * Returns `true` if pinning left or right, otherwise `false`.
+     * @agModule `ColumnApiModule`
+     */
     isPinning(): boolean;
 
-    /** Returns `true` if pinning left, otherwise `false`. */
+    /**
+     * Returns `true` if pinning left, otherwise `false`.
+     * @agModule `ColumnApiModule`
+     */
     isPinningLeft(): boolean;
 
-    /** Returns `true` if pinning right, otherwise `false`. */
+    /**
+     * Returns `true` if pinning right, otherwise `false`.
+     * @agModule `ColumnApiModule`
+     */
     isPinningRight(): boolean;
 
-    /** Returns the column to the right of the provided column, taking into consideration open / closed column groups and visible columns. This is useful if you need to know what column is beside yours e.g. if implementing your own cell navigation. */
+    /**
+     * Returns the column to the right of the provided column, taking into consideration open / closed column groups and visible columns. This is useful if you need to know what column is beside yours e.g. if implementing your own cell navigation.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayedColAfter<TValue = any>(col: Column): Column<TValue> | null;
 
-    /** Same as `getVisibleColAfter` except gives column to the left. */
+    /**
+     * Same as `getVisibleColAfter` except gives column to the left.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayedColBefore<TValue = any>(col: Column): Column<TValue> | null;
 
-    /** Sets the visibility of columns. Key can be the column ID or `Column` object. */
+    /**
+     * Sets the visibility of columns. Key can be the column ID or `Column` object.
+     * @agModule `ColumnApiModule`
+     */
     setColumnsVisible(keys: (string | Column)[], visible: boolean): void;
 
-    /** Set a column's pinned / unpinned state. Key can be the column ID, field, `ColDef` object or `Column` object. */
-    setColumnsPinned(keys: (string | ColDef | Column)[], pinned: ColumnPinnedType): void;
+    /**
+     * Set a column's pinned / unpinned state. Key can be the column ID, field, `ColDef` object or `Column` object.
+     * @agModule `ColumnApiModule`
+     */
+    setColumnsPinned(keys: ColKey[], pinned: ColumnPinnedType): void;
 
     /**
      * Returns all the grid columns, same as `getColumns()`, except
@@ -570,22 +773,39 @@ export interface _ColumnGridApi<TData> {
      *  a) it has the order of the columns that are presented in the grid
      *
      *  b) it's after the 'pivot' step, so if pivoting, has the value columns for the pivot.
+     *
+     * @agModule `ColumnApiModule`
      */
     getAllGridColumns(): Column[];
 
-    /** Same as `getAllDisplayedColumns` but just for the pinned left portion of the grid. */
+    /**
+     * Same as `getAllDisplayedColumns` but just for the pinned left portion of the grid.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayedLeftColumns(): Column[];
 
-    /** Same as `getAllDisplayedColumns` but just for the center portion of the grid. */
+    /**
+     * Same as `getAllDisplayedColumns` but just for the center portion of the grid.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayedCenterColumns(): Column[];
 
-    /** Same as `getAllDisplayedColumns` but just for the pinned right portion of the grid. */
+    /**
+     * Same as `getAllDisplayedColumns` but just for the pinned right portion of the grid.
+     * @agModule `ColumnApiModule`
+     */
     getDisplayedRightColumns(): Column[];
 
-    /** Returns all columns currently displayed (e.g. are visible and if in a group, the group is showing the columns) for the pinned left, centre and pinned right portions of the grid. */
+    /**
+     * Returns all columns currently displayed (e.g. are visible and if in a group, the group is showing the columns) for the pinned left, centre and pinned right portions of the grid.
+     * @agModule `ColumnApiModule`
+     */
     getAllDisplayedColumns(): Column[];
 
-    /** Same as `getAllGridColumns()`, except only returns rendered columns, i.e. columns that are not within the viewport and therefore not rendered, due to column virtualisation, are not displayed. */
+    /**
+     * Same as `getAllGridColumns()`, except only returns rendered columns, i.e. columns that are not within the viewport and therefore not rendered, due to column virtualisation, are not displayed.
+     * @agModule `ColumnApiModule`
+     */
     getAllDisplayedVirtualColumns(): Column[];
 }
 
@@ -624,68 +844,218 @@ export interface _ColumnGroupGridApi {
     getAllDisplayedColumnGroups(): (Column | ColumnGroup)[] | null;
 }
 
-export interface _DragGridApi {
-    /** Adds a drop zone outside of the grid where rows can be dropped. */
+export interface _DragGridApi<TData> {
+    /**
+     * Adds a drop zone outside of the grid where rows can be dropped.
+     * @agModule `RowDragModule`
+     */
     addRowDropZone(params: RowDropZoneParams): void;
 
-    /** Removes an external drop zone added by `addRowDropZone`. */
+    /**
+     * Removes an external drop zone added by `addRowDropZone`.
+     * @agModule `RowDragModule` */
     removeRowDropZone(params: RowDropZoneParams): void;
 
-    /** Returns the `RowDropZoneParams` to be used by another grid's `addRowDropZone` method. */
+    /**
+     * Returns the `RowDropZoneParams` to be used by another grid's `addRowDropZone` method.
+     * @agModule `RowDragModule`
+     */
     getRowDropZoneParams(events?: RowDropZoneEvents): RowDropZoneParams | undefined;
+
+    /**
+     * Gets the currently highlighted drop target row, set by `setRowDropPositionIndicator` or managed drag ad drop.
+     * @agModule `RowDragModule`
+     */
+    getRowDropPositionIndicator(): RowDropPositionIndicator<TData>;
+
+    /**
+     * Sets the current highlighted row drop target.
+     * This is useful for implementing custom unmanaged row drag and drop logic, to highlight the target row.
+     * @agModule `RowDragModule`
+     */
+    setRowDropPositionIndicator(highlight: SetRowDropPositionIndicatorParams<TData> | null | undefined): void;
 }
 
 export interface _EditGridApi<TData> {
-    /** Returns the list of active cell editor instances. Optionally provide parameters to restrict to certain columns / row nodes. */
+    /**
+     * Returns the list of active cell editor instances. Optionally provide parameters to restrict to certain columns / row nodes.
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
     getCellEditorInstances(params?: GetCellEditorInstancesParams<TData>): ICellEditor[];
 
-    /** If the grid is editing, returns back details of the editing cell(s). */
-    getEditingCells(): CellPosition[];
+    /**
+     * If the grid is editing, returns back details of the editing cell(s).
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
+    getEditingCells(): EditingCellPosition[];
 
-    /** If a cell is editing, it stops the editing. Pass `true` if you want to cancel the editing (i.e. don't accept changes). */
+    /**
+     * If the grid is editing, returns back edit values of the row if any.
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
+    getEditRowValues(rowNode: IRowNode<TData>): Record<string, any> | undefined;
+
+    /**
+     * If a cell is editing, it stops the editing. Pass `true` if you want to cancel the editing (i.e. don't accept changes).
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
     stopEditing(cancel?: boolean): void;
 
-    /** Start editing the provided cell. If another cell is editing, the editing will be stopped in that other cell. */
+    /**
+     * Start editing the provided cell. If another cell is editing, the editing will be stopped in that other cell.
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
     startEditingCell(params: StartEditingCellParams): void;
+
+    /**
+     * Returns `true` if the grid is editing a cell
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
+    isEditing(cellPosition: CellPosition): boolean;
+
+    /**
+     * Run validation for every instantiated editor.
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
+    validateEdit(): ICellEditorValidationError[] | null;
+
+    /**
+     * The validation errors the Grid currently holds, without running validation. Use `validateEdit()` to revalidate instead.
+     * @agModule `TextEditorModule` / `LargeTextEditorModule` / `NumberEditorModule` / `DateEditorModule` / `CheckboxEditorModule` / `CustomEditorModule` / `SelectEditorModule` / `RichSelectModule`
+     */
+    getEditValidationErrors(): ICellEditorValidationError[] | null;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _BatchEditApi {
+    /**
+     * Starts a batch editing session. While batch editing is active, cell edits are accumulated
+     * as pending values without being committed to the row data. The pending values are only
+     * written when `commitBatchEdit()` is called, or discarded when `cancelBatchEdit()` is called.
+     *
+     * Calling `startBatchEdit()` while a batch is already active is a no-op.
+     * Use `isBatchEditing()` to check whether a batch session is currently active.
+     *
+     * Any active cell editor is cancelled when the batch session starts.
+     *
+     * The `batchEditingStarted` event is fired lazily on the first actual cell edit within the
+     * batch session, not when `startBatchEdit()` is called.
+     *
+     * Only supported with the Client-Side Row Model.
+     * @agModule `BatchEditModule`
+     */
+    startBatchEdit(): void;
+
+    /**
+     * Commits all pending batch edits to the row data and ends the batch editing session.
+     * Each accumulated pending value is written via `rowNode.setDataValue()`, and the
+     * `batchEditingStopped` event is fired with the committed edits.
+     *
+     * Calling `commitBatchEdit()` when no batch is active is a no-op.
+     *
+     * If no cells were edited during the batch session (i.e. `batchEditingStarted` was never
+     * fired), `batchEditingStopped` is not fired either.
+     *
+     * With `invalidEditValueMode: 'block'`, a commit is rejected while any edit is invalid: nothing is
+     * written, `batchEditingStopped` does not fire, and the batch and its editors stay open so the value
+     * can be corrected and the commit retried (or `cancelBatchEdit()` called).
+     *
+     * Only supported with the Client-Side Row Model.
+     * @agModule `BatchEditModule`
+     */
+    commitBatchEdit(): void;
+
+    /**
+     * Cancels all pending batch edits, reverting cells to their original values, and ends
+     * the batch editing session. The `batchEditingStopped` event is fired with an empty edit map.
+     *
+     * Calling `cancelBatchEdit()` when no batch is active is a no-op.
+     *
+     * If no cells were edited during the batch session (i.e. `batchEditingStarted` was never
+     * fired), `batchEditingStopped` is not fired either.
+     *
+     * Only supported with the Client-Side Row Model.
+     * @agModule `BatchEditModule`
+     */
+    cancelBatchEdit(): void;
+
+    /**
+     * Returns `true` if a batch editing session is currently active (i.e. `startBatchEdit()`
+     * has been called and neither `commitBatchEdit()` nor `cancelBatchEdit()` has been called yet).
+     * @agModule `BatchEditModule`
+     */
+    isBatchEditing(): boolean;
 }
 
 export interface _UndoRedoGridApi {
-    /** Reverts the last cell edit. */
+    /**
+     * Reverts the last cell edit.
+     * @agModule `UndoRedoEditModule`
+     */
     undoCellEditing(): void;
 
-    /** Re-applies the most recently undone cell edit. */
+    /**
+     * Re-applies the most recently undone cell edit.
+     * @agModule `UndoRedoEditModule`
+     */
     redoCellEditing(): void;
 
-    /** Returns current number of available cell edit undo operations. */
+    /**
+     * Returns current number of available cell edit undo operations.
+     * @agModule `UndoRedoEditModule`
+     */
     getCurrentUndoSize(): number;
 
-    /** Returns current number of available cell edit redo operations. */
+    /**
+     * Returns current number of available cell edit redo operations.
+     * @agModule `UndoRedoEditModule`
+     */
     getCurrentRedoSize(): number;
 }
 
 export interface _FilterGridApi {
-    /** Returns `true` if any filter is set. This includes quick filter, column filter, external filter or advanced filter. */
+    /**
+     * Returns `true` if any filter is set. This includes quick filter, column filter, external filter or advanced filter.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule` / `QuickFilterModule` / `ExternalFilterModule` / `AdvancedFilterModule`
+     *  */
     isAnyFilterPresent(): boolean;
 
     /**
      * Informs the grid that a filter has changed. This is typically called after a filter change through one of the filter APIs.
      * @param source The source of the filter change event. If not specified defaults to `'api'`.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule` / `QuickFilterModule` / `ExternalFilterModule` / `AdvancedFilterModule`
      */
     onFilterChanged(source?: FilterChangedEventSourceType): void;
 }
 
 export interface _ColumnFilterGridApi {
-    /** Returns `true` if any column filter is set, otherwise `false`. */
+    /**
+     * Returns `true` if any column filter is set, otherwise `false`.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
     isColumnFilterPresent(): boolean;
 
     /**
      * Returns the filter component instance for a column.
      * For getting/setting models for individual column filters, use `getColumnFilterModel` and `setColumnFilterModel` instead of this.
      * `key` can be a column ID or a `Column` object.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
      */
-    getColumnFilterInstance<TFilter extends IFilter>(key: string | Column): Promise<TFilter | null | undefined>;
+    getColumnFilterInstance<TFilter = IFilter>(key: string | Column): Promise<TFilter | null | undefined>;
 
-    /** Destroys a filter. Useful to force a particular filter to be created from scratch again. */
+    /**
+     * Returns the filter handler instance for a column.
+     * Used when `enableFilterHandlers = true`, or when using a grid-provided filter.
+     * If using a `SimpleColumnFilter`, this will be an object containing the provided `doesFilterPass` callback.
+     * `key` can be a column ID or a `Column` object.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
+    getColumnFilterHandler<TFilterHandler>(key: string | Column): TFilterHandler | undefined;
+
+    /**
+     * Destroys a filter. Useful to force a particular filter to be created from scratch again.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
     destroyFilter(key: string | Column): void;
 
     /**
@@ -694,43 +1064,168 @@ export interface _ColumnFilterGridApi {
      * the filter model will be applied asynchronously after row data is added.
      * To always perform this synchronously, set `cellDataType = false` on the default column definition,
      * or provide cell data types for every column.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
      */
     setFilterModel(model: FilterModel | null): void;
 
-    /** Gets the current state of all the column filters. Used for saving filter state. */
+    /**
+     * Gets the current state of all the column filters. Used for saving filter state.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
     getFilterModel(): FilterModel;
 
     /**
      * Gets the current filter model for the specified column.
      * Will return `null` if no active filter.
+     * @param useUnapplied If `enableFilterHandlers = true` and value is `true`, will return the unapplied filter model.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
      */
-    getColumnFilterModel<TModel>(column: string | Column): TModel | null;
+    getColumnFilterModel<TModel>(column: string | Column, useUnapplied?: boolean): TModel | null;
 
     /**
      * Sets the filter model for the specified column.
      * Setting a `model` of `null` will reset the filter (make inactive).
      * Must wait on the response before calling `api.onFilterChanged()`.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
      */
     setColumnFilterModel<TModel>(column: string | Column, model: TModel | null): Promise<void>;
 
-    /** Show the filter for the provided column. */
+    /**
+     * Show the filter for the provided column.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
     showColumnFilter(colKey: string | Column): void;
+
+    /**
+     * Hide the filter popup if it is open.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
+    hideColumnFilter(): void;
+
+    /**
+     * Perform the provided filter action for the column specified, or all columns.
+     * Requires `enableFilterHandlers = true`.
+     * @agModule `TextFilterModule` / `NumberFilterModule` / `DateFilterModule` / `SetFilterModule` / `MultiFilterModule` / `CustomFilterModule`
+     */
+    doFilterAction(params: FilterActionParams): void;
 }
 
 export interface _QuickFilterGridApi {
-    /** Returns `true` if the Quick Filter is set, otherwise `false`. */
+    /**
+     * Only supported for Client-Side Row Model.
+     * Returns `true` if the Quick Filter is set, otherwise `false`.
+     * @agModule `QuickFilterModule`
+     */
     isQuickFilterPresent(): boolean;
 
-    /** Get the current Quick Filter text from the grid, or `undefined` if none is set. */
+    /**
+     * Only supported for Client-Side Row Model.
+     * Get the current Quick Filter text from the grid, or `undefined` if none is set.
+     * @agModule `QuickFilterModule`
+     */
     getQuickFilter(): string | undefined;
 
-    /** Reset the Quick Filter cache text on every rowNode. */
+    /**
+     * Only supported for Client-Side Row Model.
+     * Reset the Quick Filter cache text on every rowNode.
+     * @agModule `QuickFilterModule`
+     */
     resetQuickFilter(): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _FindApi<TData> {
+    /**
+     * Go to the next match.
+     * @agModule `FindModule`
+     */
+    findNext(): void;
+    /**
+     * Go to the previous match.
+     * @agModule `FindModule`
+     */
+    findPrevious(): void;
+    /**
+     * Get the total number of matches.
+     * @agModule `FindModule`
+     */
+    findGetTotalMatches(): number;
+    /**
+     * Go to the provided match (first match is `1`).
+     * By default, if the provided match is already active, this will do nothing.
+     * If `force` is set to `true`, this will instead reset the active match to that provided
+     * (e.g. scroll the grid).
+     * @agModule `FindModule`
+     */
+    findGoTo(match: number, force?: boolean): void;
+    /**
+     * Clear the active match.
+     * @agModule `FindModule`
+     */
+    findClearActive(): void;
+    /**
+     * Get the active match, or `undefined` if no active match.
+     * @agModule `FindModule`
+     */
+    findGetActiveMatch(): FindMatch<TData> | undefined;
+    /**
+     * Get the number of matches within the provided cell.
+     * @agModule `FindModule`
+     */
+    findGetNumMatches(params: FindCellParams<TData>): number;
+    /**
+     * Get the parts of a cell value, including matches and active match.
+     * Used for custom cell components.
+     * @agModule `FindModule`
+     */
+    findGetParts(params: FindCellValueParams<TData>): FindPart[];
+    /**
+     * This will re-run the search with the current value. This is normally done automatically.
+     *
+     * This should only be called in situations where data is mutated outside of the grid,
+     * and `api.refreshCells()` or `api.redrawRows()` are being used (`api.findRefresh()` should be called after these).
+     * @agModule `FindModule`
+     */
+    findRefresh(): void;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _NotesGridApi {
+    /**
+     * Return the current note for a cell.
+     * @agModule `NotesModule`
+     */
+    getNote(params: GetNoteParams): Note | undefined;
+
+    /**
+     * Set or remove the note for a cell.
+     * Pass `note: undefined` to remove the note.
+     * @agModule `NotesModule`
+     */
+    setNote(params: SetNoteParams): void;
+
+    /**
+     * Refresh note presence for the currently rendered cells.
+     * @agModule `NotesModule`
+     */
+    refreshNotes(params?: RefreshNotesParams): void;
+}
+
 export interface _StateGridApi {
-    /** Get the current state of the grid. Can be used in conjunction with the `initialState` grid option to save and restore grid state. */
+    /**
+     * Get the current state of the grid.
+     * Can be used in conjunction with the `initialState` grid option or `api.setState()` to save and restore grid state.
+     * @agModule `GridStateModule`
+     */
     getState(): GridState;
+    /**
+     * Set the current state of the grid.
+     * Can be used in conjunction with `api.getState()` or `onStateUpdated` to save and restore grid state.
+     * This method should only be used to restore state;
+     * it should not be called on every state update (the grid does not support being used as a controlled component).
+     * @param propertiesToIgnore If supplied, the existing state of the provided properties will be maintained.
+     */
+    setState(state: GridState, propertiesToIgnore?: GridStateKey[]): void;
 }
 
 export interface _PaginationGridApi {
@@ -738,52 +1233,102 @@ export interface _PaginationGridApi {
      * Returns `true` when the last page is known.
      * This will always be `true` if you are using the Client-Side Row Model for pagination.
      * Returns `false` when the last page is not known; this only happens when using Infinite Row Model.
+     * @agModule `PaginationModule`
      */
     paginationIsLastPageFound(): boolean;
 
-    /** Returns how many rows are being shown per page. */
+    /**
+     * Returns how many rows are being shown per page.
+     * @agModule `PaginationModule`
+     */
     paginationGetPageSize(): number;
 
-    /** Returns the 0-based index of the page which is showing. */
+    /**
+     * Returns the 0-based index of the page which is showing.
+     * @agModule `PaginationModule`
+     */
     paginationGetCurrentPage(): number;
 
-    /** Returns the total number of pages. */
+    /**
+     * Returns the total number of pages.
+     * @agModule `PaginationModule`
+     */
     paginationGetTotalPages(): number;
 
     /**
      * Returns the total number of pageable rows, as impacted by `gridOptions.paginateChildRows: true`.
      *
      * It is recommended to instead use `gridApi.getDisplayedRowCount()` if not using pagination, or if `gridOption.paginateChildRows=true`.
+     *
+     * @agModule `PaginationModule`
      **/
     paginationGetRowCount(): number;
 
-    /** Navigates to the next page. */
+    /**
+     * Navigates to the next page.
+     * @agModule `PaginationModule`
+     */
     paginationGoToNextPage(): void;
 
-    /** Navigates to the previous page. */
+    /**
+     * Navigates to the previous page.
+     * @agModule `PaginationModule`
+     */
     paginationGoToPreviousPage(): void;
 
-    /** Navigates to the first page. */
+    /**
+     * Navigates to the first page.
+     * @agModule `PaginationModule`
+     */
     paginationGoToFirstPage(): void;
 
-    /** Navigates to the last page. */
+    /**
+     * Navigates to the last page.
+     * @agModule `PaginationModule`
+     */
     paginationGoToLastPage(): void;
 
-    /** Goes to the specified page. If the page requested doesn't exist, it will go to the last page. */
+    /**
+     * Goes to the specified page. If the page requested doesn't exist, it will go to the last page.
+     * @agModule `PaginationModule`
+     */
     paginationGoToPage(page: number): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _PinnedRowGridApi {
-    /** Gets the number of top pinned rows. */
+    /**
+     * Gets the number of top pinned rows.
+     * @agModule `PinnedRowModule`
+     */
     getPinnedTopRowCount(): number;
 
-    /** Gets the number of bottom pinned rows. */
+    /**
+     * Gets the number of bottom pinned rows.
+     * @agModule `PinnedRowModule`
+     */
     getPinnedBottomRowCount(): number;
 
-    /** Gets the top pinned row with the specified index. */
+    /**
+     * Gets the top pinned row with the specified index.
+     * @agModule `PinnedRowModule`
+     */
     getPinnedTopRow<TPinnedData = any>(index: number): IRowNode<TPinnedData> | undefined;
-    /** Gets the bottom pinned row with the specified index. */
+
+    /**
+     * Gets the bottom pinned row with the specified index.
+     * @agModule `PinnedRowModule`
+     */
     getPinnedBottomRow<TPinnedData = any>(index: number): IRowNode<TPinnedData> | undefined;
+
+    /**
+     * Iterates over each pinned row, calling the provided callback for each row
+     * @agModule `PinnedRowModule`
+     */
+    forEachPinnedRow<TPinnedData = any>(
+        floating: NonNullable<RowPinnedType>,
+        callback: (rowNode: IRowNode<TPinnedData>) => void
+    ): void;
 }
 
 export interface _RenderGridApi<TData> {
@@ -793,81 +1338,148 @@ export interface _RenderGridApi<TData> {
      * Example: `api.setGridAriaProperty('label', 'my grid')` will set `aria-label=\"my grid\"`.
      *
      * `api.setGridAriaProperty('label', null)` will remove the `aria-label` attribute from the grid element.
+     * @agModule `RenderApiModule`
      */
     setGridAriaProperty(property: string, value: string | null): void;
 
-    /** Performs change detection on all cells, refreshing cells where required. */
+    /**
+     * Performs change detection on all cells, refreshing cells where required.
+     * @agModule `RenderApiModule`
+     */
     refreshCells(params?: RefreshCellsParams<TData>): void;
 
-    /** Redraws the header. Useful if a column name changes, or something else that changes how the column header is displayed. */
+    /**
+     * Redraws the header. Useful if a column name changes, or something else that changes how the column header is displayed.
+     * @agModule `RenderApiModule`
+     */
     refreshHeader(): void;
 
-    /** Returns `true` when there are no more animation frames left to process. */
+    /**
+     * Returns `true` when there are no more animation frames left to process.
+     * @agModule `RenderApiModule`
+     */
     isAnimationFrameQueueEmpty(): boolean;
 
+    /**
+     * Flushes all animation frames.
+     * @agModule `RenderApiModule`
+     */
     flushAllAnimationFrames(): void;
 
     /**
      * Gets the sizes that various UI elements will be rendered at with the current theme.
      * If you override the row or header height using `gridOptions`, the override value you provided will be returned.
+     * @agModule `RenderApiModule`
      */
     getSizesForCurrentTheme(): { rowHeight: number; headerHeight: number };
 
-    /** Returns the list of active cell renderer instances. */
+    /**
+     * Returns the list of active cell renderer instances.
+     * @agModule `RenderApiModule`
+     */
     getCellRendererInstances(params?: GetCellRendererInstancesParams<TData>): ICellRenderer<TData>[];
 }
 
 export interface _HighlightChangesGridApi<TData> {
-    /** Flash rows, columns or individual cells. */
+    /**
+     * Flash rows, columns or individual cells.
+     * @agModule `HighlightChangesModule`
+     */
     flashCells(params?: FlashCellsParams<TData>): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _SideBarGridApi<TData> {
-    /** Returns `true` if the side bar is visible. */
+    /**
+     * Returns `true` if the side bar is visible.
+     * @agModule `SideBarModule`
+     */
     isSideBarVisible(): boolean;
 
-    /** Show/hide the entire side bar, including any visible panel and the tab buttons. */
+    /**
+     * Show/hide the entire side bar, including any visible panel and the tab buttons.
+     * @agModule `SideBarModule`
+     */
     setSideBarVisible(show: boolean): void;
 
-    /** Sets the side bar position relative to the grid. Possible values are `'left'` or `'right'`. */
+    /**
+     * Sets the side bar position relative to the grid. Possible values are `'left'` or `'right'`.
+     * @agModule `SideBarModule`
+     */
     setSideBarPosition(position: 'left' | 'right'): void;
 
-    /** Opens a particular tool panel. Provide the ID of the tool panel to open. */
-    openToolPanel(key: string): void;
+    /**
+     * Opens a particular tool panel. Provide the ID of the tool panel to open.
+     * Optionally, provide a parent element to attach the tool panel to.
+     * @agModule `SideBarModule`
+     */
+    openToolPanel(key: string, parent?: HTMLElement | null): void;
 
-    /** Closes the currently open tool panel (if any). */
+    /**
+     * Closes the currently open tool panel (if any).
+     * @agModule `SideBarModule`
+     */
     closeToolPanel(): void;
 
-    /** Returns the ID of the currently shown tool panel if any, otherwise `null`. */
+    /**
+     * Returns the ID of the currently shown tool panel if any, otherwise `null`.
+     * @agModule `SideBarModule`
+     */
     getOpenedToolPanel(): string | null;
 
-    /** Force refreshes all tool panels by calling their `refresh` method. */
+    /**
+     * Force refreshes all tool panels by calling their `refresh` method.
+     * @agModule `SideBarModule`
+     */
     refreshToolPanel(): void;
 
-    /** Returns `true` if the tool panel is showing, otherwise `false`. */
+    /**
+     * Returns `true` if the tool panel is showing, otherwise `false`.
+     * @agModule `SideBarModule`
+     */
     isToolPanelShowing(): boolean;
 
     getToolPanelInstance(id: 'columns'): IColumnToolPanel | undefined;
     getToolPanelInstance(id: 'filters'): IFiltersToolPanel | undefined;
     // This override is a duplicate but is required to make the general override public
     getToolPanelInstance<TToolPanel = IToolPanel<TData>>(id: string): TToolPanel | undefined;
-    /** Gets the tool panel instance corresponding to the supplied `id`. */
+    /**
+     * Gets the tool panel instance corresponding to the supplied `id`.
+     * @agModule `SideBarModule`
+     */
     getToolPanelInstance<TToolPanel = IToolPanel<TData>>(id: string): TToolPanel | undefined;
 
-    /** Returns the current side bar configuration. If a shortcut was used, returns the detailed long form. */
+    /**
+     * Returns the current side bar configuration. If a shortcut was used, returns the detailed long form.
+     * @agModule `SideBarModule`
+     */
     getSideBar(): SideBarDef | undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _ToolbarGridApi<TData = any> {
+    /**
+     * Gets the toolbar item instance for the given `key`. Only toolbar items configured with a `key` can be accessed.
+     * @agModule `ToolbarModule`
+     */
+    getToolbarItemInstance<T = IToolbarItem<TData>>(key: string): T | undefined;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _StatusBarGridApi<TData = any> {
-    /** Gets the status panel instance corresponding to the supplied `id`. */
+    /**
+     * Gets the status panel instance corresponding to the supplied `id`.
+     * @agModule `StatusBarModule` */
     getStatusPanel<TStatusPanel = IStatusPanel<TData>>(key: string): TStatusPanel | undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _InfiniteRowModelGridApi {
     /**
      * Marks all the currently loaded blocks in the cache for reload.
      * If you have 10 blocks in the cache, all 10 will be marked for reload.
      * The old data will continue to be displayed until the new data is loaded.
+     * @agModule `InfiniteRowModelModule`
      */
     refreshInfiniteCache(): void;
 
@@ -876,101 +1488,168 @@ export interface _InfiniteRowModelGridApi {
      * The grid is then told to refresh. Only the blocks required to display the current data on screen are fetched (typically no more than 2).
      * The grid will display nothing while the new blocks are loaded.
      * Use this to immediately remove the old data from the user.
+     * @agModule `InfiniteRowModelModule`
      */
     purgeInfiniteCache(): void;
 
-    /** The row count defines how many rows the grid allows scrolling to. */
-
-    /** @deprecated v32.2 gridApi.getInfiniteRowCount() deprecated, please use gridApi.getDisplayedRowCount() instead. */
+    /**
+     * @deprecated v32.2 gridApi.getInfiniteRowCount() deprecated, please use gridApi.getDisplayedRowCount() instead.
+     */
     getInfiniteRowCount(): number | undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _CsvExportGridApi {
-    /** Similar to `exportDataAsCsv`, except returns the result as a string rather than download it. */
+    /**
+     * Similar to `exportDataAsCsv`, except returns the result as a string rather than download it.
+     * @agModule `CsvExportModule`
+     */
     getDataAsCsv(params?: CsvExportParams): string | undefined;
 
-    /** Downloads a CSV export of the grid's data. */
+    /**
+     * Downloads a CSV export of the grid's data.
+     * @agModule `CsvExportModule`
+     */
     exportDataAsCsv(params?: CsvExportParams): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _RowGroupingGridApi {
-    /** Set the row group columns. */
-    setRowGroupColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Set the row group columns.
+     * @agModule `RowGroupingModule`
+     */
+    setRowGroupColumns(colKeys: ColKey[]): void;
 
-    /** Move the column to a new position in the row grouping order. */
+    /**
+     * Move the column to a new position in the row grouping order.
+     * @agModule `RowGroupingModule`
+     */
     moveRowGroupColumn(fromIndex: number, toIndex: number): void;
 
-    /** Remove columns from the row groups. */
-    removeRowGroupColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Remove columns from the row groups.
+     * @agModule `RowGroupingModule`
+     */
+    removeRowGroupColumns(colKeys: ColKey[]): void;
 
-    /** Add columns to the row groups. */
-    addRowGroupColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Add columns to the row groups.
+     * @agModule `RowGroupingModule`
+     */
+    addRowGroupColumns(colKeys: ColKey[]): void;
 
-    /** Get row group columns. */
+    /**
+     * Get row group columns.
+     * @agModule `RowGroupingModule`
+     */
     getRowGroupColumns(): Column[];
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _AggregationGridApi<TData> {
-    /** Add aggregations function with the specified keys. */
+    /**
+     * Add aggregations function with the specified keys.
+     * @agModule `RowGroupingModule / PivotModule / TreeDataModule`
+     */
     addAggFuncs(aggFuncs: { [key: string]: IAggFunc<TData> }): void;
 
-    /** Clears all aggregation functions (including those provided by the grid). */
+    /**
+     * Clears all aggregation functions (including those provided by the grid).
+     * @agModule `RowGroupingModule / PivotModule / TreeDataModule`
+     */
     clearAggFuncs(): void;
 
-    /** Sets the agg function for a column. `aggFunc` can be one of the built-in aggregations or a custom aggregation by name or direct function. */
-    setColumnAggFunc<TValue = any>(
-        key: string | ColDef<TData, TValue> | Column<TValue>,
-        aggFunc: string | IAggFunc<TData, TValue> | null | undefined
-    ): void;
+    /**
+     * Sets the agg function for a column. `aggFunc` can be one of the built-in aggregations or a custom aggregation by name or direct function.
+     * @agModule `RowGroupingModule / PivotModule / TreeDataModule`
+     */
+    setColumnAggFunc<TValue = any>(key: ColKey<TData, TValue>, aggFunc: ColAggFunc<TData, TValue>): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _PivotGridApi<TData> {
-    /** Returns whether pivot mode is currently active. */
+    /**
+     * Returns whether pivot mode is currently active.
+     * @agModule `PivotModule`
+     */
     isPivotMode(): boolean;
 
-    /** Returns the pivot result column for the given `pivotKeys` and `valueColId`. */
-    getPivotResultColumn<TValue = any>(
-        pivotKeys: string[],
-        valueColKey: string | ColDef<TData, TValue> | Column<TValue>
-    ): Column<TValue> | null;
+    /**
+     * Returns the pivot result column for the given `pivotKeys` and `valueColId`.
+     * @agModule `PivotModule`
+     */
+    getPivotResultColumn<TValue = any>(pivotKeys: string[], valueColKey: ColKey<TData, TValue>): Column<TValue> | null;
 
-    /** Set the value columns to the provided list of columns. */
-    setValueColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Set the value columns to the provided list of columns.
+     * @agModule `PivotModule`
+     */
+    setValueColumns(colKeys: ColKey[]): void;
 
-    /** Get a list of the existing value columns. */
+    /**
+     * Get a list of the existing value columns.
+     * @agModule `PivotModule`
+     */
     getValueColumns(): Column[];
 
-    /** Remove the given list of columns from the existing set of value columns. */
-    removeValueColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Remove the given list of columns from the existing set of value columns.
+     * @agModule `PivotModule`
+     */
+    removeValueColumns(colKeys: ColKey[]): void;
 
-    /** Add the given list of columns to the existing set of value columns. */
-    addValueColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Add the given list of columns to the existing set of value columns.
+     * @agModule `PivotModule`
+     */
+    addValueColumns(colKeys: ColKey[]): void;
 
-    /** Set the columns for the grid to pivot on. */
-    setPivotColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Set the columns for the grid to pivot on.
+     * @agModule `PivotModule`
+     */
+    setPivotColumns(colKeys: ColKey[]): void;
 
-    /** Stops the grid from pivoting on the provided columns. */
-    removePivotColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Stops the grid from pivoting on the provided columns.
+     * @agModule `PivotModule`
+     */
+    removePivotColumns(colKeys: ColKey[]): void;
 
-    /** Add columns for the grid to pivot on. */
-    addPivotColumns(colKeys: (string | ColDef | Column)[]): void;
+    /**
+     * Add columns for the grid to pivot on.
+     * @agModule `PivotModule`
+     */
+    addPivotColumns(colKeys: ColKey[]): void;
 
-    /** Get the columns which the grid is pivoting on. */
+    /**
+     * Get the columns which the grid is pivoting on.
+     * @agModule `PivotModule`
+     */
     getPivotColumns(): Column[];
 
-    /** Set explicit pivot column definitions yourself. Used for advanced use cases only. */
+    /**
+     * Set explicit pivot column definitions yourself. Used for advanced use cases only.
+     * @agModule `PivotModule`
+     */
     setPivotResultColumns(colDefs: (ColDef | ColGroupDef)[] | null): void;
 
-    /** Returns the grid's pivot result columns. */
+    /**
+     * Returns the grid's pivot result columns.
+     * @agModule `PivotModule`
+     */
     getPivotResultColumns(): Column[] | null;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _CellSelectionGridApi {
     /**
      * Returns the list of selected cell ranges.
      *
      * The start is the first cell the user clicked on and the end is the cell where the user stopped dragging.
      * Do not assume that the start cell's index is numerically before the end cell, as the user could have dragged up.
+     * @agModule `CellSelectionModule`
      */
     getCellRanges(): CellRange[] | null;
 
@@ -978,6 +1657,7 @@ export interface _CellSelectionGridApi {
      * Adds the provided cell range to the selected ranges.
      *
      * This keeps any previous ranges. If you wish to only have the new range selected, then call `clearCellSelection()` first.
+     * @agModule `CellSelectionModule`
      */
     addCellRange(params: CellRangeParams): void;
 
@@ -987,16 +1667,21 @@ export interface _CellSelectionGridApi {
      */
     clearRangeSelection(): void;
 
-    /** Clears the selected cell ranges. */
+    /**
+     * Clears the selected cell ranges.
+     * @agModule `CellSelectionModule`
+     */
     clearCellSelection(): void;
 }
 
-export interface _ServerSideRowModelGridApi<TData> {
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _ServerSideRowModelGridApi<TData> extends _RowModelSharedApi {
     /**
      * Returns an object containing rules matching the selected rows in the SSRM.
      *
      * If `rowSelection.groupSelects` is `'self'` the returned object will be flat, and will conform to `IServerSideSelectionState`.
      * If `rowSelection.groupSelects` is `'descendants'` or `'filteredDescendants'` the returned object will be hierarchical, and will conform to `IServerSideGroupSelectionState`.
+     * @agModule `ServerSideRowModelApiModule`
      */
     getServerSideSelectionState(): IServerSideSelectionState | IServerSideGroupSelectionState | null;
 
@@ -1005,12 +1690,19 @@ export interface _ServerSideRowModelGridApi<TData> {
      *
      * If `rowSelection.groupSelects` is `'self'` the param will be flat, and should conform to `IServerSideSelectionState`.
      * If `rowSelection.groupSelects` is `'descendants'` or `'filteredDescendants'` the param will be hierarchical, and should conform to `IServerSideGroupSelectionState`.
+     * @agModule `ServerSideRowModelApiModule`
      */
     setServerSideSelectionState(state: IServerSideSelectionState | IServerSideGroupSelectionState): void;
 
-    /** Apply transactions to the server side row model. */
+    /**
+     * Apply transactions to the server side row model.
+     * @agModule `ServerSideRowModelApiModule`
+     */
     applyServerSideTransaction(transaction: ServerSideTransaction): ServerSideTransactionResult<TData> | undefined;
-    /** Batch apply transactions to the server side row model. */
+    /**
+     * Batch apply transactions to the server side row model.
+     * @agModule `ServerSideRowModelApiModule`
+     */
     applyServerSideTransactionAsync(
         transaction: ServerSideTransaction,
         callback?: (res: ServerSideTransactionResult<TData>) => void
@@ -1019,6 +1711,7 @@ export interface _ServerSideRowModelGridApi<TData> {
     /**
      * Applies row data to a server side store.
      * New rows will overwrite rows at the same index in the same way as if provided by a datasource success callback.
+     * @agModule `ServerSideRowModelApiModule`
      */
     applyServerSideRowData(params: {
         successParams: LoadSuccessParams<TData>;
@@ -1026,9 +1719,16 @@ export interface _ServerSideRowModelGridApi<TData> {
         startRow?: number;
     }): void;
 
-    /** Gets all failed server side loads to retry. */
+    /**
+     * Gets all failed server side loads to retry.
+     * @agModule `ServerSideRowModelApiModule`
+     */
     retryServerSideLoads(): void;
 
+    /**
+     * Flush all pending async transactions.
+     * @agModule `ServerSideRowModelApiModule`
+     */
     flushServerSideAsyncTransactions(): void;
 
     /**
@@ -1036,133 +1736,292 @@ export interface _ServerSideRowModelGridApi<TData> {
      * If you pass no parameters, then the top level store is refreshed.
      * To refresh a child level, pass in the string of keys to get to the desired level.
      * Once the store refresh is complete, the storeRefreshed event is fired.
+     * @agModule `ServerSideRowModelApiModule`
      */
     refreshServerSide(params?: RefreshServerSideParams): void;
 
-    /** Returns info on all server side group levels. */
+    /**
+     * Returns info on all server side group levels.
+     * @agModule `ServerSideRowModelApiModule`
+     */
     getServerSideGroupLevelState(): ServerSideGroupLevelState[];
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _ContextMenuGridApi {
     /**
      * Displays the AG Grid context menu
+     * @agModule `ContextMenuModule`
      */
     showContextMenu(params?: IContextMenuParams): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _ColumnChooserGridApi {
-    /** Show the column chooser. */
+    /**
+     * Show the column chooser.
+     * @agModule `ColumnMenuModule`
+     */
     showColumnChooser(params?: ColumnChooserParams): void;
 
-    /** Hide the column chooser if visible. */
+    /**
+     * Hide the column chooser if visible.
+     * @agModule `ColumnMenuModule`
+     */
     hideColumnChooser(): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _FormulaGridApi<TData = any> {
+    /**
+     * Invalidate the grid's formula cache so the next render re-queries
+     * `formulaDataSource.getFormula` and re-evaluates affected formulas.
+     *
+     * Call this when the formula store has been mutated outside the grid (e.g. synced from
+     * a backend). In-grid edits and Client-Side Row Model updates invalidate automatically.
+     *
+     * - No argument: invalidates every cached formula.
+     * - `RowNode`: invalidates that row and its pinned / group-footer siblings.
+     * - `string` (row id): resolved against the main row model, pinned-top and pinned-bottom.
+     *   Every match is invalidated — so if a statically-pinned row shares an id with a body
+     *   row, both are refreshed. An unknown id is a silent no-op.
+     *
+     * @returns `true` when a refresh was actually performed — i.e. the full cache was cleared
+     * (no-arg call) or at least one cache entry was dropped for any resolved row or its
+     * siblings. Returns `false` for no-op cases: formulas inactive, an unknown row id,
+     * or a row whose entire sibling chain had no cached formulas.
+     *
+     * @agModule `FormulaModule`
+     */
+    refreshFormulas(rowNode?: IRowNode<TData> | string): boolean;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _MasterDetailGridApi {
-    /** Register a detail grid with the master grid when it is created. */
+    /**
+     * Register a detail grid with the master grid when it is created.
+     * @agModule `MasterDetailModule`
+     */
     addDetailGridInfo(id: string, gridInfo: DetailGridInfo): void;
 
-    /** Unregister a detail grid from the master grid when it is destroyed. */
+    /**
+     * Unregister a detail grid from the master grid when it is destroyed.
+     * @agModule `MasterDetailModule`
+     */
     removeDetailGridInfo(id: string): void;
 
-    /** Returns the `DetailGridInfo` corresponding to the supplied `detailGridId`. */
+    /**
+     * Returns the `DetailGridInfo` corresponding to the supplied `detailGridId`.
+     * @agModule `MasterDetailModule`
+     */
     getDetailGridInfo(id: string): DetailGridInfo | undefined;
 
-    /** Iterates through each `DetailGridInfo` in the grid and calls the supplied callback on each. */
+    /**
+     * Iterates through each `DetailGridInfo` in the grid and calls the supplied callback on each.
+     * @agModule `MasterDetailModule`
+     */
     forEachDetailGridInfo(callback: (gridInfo: DetailGridInfo, index: number) => void): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _ExcelExportGridApi {
-    /** Similar to `exportDataAsExcel`, except instead of downloading a file, it will return a [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) to be processed by the user. */
+    /**
+     * Similar to `exportDataAsExcel`, except instead of downloading a file, it will return a [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) to be processed by the user.
+     * @agModule `ExcelExportModule`
+     */
     getDataAsExcel(params?: ExcelExportParams): string | Blob | undefined;
 
-    /** Downloads an Excel export of the grid's data. */
+    /**
+     * Downloads an Excel export of the grid's data.
+     * @agModule `ExcelExportModule`
+     */
     exportDataAsExcel(params?: ExcelExportParams): void;
 
-    /** This is method to be used to get the grid's data as a sheet, that will later be exported either by `getMultipleSheetsAsExcel()` or `exportMultipleSheetsAsExcel()`. */
+    /**
+     * This is method to be used to get the grid's data as a sheet, that will later be exported either by `getMultipleSheetsAsExcel()` or `exportMultipleSheetsAsExcel()`.
+     * @agModule `ExcelExportModule`
+     */
     getSheetDataForExcel(params?: ExcelExportParams): string | undefined;
 
-    /** Similar to `exportMultipleSheetsAsExcel`, except instead of downloading a file, it will return a [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) to be processed by the user. */
+    /**
+     * Similar to `exportMultipleSheetsAsExcel`, except instead of downloading a file, it will return a [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) to be processed by the user.
+     * @agModule `ExcelExportModule`
+     */
     getMultipleSheetsAsExcel(params: ExcelExportMultipleSheetParams): Blob | undefined;
 
-    /** Downloads an Excel export of multiple sheets in one file. */
+    /**
+     * Downloads an Excel export of multiple sheets in one file.
+     * @agModule `ExcelExportModule`
+     */
     exportMultipleSheetsAsExcel(params: ExcelExportMultipleSheetParams): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _PdfExportGridApi {
+    /**
+     * Similar to `exportDataAsPdf`, except instead of downloading a file, it will return a [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) to be processed by the user.
+     * @agModule `PdfExportModule`
+     */
+    getDataAsPdf(params?: PdfExportParams): Blob | undefined;
+
+    /**
+     * Downloads a PDF export of the grid's data.
+     * @agModule `PdfExportModule`
+     */
+    exportDataAsPdf(params?: PdfExportParams): void;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _ClipboardGridApi {
-    /** Copies data to clipboard by following the same rules as pressing Ctrl+C. */
+    /**
+     * Copies data to clipboard by following the same rules as pressing Ctrl+C.
+     * @agModule `ClipboardModule`
+     */
     copyToClipboard(params?: IClipboardCopyParams): void;
 
-    /** Cuts data to clipboard by following the same rules as pressing Ctrl+X. */
+    /**
+     * Cuts data to clipboard by following the same rules as pressing Ctrl+X.
+     * @agModule `ClipboardModule`
+     */
     cutToClipboard(params?: IClipboardCopyParams): void;
 
-    /** Copies the selected rows to the clipboard. */
+    /**
+     * Copies the selected rows to the clipboard.
+     * @agModule `ClipboardModule`
+     */
     copySelectedRowsToClipboard(params?: IClipboardCopyRowsParams): void;
 
-    /** Copies the selected ranges to the clipboard. */
+    /**
+     * Copies the selected ranges to the clipboard.
+     * @agModule `ClipboardModule`
+     */
     copySelectedRangeToClipboard(params?: IClipboardCopyParams): void;
 
-    /** Copies the selected range down, similar to `Ctrl + D` in Excel. */
+    /**
+     * Copies the selected range down, similar to `Ctrl + D` in Excel.
+     * @agModule `ClipboardModule`
+     */
     copySelectedRangeDown(): void;
 
-    /** Pastes the data from the Clipboard into the focused cell of the grid. If no grid cell is focused, calling this method has no effect. */
+    /**
+     * Pastes the data from the Clipboard into the focused cell of the grid. If no grid cell is focused, calling this method has no effect.
+     * @agModule `ClipboardModule`
+     */
     pasteFromClipboard(): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _GridChartsGridApi {
-    /** Returns a list of models with information about the charts that are currently rendered from the grid. */
+    /**
+     * Returns a list of models with information about the charts that are currently rendered from the grid.
+     * @agModule `IntegratedChartsModule`
+     */
     getChartModels(): ChartModel[] | undefined;
 
-    /** Returns the `ChartRef` using the supplied `chartId`. */
+    /**
+     * Returns the `ChartRef` using the supplied `chartId`.
+     * @agModule `IntegratedChartsModule`
+     */
     getChartRef(chartId: string): ChartRef | undefined;
 
-    /** Returns a base64-encoded image data URL for the referenced chartId. */
+    /**
+     * Returns a base64-encoded image data URL for the referenced chartId.
+     * @agModule `IntegratedChartsModule`
+     */
     getChartImageDataURL(params: GetChartImageDataUrlParams): string | undefined;
 
-    /** Starts a browser-based image download for the referenced chartId. */
+    /**
+     * Starts a browser-based image download for the referenced chartId.
+     * @agModule `IntegratedChartsModule`
+     */
     downloadChart(params: ChartDownloadParams): void;
 
-    /** Open the Chart Tool Panel. */
+    /**
+     * Open the Chart Tool Panel.
+     * @agModule `IntegratedChartsModule`
+     */
     openChartToolPanel(params: OpenChartToolPanelParams): void;
 
-    /** Close the Chart Tool Panel. */
+    /**
+     * Close the Chart Tool Panel.
+     * @agModule `IntegratedChartsModule`
+     */
     closeChartToolPanel(params: CloseChartToolPanelParams): void;
 
-    /** Used to programmatically create charts from a range. */
+    /**
+     * Used to programmatically create charts from a range.
+     * @agModule `IntegratedChartsModule`
+     */
     createRangeChart(params: CreateRangeChartParams): ChartRef | undefined;
 
-    /** Used to programmatically create pivot charts from a grid. */
+    /**
+     * Used to programmatically create pivot charts from a grid.
+     * @agModule `IntegratedChartsModule`
+     */
     createPivotChart(params: CreatePivotChartParams): ChartRef | undefined;
 
-    /** Used to programmatically create cross filter charts from a range. */
+    /**
+     * Used to programmatically create cross filter charts from a range.
+     * @agModule `IntegratedChartsModule`
+     */
     createCrossFilterChart(params: CreateCrossFilterChartParams): ChartRef | undefined;
 
-    /** Used to programmatically update a chart. */
+    /**
+     * Used to programmatically update a chart.
+     * @agModule `IntegratedChartsModule`
+     */
     updateChart(params: UpdateChartParams): void;
 
-    /** Restores a chart using the `ChartModel` that was previously obtained from `getChartModels()`. */
+    /**
+     * Restores a chart using the `ChartModel` that was previously obtained from `getChartModels()`.
+     * @agModule `IntegratedChartsModule`
+     */
     restoreChart(chartModel: ChartModel, chartContainer?: HTMLElement): ChartRef | undefined;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface _AdvancedFilterGridApi {
-    /** Get the state of the Advanced Filter. Used for saving Advanced Filter state */
+    /**
+     * Get the state of the Advanced Filter. Used for saving Advanced Filter state
+     * @agModule `AdvancedFilterModule`
+     */
     getAdvancedFilterModel(): AdvancedFilterModel | null;
 
-    /** Set the state of the Advanced Filter. Used for restoring Advanced Filter state */
+    /**
+     * Set the state of the Advanced Filter or used for restoring Advanced Filter state.
+     * If inferring cell data types, and row data is initially empty or yet to be set, the filter model will be applied asynchronously after row data is added.
+     * To always perform this synchronously, set `cellDataType = false` on the default column definition, or provide cell data types for every column.
+     * @agModule `AdvancedFilterModule`
+     */
     setAdvancedFilterModel(advancedFilterModel: AdvancedFilterModel | null): void;
 
-    /** Open the Advanced Filter Builder dialog (if enabled). */
+    /**
+     * Open the Advanced Filter Builder dialog (if enabled).
+     * @agModule `AdvancedFilterModule`
+     */
     showAdvancedFilterBuilder(): void;
 
     /**
      * Closes the Advanced Filter Builder dialog (if enabled).
      * Un-applied changes are discarded.
+     * @agModule `AdvancedFilterModule`
      */
     hideAdvancedFilterBuilder(): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface _AiToolkitGridApi {
+    /**
+     * Returns the structured schema of the grid, which includes information about columns, data types, and relationships.
+     * This schema can be passed to AI services to ensure the response is of the correct format.
+     * @agModule `AiToolkitModule`
+     */
+    getStructuredSchema(params?: StructuredSchemaParams): any;
+}
+
 export interface GridApi<TData = any>
-    extends _CoreGridApi<TData>,
+    extends
+        _CoreGridApi<TData>,
         _StateGridApi,
         _RowSelectionGridApi<TData>,
         _RowGridApi<TData>,
@@ -1177,24 +2036,27 @@ export interface GridApi<TData = any>
         _PinnedRowGridApi,
         _RenderGridApi<TData>,
         _HighlightChangesGridApi<TData>,
-        _DragGridApi,
+        _DragGridApi<TData>,
         _ColumnAutosizeApi,
         _ColumnResizeApi,
         _ColumnMoveApi,
         _ColumnHoverApi,
         _ColumnGridApi<TData>,
         _ColumnGroupGridApi,
-        _DragGridApi,
         _EditGridApi<TData>,
         _UndoRedoGridApi,
         _FilterGridApi,
         _ColumnFilterGridApi,
         _QuickFilterGridApi,
+        _FindApi<TData>,
+        _NotesGridApi,
         _PaginationGridApi,
+        _RowModelSharedApi,
         _CsrmSsrmSharedGridApi,
         _SsrmInfiniteSharedGridApi,
         _ClientSideRowModelGridApi<TData>,
         _SideBarGridApi<TData>,
+        _ToolbarGridApi<TData>,
         _StatusBarGridApi<TData>,
         _InfiniteRowModelGridApi,
         _CsvExportGridApi,
@@ -1206,9 +2068,13 @@ export interface GridApi<TData = any>
         _ContextMenuGridApi,
         _ColumnChooserGridApi,
         _MasterDetailGridApi,
+        _FormulaGridApi<TData>,
         _ExcelExportGridApi,
+        _PdfExportGridApi,
         _ClipboardGridApi,
         _GridChartsGridApi,
-        _AdvancedFilterGridApi {
+        _AdvancedFilterGridApi,
+        _BatchEditApi,
+        _AiToolkitGridApi {
     dispatchEvent(event: AgEvent): void;
 }

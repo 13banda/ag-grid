@@ -7,9 +7,14 @@ import {
     NumberFilterModule,
     RowStyleModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextFilterModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     RowStyleModule,
     AlignedGridsModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -57,11 +61,9 @@ let bottomApi: GridApi;
 const gridOptionsTop: GridOptions = {
     defaultColDef: {
         filter: true,
-        flex: 1,
         minWidth: 100,
     },
     columnDefs,
-    rowData: null,
     // don't show the horizontal scrollbar on the top grid
     suppressHorizontalScroll: true,
     alwaysShowVerticalScroll: true,

@@ -1,30 +1,26 @@
-import type { ChartType } from 'ag-grid-community';
+import { _flatten } from 'ag-stack';
 
 import type { AgChartsExports } from '../../../../../agChartsExports';
 import type { ChartTranslationKey } from '../../../../services/chartTranslationService';
-import type { ThemeTemplateParameters } from '../../miniChartsContainer';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { createColumnRects } from '../miniChartHelpers';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
-export class MiniStackedColumn extends MiniChartWithAxes {
-    static chartType: ChartType = 'stackedColumn';
-
+export const miniStackedColumnData = [
+    [8, 12, 16],
+    [6, 9, 12],
+    [2, 3, 4],
+];
+export class MiniStackedColumnClass extends MiniChartWithAxes {
     private readonly stackedColumns: any[][];
-
-    static data = [
-        [8, 12, 16],
-        [6, 9, 12],
-        [2, 3, 4],
-    ];
 
     constructor(
         container: HTMLElement,
         agChartsExports: AgChartsExports,
         fills: string[],
         strokes: string[],
-        _themeTemplateParameters: ThemeTemplateParameters,
         _isCustomTheme: boolean,
-        data = MiniStackedColumn.data,
+        data = miniStackedColumnData,
         yScaleDomain = [0, 16],
         tooltipName: ChartTranslationKey = 'stackedColumnTooltip'
     ) {
@@ -44,17 +40,22 @@ export class MiniStackedColumn extends MiniChartWithAxes {
             agChartsExports,
         });
 
-        root.append(([] as any[]).concat.apply([], this.stackedColumns));
+        root.append(_flatten(this.stackedColumns));
 
         this.updateColors(fills, strokes);
     }
 
     updateColors(fills: string[], strokes: string[]) {
-        this.stackedColumns.forEach((series: any[], i: number) =>
-            series.forEach((column) => {
+        this.stackedColumns.forEach((series: any[], i: number) => {
+            for (const column of series) {
                 column.fill = fills[i];
                 column.stroke = strokes[i];
-            })
-        );
+            }
+        });
     }
 }
+
+export const MiniStackedColumn: MiniChartSelector = {
+    chartType: 'stackedColumn',
+    miniChart: MiniStackedColumnClass,
+};

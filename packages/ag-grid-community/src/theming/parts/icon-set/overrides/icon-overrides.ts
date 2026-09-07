@@ -1,7 +1,5 @@
-import { createPart } from '../../../Part';
-import { colorValueToCss, fontFamilyValueToCss, fontWeightValueToCss, imageValueToCss } from '../../../theme-types';
-import type { ColorValue, FontFamilyValue, FontWeightValue, ImageValue } from '../../../theme-types';
-import { sharedIconStylesCSS } from '../shared-icon-styles.css-GENERATED';
+import type { ColorValue, FontFamilyValue, FontWeightValue, ImageValue } from 'ag-stack';
+import { colorValueToCss, createPart, fontFamilyValueToCss, fontWeightValueToCss, imageValueToCss } from 'ag-stack';
 
 type IconSetOverridesImage = {
     type: 'image';
@@ -26,11 +24,11 @@ type IconSetOverridesFont = {
 type IconSetOverridesArgs = IconSetOverridesImage | IconSetOverridesFont;
 
 export const iconOverrides = (args: IconSetOverridesArgs) => {
-    const cssParts = [sharedIconStylesCSS];
+    const cssParts: string[] = [];
     if (args.type === 'image') {
         const { icons, mask } = args;
-        for (const [key, value] of Object.entries(icons)) {
-            const imageCssValue = imageValueToCss(value);
+        for (const key of Object.keys(icons)) {
+            const imageCssValue = imageValueToCss(icons[key]);
             if (mask) {
                 cssParts.push(`.ag-icon-${key}::before { mask-image: ${imageCssValue}; }`);
             } else {
@@ -50,8 +48,8 @@ export const iconOverrides = (args: IconSetOverridesArgs) => {
         if (color) {
             properties += ` color: ${colorValueToCss(color)};`;
         }
-        for (const [key, value] of Object.entries(icons)) {
-            cssParts.push(`.ag-icon-${key}::before { content: ${JSON.stringify(value)}; ${properties} }`);
+        for (const key of Object.keys(icons)) {
+            cssParts.push(`.ag-icon-${key}::before { content: ${JSON.stringify(icons[key])}; ${properties} }`);
         }
     }
     return createPart({

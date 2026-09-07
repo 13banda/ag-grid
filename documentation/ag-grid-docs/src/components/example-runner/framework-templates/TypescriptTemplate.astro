@@ -1,44 +1,50 @@
 ---
 import { MetaData } from './lib/MetaData';
-import { ExampleStyle } from './lib/ExampleStyle';
-import { Styles } from './lib/Styles';
-import { Extras } from './lib/Extras';
-import { SystemJs } from './lib/SystemJs';
-import { pathJoin } from '@utils/pathJoin';
+import ExampleStyle from './lib/ExampleStyle.astro';
+import Styles from './lib/Styles.astro';
+import Extras from './lib/Extras.astro';
+import { ExampleModules } from './lib/ExampleModules';
 import { getCacheBustingUrl } from '@utils/gridLibraryPaths';
 
 interface Props {
     isDev: boolean;
     title: string;
     isEnterprise: boolean;
+    isIntegratedCharts?: boolean;
 
     modifiedTimeMs: number;
     entryFileName: string;
+    fileNames: string[];
 
     styleFiles?: string[];
     indexFragment: string;
     appLocation: string;
-    boilerplatePath: string;
     extraStyles?: string;
-    children?: any;
     extras?: string[];
+    headFragment?: string;
+    usesMathRandom?: boolean;
+    transpileInBrowser?: boolean;
+    nonce?: string;
 }
 
 const {
     title,
     isDev,
     isEnterprise,
+    isIntegratedCharts,
     modifiedTimeMs,
     appLocation,
     entryFileName,
+    fileNames,
     styleFiles,
     indexFragment,
-    boilerplatePath,
     extraStyles,
     extras,
+    headFragment,
+    usesMathRandom,
+    transpileInBrowser,
+    nonce,
 } = Astro.props as Props;
-
-const startFile = pathJoin(appLocation, entryFileName);
 ---
 
 <html lang="en">
@@ -54,12 +60,14 @@ const startFile = pathJoin(appLocation, entryFileName);
                 : []}
         />
         <Extras extras={extras ?? []} />
+        <Fragment set:html={headFragment} />
     </head>
     <body>
         <Fragment set:html={indexFragment} />
 
         <script
             is:inline
+            nonce={nonce}
             define:vars={{
                 appLocation,
             }}
@@ -67,13 +75,16 @@ const startFile = pathJoin(appLocation, entryFileName);
             window.__basePath = appLocation;
         </script>
 
-        <SystemJs
-            isDev={isDev}
-            boilerplatePath={boilerplatePath}
+        <ExampleModules
             appLocation={appLocation}
-            startFile={startFile}
+            entryFileName={entryFileName}
+            fileNames={fileNames}
             internalFramework={'typescript'}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={isIntegratedCharts}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         />
         <Styles
             baseUrl={appLocation}

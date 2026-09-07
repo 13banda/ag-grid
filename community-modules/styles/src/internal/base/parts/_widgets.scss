@@ -65,11 +65,67 @@
             outline: none;
             box-shadow: var(--ag-input-focus-box-shadow);
             border-color: var(--ag-input-focus-border-color);
+            &.invalid,
+            &:invalid {
+                box-shadow: var(--ag-input-error-focus-box-shadow);
+                border-color: var(--ag-invalid-color);
+            }
         }
 
         &:invalid {
             border: var(--ag-borders-input-invalid) var(--ag-input-border-color-invalid);
         }
+    }
+
+    .ag-input-field-clear-button {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--ag-icon-size);
+        height: var(--ag-icon-size);
+        padding: 0;
+        border: 0;
+        border-radius: var(--ag-border-radius);
+        color: inherit;
+        background: transparent;
+        cursor: pointer;
+        @include ag.unthemed-rtl(
+            (
+                right: var(--ag-grid-size),
+            )
+        );
+    }
+
+    input[class^='ag-'][type='text'].ag-input-field-input-with-clear-button,
+    input[class^='ag-'][type='number'].ag-input-field-input-with-clear-button {
+        @include ag.unthemed-rtl(
+            (
+                padding-right: calc(var(--ag-icon-size) + var(--ag-grid-size) * 2),
+            )
+        );
+    }
+
+    // the glyph itself comes from the theme's icon font, as `.ag-icon-search`
+    .ag-input-field-search-icon {
+        position: absolute;
+        display: inline-flex;
+        align-items: center;
+        opacity: 0.5;
+        pointer-events: none;
+        inset-inline-start: var(--ag-grid-size);
+    }
+
+    // the `.ag-ltr`/`.ag-rtl` prefix and the input's own class are what lift this above each theme's
+    // `ag.text-input` padding — `.ag-theme-x .ag-ltr input[class^='ag-'][type='text']` in Alpine and
+    // Balham — which is emitted after this file and would otherwise win the cascade
+    .ag-input-field-search input.ag-input-field-input[class^='ag-'][type='text'],
+    .ag-input-field-search input.ag-input-field-input[class^='ag-'][type='number'] {
+        @include ag.unthemed-rtl(
+            (
+                padding-left: calc(var(--ag-icon-size) + var(--ag-grid-size) * 2),
+            )
+        );
     }
 
     input[class^='ag-'][type='number']:not(.ag-number-field-input-stepper) {
@@ -89,6 +145,10 @@
     button[class^='ag-'] {
         &:focus {
             box-shadow: var(--ag-input-focus-box-shadow);
+            &:invalid,
+            &.invalid {
+                box-shadow: var(--ag-input-error-focus-box-shadow);
+            }
         }
     }
 
@@ -157,13 +217,18 @@
         color: var(--ag-secondary-foreground-color);
     }
 
+    .ag-drag-handle-disabled {
+        opacity: 0.35;
+        pointer-events: none;
+    }
+
     .ag-cell-wrapper > *:not(.ag-cell-value):not(.ag-group-value) {
         // assign internal variables to simplify the `height` value
         --ag-internal-calculated-line-height: var(
             --ag-line-height,
             calc(var(--ag-row-height) - var(--ag-row-border-width))
         );
-        --ag-internal-padded-row-height: calc(var(--ag-row-height) - var(--ag-row-border-width));
+        --ag-internal-padded-row-height: calc(var(--ag-row-height) - var(--ag-row-border-width) - 2px);
         // Needed to capitalize min, because it clashes with old versions of Sass
         height: Min(var(--ag-internal-calculated-line-height), var(--ag-internal-padded-row-height));
         display: flex;
@@ -276,6 +341,13 @@
             outline: none;
             box-shadow: var(--ag-input-focus-box-shadow);
             border-color: var(--ag-input-focus-border-color);
+            &.invalid {
+                box-shadow: var(--ag-input-error-focus-box-shadow);
+            }
+        }
+
+        &.invalid {
+            border: var(--ag-borders-input-invalid) var(--ag-input-border-color-invalid);
         }
     }
 
@@ -429,6 +501,10 @@
         transform: translateY(calc(var(--ag-grid-size) * 2));
     }
 
+    .ag-dnd-ghost-not-allowed {
+        border-color: color-mix(in srgb, var(--ag-background-color), var(--ag-invalid-color) 50%);
+    }
+
     .ag-dnd-ghost-icon {
         margin-right: var(--ag-grid-size);
         color: var(--ag-foreground-color);
@@ -495,7 +571,7 @@
         height: auto;
         border-radius: var(--ag-border-radius);
         border: var(--ag-borders) var(--ag-border-color);
-        .ag-loading-text {
+        .ag-rich-select-loading {
             padding: var(--ag-widget-vertical-spacing) var(--ag-widget-horizontal-spacing);
         }
     }
@@ -522,6 +598,32 @@
                 left: calc(var(--ag-cell-horizontal-padding)),
             )
         );
+    }
+
+    .ag-rich-select-typing-multi {
+        .ag-rich-select-field-input {
+            @include ag.unthemed-rtl(
+                (
+                    margin-left: 0.25rem,
+                )
+            );
+        }
+
+        .ag-rich-select-deselect-button {
+            @include ag.unthemed-rtl(
+                (
+                    margin-left: auto,
+                )
+            );
+        }
+
+        .ag-rich-select-deselect-button.ag-hidden + .ag-picker-field-icon {
+            @include ag.unthemed-rtl(
+                (
+                    margin-left: auto,
+                )
+            );
+        }
     }
 
     .ag-popup-editor .ag-rich-select-value {
@@ -566,6 +668,15 @@
         width: 100%;
     }
 
+    .ag-autocomplete-list-popup {
+        position: absolute;
+        user-select: none;
+        border-radius: var(--ag-border-radius);
+        box-shadow: var(--ag-dropdown-shadow);
+        background-color: var(--ag-background-color);
+        padding: 0;
+    }
+
     .ag-autocomplete-list {
         width: 100%;
         min-width: 200px;
@@ -573,6 +684,7 @@
     }
 
     .ag-autocomplete-virtual-list-item {
+        display: flex;
         cursor: default;
         height: var(--ag-list-item-height);
 
@@ -585,12 +697,35 @@
         }
     }
 
+    .ag-autocomplete-row {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        overflow: hidden;
+    }
+
     .ag-autocomplete-row-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
         margin: 0px var(--ag-widget-container-horizontal-padding);
     }
 
     .ag-autocomplete-row-selected {
         background-color: var(--ag-selected-row-background-color);
+    }
+
+    .ag-autocomplete-row-path-parent {
+        opacity: 0.5;
+    }
+
+    .ag-autocomplete-row-group-count {
+        opacity: 0.5;
+        @include ag.unthemed-rtl(
+            (
+                margin-left: var(--ag-grid-size),
+            )
+        );
     }
 
     ////////////////////////////////////////
@@ -618,12 +753,163 @@
     }
 
     ////////////////////////////////////////
+    // Content Editable Field
+    ////////////////////////////////////////
+    .ag-content-editable-field-input {
+        background-color: var(--ag-background-color);
+        border: var(--ag-borders-input) var(--ag-input-border-color);
+        border-radius: var(--ag-border-radius);
+        color: var(--ag-foreground-color);
+        @include ag.unthemed-rtl(
+            (
+                padding-left: var(--ag-grid-size),
+            )
+        );
+    }
+
+    .ag-cell-editor .ag-wrapper.ag-content-editable-field-input {
+        // assign internal variables to simplify the `line-height` value
+        --ag-internal-calculated-line-height: var(
+            --ag-line-height,
+            calc(var(--ag-row-height) - var(--ag-row-border-width))
+        );
+        --ag-internal-padded-row-height: calc(var(--ag-row-height) - var(--ag-row-border-width) - 2px);
+
+        line-height: Min(var(--ag-internal-calculated-line-height), var(--ag-internal-padded-row-height));
+    }
+
+    .ag-content-editable-field-input:focus,
+    .ag-content-editable-field-input:focus-within {
+        box-shadow: var(--ag-input-focus-box-shadow);
+        border-color: var(--ag-input-focus-border-color);
+    }
+
+    :where(.ag-content-editable-field.ag-disabled .ag-content-editable-field-input) {
+        background-color: var(--ag-input-disabled-background-color);
+        border-color: var(--ag-input-disabled-border-color);
+        color: var(--ag-disabled-foreground-color);
+    }
+
+    .ag-content-editable-field-input.invalid {
+        border-color: var(--ag-invalid-color);
+    }
+
+    ////////////////////////////////////////
+    // Formula Field
+    ////////////////////////////////////////
+    .ag-formula-token {
+        line-height: var(--ag-line-height, 1.6);
+    }
+
+    .ag-formula-token-color-1 {
+        color: var(--ag-formula-token-1-color);
+    }
+
+    .ag-formula-token-color-2 {
+        color: var(--ag-formula-token-2-color);
+    }
+
+    .ag-formula-token-color-3 {
+        color: var(--ag-formula-token-3-color);
+    }
+
+    .ag-formula-token-color-4 {
+        color: var(--ag-formula-token-4-color);
+    }
+
+    .ag-formula-token-color-5 {
+        color: var(--ag-formula-token-5-color);
+    }
+
+    .ag-formula-token-color-6 {
+        color: var(--ag-formula-token-6-color);
+    }
+
+    .ag-formula-token-color-7 {
+        color: var(--ag-formula-token-7-color);
+    }
+
+    .ag-formula-range-color-1 {
+        --ag-range-selection-border-color: var(--ag-formula-token-1-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-1-background-color);
+    }
+
+    .ag-formula-range-color-2 {
+        --ag-range-selection-border-color: var(--ag-formula-token-2-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-2-background-color);
+    }
+
+    .ag-formula-range-color-3 {
+        --ag-range-selection-border-color: var(--ag-formula-token-3-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-3-background-color);
+    }
+
+    .ag-formula-range-color-4 {
+        --ag-range-selection-border-color: var(--ag-formula-token-4-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-4-background-color);
+    }
+
+    .ag-formula-range-color-5 {
+        --ag-range-selection-border-color: var(--ag-formula-token-5-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-5-background-color);
+    }
+
+    .ag-formula-range-color-6 {
+        --ag-range-selection-border-color: var(--ag-formula-token-6-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-6-background-color);
+    }
+
+    .ag-formula-range-color-7 {
+        --ag-range-selection-border-color: var(--ag-formula-token-7-color);
+        --ag-range-selection-background-color: var(--ag-formula-token-7-background-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-1,
+    .ag-fill-handle.ag-formula-range-color-1 {
+        background-color: var(--ag-formula-token-1-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-2,
+    .ag-fill-handle.ag-formula-range-color-2 {
+        background-color: var(--ag-formula-token-2-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-3,
+    .ag-fill-handle.ag-formula-range-color-3 {
+        background-color: var(--ag-formula-token-3-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-4,
+    .ag-fill-handle.ag-formula-range-color-4 {
+        background-color: var(--ag-formula-token-4-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-5,
+    .ag-fill-handle.ag-formula-range-color-5 {
+        background-color: var(--ag-formula-token-5-color);
+    }
+
+    .ag-range-handle.ag-formula-range-color-6,
+    .ag-fill-handle.ag-formula-range-color-6 {
+        background-color: var(--ag-formula-token-6-color);
+    }
+
+    ////////////////////////////////////////
     // Dialog
     ////////////////////////////////////////
     .ag-dragging-range-handle .ag-dialog,
     .ag-dragging-fill-handle .ag-dialog {
         opacity: 0.7;
         pointer-events: none;
+
+        .ag-charts-canvas-center,
+        .ag-charts-series-area,
+        .ag-charts-proxy-elem,
+        .ag-charts-proxy-legend-toolbar,
+        .ag-charts-toolbar,
+        .ag-charts-canvas-overlay > * {
+            pointer-events: none;
+        }
     }
 
     .ag-dialog {
@@ -653,6 +939,95 @@
     }
 
     ////////////////////////////////////////
+    // Notes
+    ////////////////////////////////////////
+    .ag-has-cell-notes::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        border-style: solid;
+        border-width: 0 var(--ag-note-indicator-size) var(--ag-note-indicator-size) 0;
+        border-color: transparent var(--ag-note-indicator-color) transparent transparent;
+        pointer-events: none;
+    }
+
+    .ag-notes-panel.ag-panel {
+        width: 100%;
+        border: var(--ag-note-popup-border);
+        background-color: var(--ag-note-popup-background-color);
+    }
+
+    .ag-notes-panel-content-wrapper {
+        min-height: 0;
+        min-width: 0;
+    }
+
+    .ag-notes-popup-content {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+        gap: calc(var(--ag-grid-size) / 2);
+        padding: var(--ag-note-popup-padding);
+    }
+
+    .ag-notes-popup-meta {
+        color: var(--ag-note-popup-text-color);
+        font-size: calc(var(--ag-font-size) - 1px);
+        @include ag.unthemed-rtl(
+            (
+                padding-left: calc(var(--ag-grid-size) / 2),
+            )
+        );
+    }
+
+    .ag-notes-popup-body {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+    }
+
+    .ag-notes-popup-editor {
+        display: flex;
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+    }
+
+    .ag-notes-popup-editor .ag-text-area-input-wrapper {
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        align-items: stretch;
+    }
+
+    .ag-notes-popup-editor .ag-text-area-input {
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        resize: none;
+        color: var(--ag-note-popup-input-text-color);
+        background-color: var(--ag-note-popup-input-background-color);
+        padding: calc(var(--ag-grid-size) / 2);
+    }
+
+    .ag-notes-popup-editor .ag-text-area-input[readonly] {
+        background-color: var(--ag-note-popup-background-color);
+        border: none;
+    }
+
+    .ag-notes-popup-read-only .ag-text-area-input-wrapper {
+        background-color: var(--ag-input-disabled-background-color);
+    }
+
+    ////////////////////////////////////////
     // Tooltip
     ////////////////////////////////////////
     .ag-tooltip {
@@ -662,6 +1037,15 @@
         border: var(--ag-borders) var(--ag-border-color);
         border-radius: var(--ag-card-radius);
         white-space: normal;
+
+        &.ag-cell-editor-tooltip,
+        &.ag-cell-formula-tooltip,
+        &.ag-calculated-column-expression-tooltip {
+            background-color: var(--ag-tooltip-error-background-color);
+            color: var(--ag-tooltip-error-text-color);
+            border: var(--ag-borders) var(--ag-tooltip-error-border-color);
+            font-weight: 500;
+        }
     }
 
     .ag-tooltip.ag-tooltip-animate,

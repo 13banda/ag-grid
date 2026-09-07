@@ -1,13 +1,13 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule, RowGroupingPanelModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    RowGroupingModule,
-    RowGroupingPanelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, RowGroupingPanelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 

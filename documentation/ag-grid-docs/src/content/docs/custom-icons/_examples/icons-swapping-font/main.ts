@@ -5,8 +5,8 @@ import {
     NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
     iconSetMaterial,
     themeQuartz,
 } from 'ag-grid-community';
@@ -15,9 +15,15 @@ import {
     ColumnsToolPanelModule,
     ContextMenuModule,
     FiltersToolPanelModule,
+    PivotModule,
     RowGroupingModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberEditorModule,
@@ -30,7 +36,7 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     RowGroupingModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
+    PivotModule,
 ]);
 
 const myTheme = themeQuartz
@@ -43,7 +49,7 @@ const myTheme = themeQuartz
 const columnDefs: ColDef[] = [
     { field: 'athlete', minWidth: 170 },
     { field: 'age' },
-    { field: 'country' },
+    { field: 'country', rowGroup: true },
     { field: 'year' },
     { field: 'date' },
     { field: 'sport' },
@@ -62,11 +68,11 @@ const gridOptions: GridOptions<IOlympicData> = {
     defaultColDef: {
         editable: true,
         filter: true,
+        enableRowGroup: true,
+        enablePivot: true,
+        enableValue: true,
     },
-
-    enableRowGroup: true,
-    enablePivot: true,
-    enableValue: true,
+    sideBar: ['columns', 'filters'],
 };
 
 // setup the grid after the page has finished loading

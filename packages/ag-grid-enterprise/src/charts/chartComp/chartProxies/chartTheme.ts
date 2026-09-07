@@ -1,6 +1,13 @@
-import type { AgChartTheme, AgChartThemeName, AgChartThemeOverrides, AgChartThemePalette } from 'ag-charts-types';
+import type {
+    AgBaseHighlightStyleOptions,
+    AgChartTheme,
+    AgChartThemeName,
+    AgChartThemeOverrides,
+    AgChartThemePalette,
+    AgMultiSeriesHighlightOptions,
+} from 'ag-charts-types';
 
-import { _warn } from 'ag-grid-community';
+import { _warnForGrid } from 'ag-grid-community';
 
 import { ALL_AXIS_TYPES } from '../utils/axisTypeMapper';
 import { get } from '../utils/object';
@@ -21,7 +28,7 @@ export function createAgChartTheme(
 
     const rootTheme = stockTheme
         ? { baseTheme: themeName as AgChartThemeName }
-        : lookupCustomChartTheme(chartProxyParams, themeName) ?? {};
+        : (lookupCustomChartTheme(chartProxyParams, themeName) ?? {});
 
     const gridOptionsThemeOverrides = chartProxyParams.getGridOptionsChartThemeOverrides();
     const apiThemeOverrides = chartProxyParams.apiChartThemeOverrides;
@@ -81,8 +88,12 @@ export function createAgChartTheme(
 
 function isIdenticalPalette(paletteA: AgChartThemePalette, paletteB: AgChartThemePalette) {
     const arrayCompare = (arrA?: any[], arrB?: any[]) => {
-        if (arrA === arrB) return true;
-        if (arrA?.length !== arrB?.length) return false;
+        if (arrA === arrB) {
+            return true;
+        }
+        if (arrA?.length !== arrB?.length) {
+            return false;
+        }
 
         return arrA?.every((v: any, i) => v === arrB?.[i]) ?? false;
     };
@@ -104,22 +115,99 @@ function createCrossFilterThemeOverrides(
             legendItemClick: (e: any) => {
                 const chart = proxy.getChart();
                 const eligibleSeriesIds = [e.seriesId, `${e.seriesId}-filtered-out`];
-                chart.series
-                    .filter((s) => eligibleSeriesIds.includes(s.id))
-                    .forEach((s) => s.toggleSeriesItem(undefined, 'category', e.itemId, undefined));
+                for (const s of chart.series.filter((s) => eligibleSeriesIds.includes(s.id))) {
+                    s.toggleSeriesItem(undefined, 'category', e.itemId, undefined);
+                }
             },
         },
     };
 
+    const common = {
+        tooltip: {
+            delay: 500,
+        },
+        legend,
+        listeners: {
+            click: (e: any) => chartProxyParams.crossFilterCallback(e, true),
+        },
+    };
+
+    if (seriesType === 'pie' || seriesType === 'donut') {
+        return {
+            [seriesType]: {
+                series: {
+                    fills: {
+                        $applyCycle: [
+                            { $cacheMax: { $size: { $path: ['./data', { $path: '/data' }] } } },
+                            { $palette: 'fills' },
+                            {
+                                $if: [
+                                    { $eq: [{ $value: '$parentIndex' }, 0] },
+                                    { $mix: [{ $value: '$1' }, { $ref: 'backgroundColor' }, 0.7] },
+                                    { $value: '$1' },
+                                ],
+                            },
+                        ],
+                    },
+                    strokes: {
+                        $applyCycle: [
+                            { $cacheMax: { $size: { $path: ['./data', { $path: '/data' }] } } },
+                            { $palette: 'strokes' },
+                            {
+                                $if: [
+                                    { $eq: [{ $value: '$parentIndex' }, 0] },
+                                    { $mix: [{ $value: '$1' }, { $ref: 'backgroundColor' }, 0.7] },
+                                    { $value: '$1' },
+                                ],
+                            },
+                        ],
+                    },
+                },
+                ...common,
+            },
+        };
+    }
+
+    const fill: { fill?: object } = {};
+    if (seriesType !== 'line') {
+        fill.fill = {
+            $if: [
+                { $isEven: [{ $value: '$index' }] },
+                { $palette: 'fill' },
+                {
+                    $mix: [
+                        {
+                            $path: ['../$prevIndex/fill', { $palette: 'fill' }],
+                        },
+                        { $ref: 'backgroundColor' },
+                        0.7,
+                    ],
+                },
+            ],
+        };
+    }
+
     return {
         [seriesType]: {
-            tooltip: {
-                delay: 500,
+            series: {
+                stroke: {
+                    $if: [
+                        { $isEven: [{ $value: '$index' }] },
+                        { $palette: 'stroke' },
+                        {
+                            $mix: [
+                                {
+                                    $path: ['../$prevIndex/fill', { $palette: 'stroke' }],
+                                },
+                                { $ref: 'backgroundColor' },
+                                0.7,
+                            ],
+                        },
+                    ],
+                },
+                ...fill,
             },
-            legend,
-            listeners: {
-                click: (e: any) => chartProxyParams.crossFilterCallback(e, true),
-            },
+            ...common,
         },
     };
 }
@@ -142,7 +230,6 @@ function inbuiltStockThemeOverrides(params: ChartProxyParams, isEnterprise: bool
                 bottom: extraPadding.includes('bottom') ? 40 : 20,
                 left: extraPadding.includes('left') ? 30 : 20,
             },
-            suppressFieldDotNotation: true,
         },
     };
 }
@@ -185,11 +272,33 @@ function getSelectedTheme(chartProxyParams: ChartProxyParams): string {
 
 export function lookupCustomChartTheme(chartProxyParams: ChartProxyParams, name: string): AgChartTheme {
     const { customChartThemes } = chartProxyParams;
-    const customChartTheme = customChartThemes && customChartThemes[name];
+    const customChartTheme = customChartThemes?.[name];
 
     if (!customChartTheme) {
-        _warn(140, { name });
+        _warnForGrid(chartProxyParams.gridId, 140, { name });
     }
 
     return customChartTheme as AgChartTheme;
+}
+
+export function getSeriesHighlight(
+    crossFiltering: boolean,
+    isSingleSeries?: boolean
+): AgMultiSeriesHighlightOptions<AgBaseHighlightStyleOptions> {
+    const highlight: AgMultiSeriesHighlightOptions<AgBaseHighlightStyleOptions> = {
+        highlightedItem: {
+            strokeWidth: 2,
+        },
+    };
+    if (!isSingleSeries) {
+        highlight.unhighlightedSeries = {
+            opacity: 1,
+        };
+    }
+    if (!crossFiltering) {
+        highlight.unhighlightedItem = {
+            opacity: 1,
+        };
+    }
+    return highlight;
 }

@@ -2,8 +2,10 @@
 
 .cta {
     position: relative;
+    display: inline-block;
 }
 
+a.cta,
 .cta a,
 .cta button {
     display: flex;
@@ -44,6 +46,13 @@
         &:hover {
             background-color: var(--color-util-brand-50);
         }
+    }
+}
+
+// Hide button (CodeSandbox & Plunker) CTA items for Mobile Safari only
+@supports (-webkit-touch-callout: none) {
+    .cta button {
+        display: none;
     }
 }
 

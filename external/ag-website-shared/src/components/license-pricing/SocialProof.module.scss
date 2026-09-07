@@ -8,9 +8,25 @@
     background-color: var(--social-proof-bg);
     border-right: 1px solid var(--color-border-secondary);
     border-left: 1px solid var(--color-border-secondary);
-    box-shadow:
-        50vw 0 0 0 var(--social-proof-bg),
-        -50vw 0 0 0 var(--social-proof-bg);
+
+    &::before,
+    &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100vw;
+        background-color: var(--social-proof-bg);
+        z-index: -1;
+    }
+
+    &::before {
+        left: -100vw;
+    }
+
+    &::after {
+        right: -100vw;
+    }
 
     #{$selector-darkmode} & {
         --social-proof-bg: color-mix(in srgb, var(--color-fg-primary), var(--color-bg-primary) 98%);
@@ -23,6 +39,10 @@
     .cellsIllustration {
         margin-left: auto;
         left: 1px;
+
+        @media screen and (max-width: 520px) {
+            left: -1px;
+        }
     }
 
     p,
@@ -65,18 +85,24 @@
     @media screen and (max-width: $breakpoint-pricing-large) {
         padding-top: $spacing-size-10;
         padding-bottom: $spacing-size-10;
-        border-bottom: 1px solid var(--color-border-secondary);
+
+        &:not(:last-child) {
+            border-bottom: 1px solid var(--color-border-secondary);
+        }
     }
 
     &:first-child {
         padding-left: $spacing-size-6;
+
         @media screen and (max-width: $breakpoint-pricing-large) {
             padding-left: $spacing-size-10;
         }
     }
 
-    &:not(:last-child) {
-        border-right: 1px solid var(--color-border-secondary);
+    @media screen and (min-width: $breakpoint-pricing-large) {
+        &:not(:last-child) {
+            border-right: 1px solid var(--color-border-secondary);
+        }
     }
 
     h4 {
@@ -104,7 +130,7 @@
     justify-content: space-between;
     width: 50%;
     font-size: var(--text-fs-base);
-    line-height: var(--text-lh-2xl);
+    line-height: var(--text-lh-base);
 
     @media screen and (max-width: $breakpoint-pricing-medium) {
         width: 100%;
@@ -112,7 +138,10 @@
 
     &:first-child {
         padding: $spacing-size-6 $spacing-size-8 $spacing-size-6 $spacing-size-6;
-        border-right: 1px solid var(--color-border-secondary);
+
+        @media screen and (min-width: $breakpoint-pricing-medium) {
+            border-right: 1px solid var(--color-border-secondary);
+        }
 
         @media screen and (max-width: $breakpoint-pricing-medium) {
             border-bottom: 1px solid var(--color-border-secondary);

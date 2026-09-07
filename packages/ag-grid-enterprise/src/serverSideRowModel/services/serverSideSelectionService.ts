@@ -1,6 +1,9 @@
 import type {
     ISelectionService,
+    IServerSideGroupSelectionState,
+    IServerSideSelectionState,
     ISetNodesSelectedParams,
+    LogService,
     NamedBean,
     RowNode,
     RowSelectionMode,
@@ -11,13 +14,11 @@ import type {
 } from 'ag-grid-community';
 import {
     BaseSelectionService,
-    _error,
     _getGroupSelectsDescendants,
     _getRowSelectionMode,
     _isMultiRowSelection,
     _isRowSelection,
     _isUsingNewRowSelectionAPI,
-    _warn,
 } from 'ag-grid-community';
 
 import { DefaultStrategy } from './selection/strategies/defaultStrategy';
@@ -46,7 +47,7 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
             if (Strategy) {
                 this.destroyBean(this.selectionStrategy);
 
-                this.selectionStrategy = this.createManagedBean(new Strategy());
+                this.selectionStrategy = this.createManagedBean(new Strategy(this.selectionCtx));
 
                 this.shotgunResetNodeSelectionState();
                 this.dispatchSelectionChanged('api');
@@ -65,7 +66,7 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
         this.selectionMode = _getRowSelectionMode(this.gos);
         const groupSelectsChildren = _getGroupSelectsDescendants(this.gos);
         const Strategy = !groupSelectsChildren ? DefaultStrategy : GroupSelectsChildrenStrategy;
-        this.selectionStrategy = this.createManagedBean(new Strategy());
+        this.selectionStrategy = this.createManagedBean(new Strategy(this.selectionCtx));
     }
 
     public handleSelectionEvent(
@@ -73,9 +74,9 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
         rowNode: RowNode<any>,
         source: SelectionEventSourceType
     ): number {
-        if (this.isRowSelectionBlocked(rowNode)) return 0;
-
-        let updatedRows = 0;
+        if (this.isRowSelectionBlocked(rowNode)) {
+            return 0;
+        }
 
         const selection = this.inferNodeSelections(rowNode, event.shiftKey, event.metaKey || event.ctrlKey, source);
 
@@ -83,6 +84,9 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
             return 0;
         }
 
+        this.selectionCtx.selectAll = false;
+
+        let updatedRows: number;
         if ('select' in selection) {
             if (selection.reset) {
                 this.selectionStrategy.deselectAllRowNodes({ source: 'api' });
@@ -100,7 +104,7 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
             });
         }
 
-        this.shotgunResetNodeSelectionState();
+        this.shotgunResetNodeSelectionState(source);
         this.dispatchSelectionChanged(source);
 
         return updatedRows;
@@ -111,32 +115,38 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
     }
 
     public setSelectionState(
-        state: string[] | ServerSideRowSelectionState | ServerSideRowGroupSelectionState,
+        state: string[] | ServerSideRowSelectionState | ServerSideRowGroupSelectionState | undefined,
         source: SelectionEventSourceType
     ): void {
         if (!_isRowSelection(this.gos)) {
-            _warn(132);
+            if (state) {
+                this.warn(132);
+            }
             return;
         }
         if (Array.isArray(state)) {
             return;
         }
-        this.selectionStrategy.setSelectedState(state);
-        this.shotgunResetNodeSelectionState();
+        if (state) {
+            this.selectionStrategy.setSelectedState(state);
+            this.shotgunResetNodeSelectionState();
 
-        this.dispatchSelectionChanged(source);
+            this.dispatchSelectionChanged(source);
+        } else {
+            this.deselectAllRowNodes({ source });
+        }
     }
 
     public setNodesSelected(params: ISetNodesSelectedParams): number {
         if (!_isRowSelection(this.gos) && params.newValue) {
-            _warn(132);
+            this.warn(132);
             return 0;
         }
 
         const { nodes, ...otherParams } = params;
 
         if (nodes.length > 1 && this.selectionMode !== 'multiRow') {
-            _warn(130);
+            this.warn(130);
             return 0;
         }
 
@@ -181,10 +191,25 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
                 this.selectRowNode(node, isNodeSelected, undefined, source);
             }
         });
+
+        this.syncRootNode(source);
+    }
+
+    /** `forEachNode` skips the root, whose selection the grand total row reports as its own. */
+    private syncRootNode(source?: SelectionEventSourceType): void {
+        const rootNode = this.beans.rowModel.rootNode;
+        if (!rootNode) {
+            return;
+        }
+
+        const isRootSelected = this.selectionStrategy.isNodeSelected(rootNode);
+        if (isRootSelected !== rootNode.isSelected()) {
+            this.selectRowNode(rootNode, isRootSelected, undefined, source);
+        }
     }
 
     public getSelectedNodes(): RowNode<any>[] {
-        return this.selectionStrategy.getSelectedNodes();
+        return this.selectionStrategy.getSelectedNodes() ?? [];
     }
 
     public getSelectedRows(): any[] {
@@ -234,17 +259,17 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
 
     public selectAllRowNodes(params: { source: SelectionEventSourceType; selectAll?: SelectAllMode }): void {
         if (!_isRowSelection(this.gos)) {
-            _warn(132);
+            this.warn(132);
             return;
         }
 
-        validateSelectionParameters(params);
+        validateSelectionParameters(this.beans.log, params);
         if (_isUsingNewRowSelectionAPI(this.gos) && !_isMultiRowSelection(this.gos)) {
-            return _warn(130);
+            return this.warn(130);
         }
 
         this.selectionStrategy.selectAllRowNodes(params);
-        this.selectionCtx.reset();
+        this.selectionCtx.selectAll = true;
 
         this.beans.rowModel.forEachNode((node) => {
             if (node.stub) {
@@ -254,14 +279,15 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
             this.selectRowNode(node, true, undefined, params.source);
         });
 
+        this.syncRootNode(params.source);
         this.dispatchSelectionChanged(params.source);
     }
 
     public deselectAllRowNodes(params: { source: SelectionEventSourceType; selectAll?: SelectAllMode }): void {
-        validateSelectionParameters(params);
+        validateSelectionParameters(this.beans.log, params);
 
         this.selectionStrategy.deselectAllRowNodes(params);
-        this.selectionCtx.reset();
+        this.selectionCtx.selectAll = false;
 
         this.beans.rowModel.forEachNode((node) => {
             if (node.stub) {
@@ -271,6 +297,7 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
             this.selectRowNode(node, false, undefined, params.source);
         });
 
+        this.syncRootNode(params.source);
         this.dispatchSelectionChanged(params.source);
     }
 
@@ -280,7 +307,7 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
 
     // used by CSRM
     public getBestCostNodeSelection(): RowNode<any>[] | undefined {
-        return _warn(194, { method: 'getBestCostNodeSelection' }) as undefined;
+        return this.warn(194, { method: 'getBestCostNodeSelection' }) as undefined;
     }
 
     /**
@@ -300,7 +327,6 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
 
         this.beans.rowModel.forEachNode((node) => {
             const rowSelectable = this.updateRowSelectable(node, true);
-
             if (!rowSelectable && node.isSelected()) {
                 nodesToDeselect.push(node);
             }
@@ -315,12 +341,40 @@ export class ServerSideSelectionService extends BaseSelectionService implements 
         }
     }
 
+    private dispatchSelectionChanged(source: SelectionEventSourceType): void {
+        this.eventSvc.dispatchEvent({
+            type: 'selectionChanged',
+            source,
+            selectedNodes:
+                this.selectionStrategy instanceof GroupSelectsChildrenStrategy
+                    ? null
+                    : this.selectionStrategy.getSelectedNodes(true, false),
+            serverSideState: this.getSelectionState() as
+                | IServerSideSelectionState
+                | IServerSideGroupSelectionState
+                | null,
+        });
+    }
+
     public updateSelectableAfterGrouping(): void {
-        return _error(194, { method: 'updateSelectableAfterGrouping' }) as undefined;
+        return this.error(194, { method: 'updateSelectableAfterGrouping' }) as undefined;
+    }
+
+    public refreshMasterNodeState(): void {
+        // Initially we don't support SSRM for master detail selection
+    }
+
+    public setDetailSelectionState(): void {
+        // Initially we don't support SSRM for master detail selection
+        return;
     }
 }
-function validateSelectionParameters({ selectAll }: { source: SelectionEventSourceType; selectAll?: SelectAllMode }) {
+
+function validateSelectionParameters(
+    log: LogService,
+    { selectAll }: { source: SelectionEventSourceType; selectAll?: SelectAllMode }
+) {
     if (selectAll === 'filtered' || selectAll === 'currentPage') {
-        _warn(195, { justCurrentPage: selectAll === 'currentPage' });
+        log.warn(195, { justCurrentPage: selectAll === 'currentPage' });
     }
 }

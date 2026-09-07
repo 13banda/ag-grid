@@ -1,0 +1,26 @@
+import { TestGridsManager } from 'ag-test-utils';
+
+import { CellStyleModule, RowSelectionModule } from 'ag-grid-community';
+import { RowGroupingModule } from 'ag-grid-enterprise';
+
+import { getTestGenerator } from '../../../util';
+import { rowModelGridOptions } from '../../grid-config';
+import { getGridOptions_checkboxes, getTestConcerns_checkboxes, groupCellSnapshotter } from '../../grouping-test-utils';
+
+describe('ag-grid groupCellRenderer', () => {
+    const gridsManager = new TestGridsManager({ modules: [RowSelectionModule, CellStyleModule, RowGroupingModule] });
+    const createTests = getTestGenerator(gridsManager, groupCellSnapshotter);
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    const gridOptions = rowModelGridOptions.csrm;
+    describe('with rowModelType=clientSide - checkboxes', () => {
+        createTests(getTestConcerns_checkboxes(gridOptions), getGridOptions_checkboxes(gridOptions));
+    });
+});

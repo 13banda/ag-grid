@@ -1,11 +1,36 @@
+import type { AgPromise } from 'ag-stack';
+import { RefPlaceholder, _addStylesToElement, _setDisplayed } from 'ag-stack';
+
+import type { HeaderStyle } from '../../../entities/colDef';
 import type { IFloatingFilterComp } from '../../../filter/floating/floatingFilter';
 import type { UserCompDetails } from '../../../interfaces/iUserCompDetails';
-import { _setDisplayed } from '../../../utils/dom';
-import type { AgPromise } from '../../../utils/promise';
-import { RefPlaceholder } from '../../../widgets/component';
+import type { ElementParams } from '../../../utils/element';
 import { AbstractHeaderCellComp } from '../abstractCell/abstractHeaderCellComp';
 import type { HeaderFilterCellCtrl } from './headerFilterCellCtrl';
 import type { IHeaderFilterCellComp } from './iHeaderFilterCellComp';
+
+const HeaderFilterCellCompElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-header-cell ag-floating-filter',
+    role: 'gridcell',
+    children: [
+        { tag: 'div', ref: 'eFloatingFilterBody', role: 'presentation' },
+        {
+            tag: 'div',
+            ref: 'eButtonWrapper',
+            cls: 'ag-floating-filter-button ag-hidden',
+            role: 'presentation',
+            children: [
+                {
+                    tag: 'button',
+                    ref: 'eButtonShowMainFilter',
+                    cls: 'ag-button ag-floating-filter-button-button',
+                    attrs: { type: 'button', tabindex: '-1' },
+                },
+            ],
+        },
+    ],
+};
 
 export class HeaderFilterCellComp extends AbstractHeaderCellComp<HeaderFilterCellCtrl> {
     private readonly eFloatingFilterBody: HTMLElement = RefPlaceholder;
@@ -16,22 +41,15 @@ export class HeaderFilterCellComp extends AbstractHeaderCellComp<HeaderFilterCel
     private compPromise: AgPromise<IFloatingFilterComp> | null;
 
     constructor(ctrl: HeaderFilterCellCtrl) {
-        super(
-            /* html */ `<div class="ag-header-cell ag-floating-filter" role="gridcell">
-            <div data-ref="eFloatingFilterBody" role="presentation"></div>
-            <div class="ag-floating-filter-button ag-hidden" data-ref="eButtonWrapper" role="presentation">
-                <button type="button" class="ag-button ag-floating-filter-button-button" data-ref="eButtonShowMainFilter" tabindex="-1"></button>
-            </div>
-        </div>`,
-            ctrl
-        );
+        super(HeaderFilterCellCompElement, ctrl);
     }
 
     public postConstruct(): void {
         const eGui = this.getGui();
 
         const compProxy: IHeaderFilterCellComp = {
-            addOrRemoveCssClass: (cssClassName, on) => this.addOrRemoveCssClass(cssClassName, on),
+            toggleCss: (cssClassName, on) => this.toggleCss(cssClassName, on),
+            setUserStyles: (styles: HeaderStyle) => _addStylesToElement(eGui, styles),
             addOrRemoveBodyCssClass: (cssClassName, on) => this.eFloatingFilterBody.classList.toggle(cssClassName, on),
             setButtonWrapperDisplayed: (displayed) => _setDisplayed(this.eButtonWrapper, displayed),
             setCompDetails: (compDetails) => this.setCompDetails(compDetails),
@@ -60,10 +78,8 @@ export class HeaderFilterCellComp extends AbstractHeaderCellComp<HeaderFilterCel
     }
 
     private destroyFloatingFilterComp(): void {
-        if (this.floatingFilterComp) {
-            this.eFloatingFilterBody.removeChild(this.floatingFilterComp.getGui());
-            this.floatingFilterComp = this.destroyBean(this.floatingFilterComp);
-        }
+        this.floatingFilterComp?.getGui().remove();
+        this.floatingFilterComp = this.destroyBean(this.floatingFilterComp);
     }
 
     private afterCompCreated(comp: IFloatingFilterComp | null): void {
@@ -81,8 +97,6 @@ export class HeaderFilterCellComp extends AbstractHeaderCellComp<HeaderFilterCel
         this.floatingFilterComp = comp;
         this.eFloatingFilterBody.appendChild(comp.getGui());
 
-        if (comp.afterGuiAttached) {
-            comp.afterGuiAttached();
-        }
+        comp.afterGuiAttached?.();
     }
 }

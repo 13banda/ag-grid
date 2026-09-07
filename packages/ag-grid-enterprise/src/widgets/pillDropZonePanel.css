@@ -17,6 +17,7 @@
     align-items: center;
     background-color: var(--ag-column-drop-cell-background-color);
     color: var(--ag-column-drop-cell-text-color);
+    font-weight: normal;
     border-radius: 500px;
     padding: calc(var(--ag-spacing) * 0.25);
     padding-left: calc(var(--ag-spacing) * 0.75);
@@ -63,36 +64,33 @@
     padding-bottom: var(--ag-spacing);
     padding-right: var(--ag-spacing);
     padding-left: var(--ag-spacing);
-
-    > * {
-        flex: none;
-    }
 }
 
 :where(.ag-column-drop-empty) .ag-column-drop-vertical-list {
     overflow: hidden;
 }
 
-.ag-column-drop-vertical-empty-message {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: dashed 1px;
-    border-color: var(--ag-border-color);
-    margin: calc(var(--ag-spacing) * 1.5) calc(var(--ag-spacing) * 2);
-    padding: calc(var(--ag-spacing) * 2);
-}
-
 .ag-column-drop-cell-button {
     cursor: pointer;
+    margin-right: calc(var(--ag-spacing) / 4);
     min-width: 0;
     opacity: 0.75;
+}
 
-    &:hover {
-        opacity: 1;
+.ag-column-drop-cell-button:hover {
+    opacity: 1;
+}
+
+.ag-column-drop-cell-drag-handle {
+    margin-left: calc(var(--ag-spacing) / 4);
+}
+
+.ag-column-drop-cell-drag-handle.ag-column-select-column-readonly {
+    opacity: 0.5;
+    pointer-events: none;
+
+    :where(.ag-icon) {
+        opacity: 0.35;
     }
 }
 
@@ -110,7 +108,8 @@
 
 .ag-column-drop-horizontal {
     white-space: nowrap;
-    overflow: hidden;
+    overflow: auto hidden;
+    scrollbar-width: thin;
     height: var(--ag-header-height);
     padding-left: var(--ag-cell-horizontal-padding);
     gap: var(--ag-cell-widget-spacing);
@@ -132,7 +131,7 @@
 
 .ag-select-agg-func-popup {
     position: absolute;
-    border: solid 1px var(--ag-border-color);
+    border: solid var(--ag-border-width) var(--ag-border-color);
     border-radius: var(--ag-border-radius);
     box-shadow: var(--ag-dropdown-shadow);
     background: var(--ag-background-color);
@@ -143,12 +142,12 @@
 .ag-select-agg-func-virtual-list-item {
     cursor: default;
     padding-left: calc(var(--ag-spacing) * 2);
+}
 
-    &:hover {
-        background-color: var(--ag-selected-row-background-color);
-    }
+.ag-select-agg-func-virtual-list-item:hover {
+    background-color: var(--ag-selected-row-background-color);
 }
 
 .ag-column-drop-horizontal-half-width:where(:not(:last-child)) {
-    border-right: solid 1px var(--ag-border-color);
+    border-right: solid var(--ag-border-width) var(--ag-border-color);
 }

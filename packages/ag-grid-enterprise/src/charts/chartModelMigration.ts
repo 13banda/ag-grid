@@ -1,7 +1,7 @@
 import type { AgChartThemeName } from 'ag-charts-types';
 
-import { _errMsg } from 'ag-grid-community';
 import type { ChartModel } from 'ag-grid-community';
+import { _errMsg } from 'ag-grid-community';
 
 import { VERSION } from '../version';
 import { ALL_AXIS_TYPES, getLegacyAxisType } from './chartComp/utils/axisTypeMapper';
@@ -32,6 +32,8 @@ export function upgradeChartModel(model: ChartModel): ChartModel {
     model = migrateIfBefore('31.0.0', model, migrateV31);
     model = migrateIfBefore('32.0.0', model, migrateV32);
     model = migrateIfBefore('33.0.0', model, migrateV33);
+    model = migrateIfBefore('34.0.0', model, migrateV34);
+    model = migrateIfBefore('36.0.0', model, migrateV36);
     model = cleanup(model);
 
     // Bump version to latest.
@@ -164,9 +166,9 @@ function migrateV26_2(model: ChartModel) {
                 [type]: { ...minimalAxis, ...axisProps },
             }))
             .reduce(merge, {});
-        ALL_AXIS_TYPES.filter((v) => updatedAxes[v] == null).forEach((v) => {
+        for (const v of ALL_AXIS_TYPES.filter((v) => updatedAxes[v] == null)) {
             updatedAxes[v] = { ...minimalAxis };
-        });
+        }
         chartTypeMixin.axes = updatedAxes;
     }
 
@@ -342,6 +344,42 @@ function migrateV33(model: ChartModel) {
     return model;
 }
 
+function migrateV34(model: ChartModel) {
+    const highlightUpdate = (parent: any, targetProp: string) => {
+        const highlightStyle = parent[targetProp];
+        if (highlightStyle == null) {
+            return;
+        }
+
+        const highlight: any = {};
+        if (highlightStyle.item) {
+            highlight.highlightedItem = highlightStyle.item;
+        }
+        if (highlightStyle.series) {
+            const { dimOpacity, ...seriesOpts } = highlightStyle.series;
+            if (dimOpacity != null) {
+                highlight.unhighlightedSeries = { opacity: dimOpacity };
+            }
+            if (Object.keys(seriesOpts).length > 0) {
+                highlight.highlightedSeries = seriesOpts;
+            }
+        }
+
+        delete parent[targetProp];
+        parent.highlight = highlight;
+    };
+
+    jsonMutateProperty('chartOptions.series[].highlightStyle', true, model, highlightUpdate);
+
+    return model;
+}
+
+function migrateV36(model: ChartModel) {
+    model = jsonRename('chartOptions.bubble.series.size', 'minSize', model);
+
+    return model;
+}
+
 function cleanup(model: ChartModel) {
     // Remove fixed width/height - this has never been supported via UI configuration.
     model = jsonDelete('chartOptions.*.width', model);
@@ -351,6 +389,7 @@ function cleanup(model: ChartModel) {
     return model;
 }
 
+/** @knipIgnore Used in tests */
 export function heuristicVersionDetection(model: ChartModel) {
     const modelAny = model as any;
 
@@ -384,27 +423,36 @@ export function heuristicVersionDetection(model: ChartModel) {
 
     // Default to 27.1.0, the last version before we added `version`.
     const defaultVersion = '27.1.0';
+    // eslint-disable-next-line no-restricted-properties
     const matchingHints = Object.entries(hints).filter(([_, match]) => match);
 
-    // eslint-disable-next-line no-console
-    if (DEBUG) console.log('AG Grid: ChartModel migration', { heuristicVersionCandidates: matchingHints });
+    if (DEBUG) {
+        // eslint-disable-next-line no-console
+        console.log('AG Grid: ChartModel migration', { heuristicVersionCandidates: matchingHints });
+    }
     const [heuristicVersion = defaultVersion] = matchingHints[0];
 
-    // eslint-disable-next-line no-console
-    if (DEBUG) console.log('AG Grid: ChartModel migration', { heuristicVersion });
+    if (DEBUG) {
+        // eslint-disable-next-line no-console
+        console.log('AG Grid: ChartModel migration', { heuristicVersion });
+    }
     return heuristicVersion;
 }
 
 function migrateIfBefore(maxVersion: string, model: ChartModel, migration: (m: ChartModel) => ChartModel): ChartModel {
     if (versionNumber(maxVersion) > versionNumber(model.version!)) {
-        // eslint-disable-next-line no-console
-        if (DEBUG) console.log('AG Grid: ChartModel migration', { migratingTo: maxVersion });
+        if (DEBUG) {
+            // eslint-disable-next-line no-console
+            console.log('AG Grid: ChartModel migration', { migratingTo: maxVersion });
+        }
 
         const result = migration(model);
         result.version = maxVersion;
 
-        // eslint-disable-next-line no-console
-        if (DEBUG) console.log('AG Grid: ChartModel migration', { migratedTo: maxVersion, result });
+        if (DEBUG) {
+            // eslint-disable-next-line no-console
+            console.log('AG Grid: ChartModel migration', { migratedTo: maxVersion, result });
+        }
         return result;
     }
 

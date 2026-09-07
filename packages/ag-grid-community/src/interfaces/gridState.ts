@@ -1,13 +1,30 @@
+import type { ColDef } from '../entities/colDef';
+import type { ShowValuesAs, ShowValuesAsType } from '../entities/colDef-showValuesAs';
 import type { CellRangeType } from './IRangeService';
 import type { AdvancedFilterModel } from './advancedFilterModel';
-import type { FilterModel } from './iFilter';
+import type { RowGroupBulkExpansionState, RowGroupExpansionState } from './iExpansionService';
+import type { ColumnFilterState, FilterModel } from './iFilter';
 import type { RowPosition } from './iRowPosition';
+import type { SortDirection } from './iSort';
 import type { SortModelItem } from './iSortModelItem';
 import type { ServerSideRowGroupSelectionState, ServerSideRowSelectionState } from './selectionState';
 
+/**
+ * Currently selected filters when using the new filter tool panel with `agSelectableColumnFilter`, keyed by column id.
+ */
+export interface SelectableFilterState {
+    [colId: string]: number;
+}
+
 export interface FilterState {
+    /** Filter model for Column Filters */
     filterModel?: FilterModel;
+    /** State of each Column Filter component, keyed by column, for filters that keep state beyond their model */
+    columnFilterState?: ColumnFilterState;
+    /** Filter model for Advanced Filter */
     advancedFilterModel?: AdvancedFilterModel;
+    /** Currently selected filter when using the new filter tool panel with `agSelectableColumnFilter` */
+    selectableFilters?: SelectableFilterState;
 }
 
 export interface CellSelectionCellState {
@@ -47,6 +64,16 @@ export interface FiltersToolPanelState {
 
 export interface ColumnToolPanelState {
     expandedGroupIds: string[];
+}
+
+export interface NewFiltersToolPanelFilterState {
+    colId: string;
+    expanded?: boolean;
+}
+
+export interface NewFiltersToolPanelState {
+    /** Ordered list of filters and their expansion state */
+    filters?: NewFiltersToolPanelFilterState[];
 }
 
 export interface SideBarState {
@@ -92,9 +119,27 @@ export interface AggregationState {
     aggregationModel: AggregationColumnState[];
 }
 
+export interface ShowValuesAsColumnState {
+    colId: string;
+    /** The "Show Values As" mode: a mode name, or the object form (`{ type, params?, precision? }`) */
+    showValuesAs: ShowValuesAsType | ShowValuesAs;
+}
+
+export interface ShowValuesAsState {
+    showValuesAsModel: ShowValuesAsColumnState[];
+}
+
+export interface PivotSortModelItem {
+    colId: string;
+    /** Direction the pivot column's labels are ordered in. `null` keeps the generated (natural) order */
+    sort: SortDirection;
+}
+
 export interface PivotState {
     pivotMode: boolean;
     pivotColIds: string[];
+    /** Pivot label sort direction of each pivot column */
+    pivotSortModel?: PivotSortModelItem[];
 }
 
 export interface ColumnPinningState {
@@ -121,63 +166,129 @@ export interface ColumnOrderState {
     orderedColIds: string[];
 }
 
-export interface ColumnGroupState {
-    openColumnGroupIds: string[];
+export interface ColumnGroupHeaderNameState {
+    groupId: string;
+    headerName: string;
 }
 
-export interface RowGroupExpansionState {
-    expandedRowGroupIds: string[];
+export interface ColumnGroupState {
+    openColumnGroupIds: string[];
+    /** User-edited group header names, keyed by group id. */
+    headerNames?: ColumnGroupHeaderNameState[];
+}
+
+/**
+ * The `ColDef` properties a user can configure through the grid's own UI, and so the only ones the
+ * `userColumns` state section carries. UI that creates or edits columns extends this union as it gains
+ * settings; everything else stays with `columnDefs` and the other state sections.
+ */
+export type UserColumnPropertyKey = 'calculatedExpression' | 'cellDataType' | 'columnGroupShow' | 'headerName';
+
+/** One `ColDef` property the user configured, as a name/value pair. The value is typed by the property it
+ *  names, so an entry cannot pair a property with a value the definition would reject. */
+export type UserColumnProperty = {
+    [K in UserColumnPropertyKey]: { property: K; value: ColDef[K] };
+}[UserColumnPropertyKey];
+
+export interface UserColumnState {
+    colId: string;
+    /** The user created this column; it exists only because of this entry. Without it the entry describes
+     *  changes to a column declared in `columnDefs`, which the developer owns the existence of. */
+    created?: boolean;
+    /** `groupId` of the containing column group; absent or `null` places the column at the top level. */
+    parentGroupId?: string | null;
+    /** The column definition properties the user configured. Absent when `removed` is set. */
+    properties?: UserColumnProperty[];
+    /** The user removed a column declared in `columnDefs`; it stays removed across restores. */
+    removed?: boolean;
+}
+
+export interface ColumnHeaderNameColumnState {
+    colId: string;
+    headerName: string;
+}
+
+export interface ColumnHeaderNameState {
+    /** User-edited column header names, keyed by column id. */
+    columnHeaderNames: ColumnHeaderNameColumnState[];
+}
+
+export interface RowPinningState {
+    /** Row IDs of rows pinned to the top container */
+    top: string[];
+    /** Row IDs of rows pinned to the bottom container */
+    bottom: string[];
 }
 
 export interface GridState {
     /** Grid version number */
     version?: string;
-    /** Includes aggregation functions (column state) */
+    /** Aggregation Functions (column state) */
     aggregation?: AggregationState;
-    /** Includes opened groups */
+    /** Opened Column Groups, and column group header names edited by end users */
     columnGroup?: ColumnGroupState;
-    /** Includes column ordering (column state) */
+    /** Column Order (column state) */
     columnOrder?: ColumnOrderState;
-    /** Includes left/right pinned columns (column state) */
+    /** Left/right Pinned Columns (column state) */
     columnPinning?: ColumnPinningState;
-    /** Includes column width/flex (column state) */
+    /** Column Sizes - width/flex (column state) */
     columnSizing?: ColumnSizingState;
-    /** Includes hidden columns (column state) */
+    /** Hidden Columns (column state) */
     columnVisibility?: ColumnVisibilityState;
-    /** Includes Column Filters and Advanced Filter */
+    /** Column Header Names edited by end users (column state) */
+    columnHeaderName?: ColumnHeaderNameState;
+    /** Column Filters and Advanced Filter */
     filter?: FilterState;
-    /** Includes currently focused cell. Works for Client-Side Row Model only */
+    /** Currently focused cell. Works for Client-Side Row Model only */
     focusedCell?: FocusedCellState;
-    /** Includes current page */
+    /** Current page */
     pagination?: PaginationState;
-    /** Includes current pivot mode and pivot columns (column state) */
+    /** Currently manually pinned rows */
+    rowPinning?: RowPinningState;
+    /** Current pivot mode and pivot columns, and pivot column label sort (column state) */
     pivot?: PivotState;
-    /** Includes currently selected cell ranges */
+    /** Currently selected cell ranges */
     cellSelection?: CellSelectionState;
     /**
      * Includes currently selected cell ranges
      * @deprecated v32.2 Use `cellSelection` instead.
      */
     rangeSelection?: RangeSelectionState;
-    /** Includes current row group columns (column state) */
+    /** Current Row Group Columns (column state) */
     rowGroup?: RowGroupState;
-    /** Includes currently expanded group rows */
+    /** Currently expanded group rows */
     rowGroupExpansion?: RowGroupExpansionState;
+    /** Currently expanded Server-Side Row Model group rows when using `ssrmExpandAllAffectsAllRows` */
+    ssrmRowGroupExpansion?: RowGroupExpansionState | RowGroupBulkExpansionState;
     /**
-     * Includes currently selected rows.
+     * Currently selected rows.
      * For Server-Side Row Model, will be `ServerSideRowSelectionState | ServerSideRowGroupSelectionState`,
-     * for other row models, will be an array of row IDs
+     * for other row models, will be an array of row IDs.
+     * Can only be set for Client-Side Row Model and Server-Side Row Model.
      */
     rowSelection?: string[] | ServerSideRowSelectionState | ServerSideRowGroupSelectionState;
-    /** Includes current scroll position. Works for Client-Side Row Model only */
+    /** Current scroll position. Works for Client-Side Row Model only */
     scroll?: ScrollState;
-    /** Includes current Side Bar positioning and opened tool panel */
+    /** Current Side Bar positioning and opened tool panel, including the state of each open tool panel */
     sideBar?: SideBarState;
-    /** Includes current sort columns and direction (column state) */
+    /** Current sort columns and direction (column state) */
     sort?: SortState;
+    /** The per-column "Show Values As" mode (column state) */
+    showValuesAs?: ShowValuesAsState;
+    /**
+     * Columns the user created or removed at runtime, such as Calculated Columns,
+     * along with the column definition properties they changed. Unlike the other sections, which configure
+     * existing columns, this section can create and remove them.
+     */
+    userColumns?: UserColumnState[];
     /**
      * When providing a partial `initialState` with some but not all column state properties, set this to `true`.
+     * This controls which top-level sections are supplied, not whether a section may itself be partial:
+     * any section you provide must match its documented shape.
      * Not required if passing the whole state object retrieved from the grid.
+     * Not used for `api.setState()`, as that instead takes a second argument of properties to ignore.
      */
     partialColumnState?: boolean;
 }
+
+export type GridStateKey = Exclude<keyof GridState, 'version' | 'partialColumnState' | 'rangeSelection'>;

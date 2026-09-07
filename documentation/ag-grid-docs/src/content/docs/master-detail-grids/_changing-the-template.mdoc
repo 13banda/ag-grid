@@ -1,4 +1,5 @@
 {% if isFramework("javascript", "angular", "vue") %}
+
 ## Changing the Template
 
 By default the Detail Cell Renderer does not include any other information around the Detail Grid. It is possible to change this to allow additional details, such as header information, around the Detail Grid. This is done by providing an alternative Detail Template.
@@ -10,6 +11,7 @@ For comparison, the default template is as follows. It is simplistic, only inten
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
+
 ```html
 <!-- for when fixed height (normal) -->
 <div class="ag-details-row ag-details-row-fixed-height">
@@ -21,6 +23,7 @@ For comparison, the default template is as follows. It is simplistic, only inten
     <div data-ref="eDetailGrid" class="ag-details-grid ag-details-grid-auto-height"/>
 </div>
 ```
+
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
@@ -31,6 +34,7 @@ To change the Detail Template, set the `template` inside the Detail Cell Rendere
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
+
 ```js
     // example override using string template
     detailCellRendererParams: {
@@ -41,13 +45,17 @@ To change the Detail Template, set the `template` inside the Detail Cell Rendere
             '</div>'
     }
 ```
+
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
+
 - **Function Template** - Called each time a detail row is shown to dynamically provide a template based on the data. Useful for displaying information specific to the Detail Grid dataset
+
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
+
 ```js
     // override using template callback
     detailCellRendererParams: {
@@ -60,6 +68,7 @@ To change the Detail Template, set the `template` inside the Detail Cell Rendere
         }
     }
 ```
+
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
@@ -79,6 +88,7 @@ In this first example, the template is set statically. Note the following:
 {% /if %}
 
 {% if isFramework("javascript", "angular", "vue") %}
+
 ### Example Dynamic Template
 
 In this second example, the template is set dynamically. Note the following:

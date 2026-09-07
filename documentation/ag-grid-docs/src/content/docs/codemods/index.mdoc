@@ -4,92 +4,90 @@ title: "Codemods"
 
 ## How to Upgrade AG Grid Version
 
-All AG Grid releases from v31 onwards come with an accompanying Codemod to help automate the upgrade process.
+AG Grid releases from v31 to v35 come with an accompanying Codemod to help automate the upgrade process.
 Codemods are scripts that fix the project's source files to address the majority of breaking changes and deprecations when upgrading from an older version.
 
-This is the easiest way to make sure projects stay up-to-date with the latest AG Grid changes.
+{% note %}
+We now recommend the [`ag-update` AI skill](./skills) to automate upgrades to any version. There is no Codemod for v36 or later.
+{% /note %}
 
 ## Framework Coverage
 
 Codemods are fully supported for projects that use the following AG Grid implementations:
 
-* React
-* JavaScript
+- React
+- JavaScript
 
 Codemods are partially supported for the following frameworks (full support coming soon):
 
-* Angular - _currently doesn't apply edits within component template source_
-* Vue - _currently doesn't apply edits within component template source_
+- Angular - _currently doesn't apply edits within component template source_
+- Vue - _currently doesn't apply edits within component template source_
 
 ## Notes
 
 Some points to bear in mind when using Codemods:
 
-* As with any automation workflow, we recommend that any changes made by the codemods are checked and reviewed before committing updated source files.
-* In particular, any automatically-applied changes should always be logically correct, however the formatting of the generated code is likely to vary slightly from the rest of the codebase and could require minor tweaking.
-* While we attempt to automate as many upgrade paths as possible, unusual use cases may still require some manual intervention.
+- As with any automation workflow, we recommend that any changes made by the codemods are checked and reviewed before committing updated source files.
+- In particular, any automatically-applied changes should always be logically correct, however the formatting of the generated code is likely to vary slightly from the rest of the codebase and could require minor tweaking.
+- While we attempt to automate as many upgrade paths as possible, unusual use cases may still require some manual intervention.
 
 See the relevant migration documentation page for more information on the Codemod for a specific AG Grid version.
-
 
 ## Usage
 
 To run the migration:
 
 ```
-npx @ag-grid-devtools/cli@latest migrate --from=30
+npx @ag-grid-devtools/cli@latest migrate --from=$FROM_VERSION --to=$TO_VERSION
 ```
-
-where `30` in this example refers to the project's existing AG Grid version.
 
 ### Arguments
 
-* `--from=<version>` _required_
+- `--from=<version>` _required_
 
     AG Grid [semver](https://semver.org/) version to migrate from.
 
-    For example `--from=30` or `--from=30.0.0` 
+    For example `--from=30` or `--from=30.0.0`
 
-* `--to=<version>`
+- `--to=<version>`
 
     AG Grid [semver](https://semver.org/) version to migrate to (defaults to the latest)
 
-* `--num-threads=<number>`
+- `--num-threads=<number>`
 
     Number of worker threads to spawn (defaults to the number of system cores).
 
-* `--dry-run`
+- `--dry-run`
 
     Show a comparison of the changes that would be made, without writing any file.
 
     Useful for reviewing the changes before applying them.
 
-* `--verbose`
+- `--verbose`
 
     Show additional log output.
 
-* `--help`
+- `--help`
 
     Show detailed usage instructions.
 
 To prevent accidental changes, the migrate command will only operate on a git repository and only if the working tree is clean.
 The following options can be used to override this behaviour:
 
-* `--allow-untracked`
-    Allow operating on files outside a git repository.
+- `--allow-untracked`
+  Allow operating on files outside a git repository.
 
     By default the application will terminate if run inside a non git directory.
 
-* `--allow-dirty`
-    Allow operating on repositories with uncommitted changes in the working tree.
+- `--allow-dirty`
+  Allow operating on repositories with uncommitted changes in the working tree.
 
     It is advisable to always commit before running the migration, but this option can be used to override the default behaviour.
 
-
 A custom list of input files can be passed to the `migrate` command:
 
-* [<file>...]
-    List of input files to operate on (defaults to all source files in the current working directory).
+- [<file>...]
+  List of input files to operate on (defaults to all source files in the current working directory).
 
     If not specified, the Codemod runner will locate all source files within the current directory, excluding all the patterns specified in the [.gitignore](https://git-scm.com/docs/gitignore) files.
 
@@ -97,7 +95,7 @@ A custom list of input files can be passed to the `migrate` command:
 
 A configuration file can also be used for advanced use cases:
 
-* `--config=<path>`
+- `--config=<path>`
 
     Loads a custom configuration file.
 
@@ -107,7 +105,7 @@ A configuration file can also be used for advanced use cases:
 
 A configuration file is a [commonJS](https://en.wikipedia.org/wiki/CommonJS) JavaScript or TypeScript module that exports a configuration object.
 
-JavaScript file with extension `.cjs` - ```npx @ag-grid-devtools/cli migrate --from=30 --config=./my-migration-config.cjs```
+JavaScript file with extension `.cjs` - `npx @ag-grid-devtools/cli migrate --from=30 --config=./my-migration-config.cjs`
 
 ```js
 // my-migration-config.cjs
@@ -119,7 +117,7 @@ module.exports = defineUserConfig({
 });
 ```
 
-[TypeScript](https://www.typescriptlang.org/) file with extension `.cts` - ```npx @ag-grid-devtools/cli migrate --from=30 --config=./my-migration-config.cts```
+[TypeScript](https://www.typescriptlang.org/) file with extension `.cts` - `npx @ag-grid-devtools/cli migrate --from=30 --config=./my-migration-config.cts`
 
 ```ts
 // my-migration-config.cts
@@ -136,7 +134,6 @@ The `defineUserConfig` function is only used to provide typing support for the c
 Configuration can be a plain object with the same shape, like `module.exports = { ... }`.
 {% /note %}
 
-
 ### Custom Import Paths and Names
 
 In case of custom grid wrappers and custom libraries, it is possible to provide custom interceptors in the configuration file to
@@ -144,7 +141,7 @@ handle the migration of these custom grid wrappers.
 
 {% if isFramework("javascript") %}
 
-Let's assume organization "my-org" has two custom grid wrapper in the package `@my-org/my-grid`
+Let's assume organisation "my-org" has two custom grid wrapper in the package `@my-org/my-grid`
 
 ```ts
 // @my-org/my-grid/index.ts
@@ -191,14 +188,14 @@ export default defineUserConfig({
 
 {% if isFramework("react") %}
 
-Let's assume organization "my-org" has a react grid wrapper in the package `@my-org/my-grid-react`
+Let's assume organisation "my-org" has a react grid wrapper in the package `@my-org/my-grid-react`
 
 ```ts
 // @my-org/my-grid-react/index.tsx
 
 import { AgGridReact, AgGridReactProps } from 'ag-grid-react';
 export interface MyGridReactProps extends AgGridReactProps { wrapperClassName?: string; }
-export const MyGrid = ({wrapperClassName, ...gridProps}: AgGridReactProps) => 
+export const MyGrid = ({wrapperClassName, ...gridProps}: AgGridReactProps) =>
     <div className={wrapperClassName}><AgGridReact {...gridProps} /></div>;
 ```
 
@@ -232,7 +229,7 @@ export default defineUserConfig({
 
 {% if isFramework("angular") %}
 
-Let's assume organization "my-org" a custom angular grid wrapper in the package `@my-org/my-grid-angular`
+Let's assume organisation "my-org" has a custom Angular grid wrapper in the package `@my-org/my-grid-angular`
 
 Then the configuration file could be:
 
@@ -264,7 +261,7 @@ export default defineUserConfig({
 
 {% if isFramework("vue") %}
 
-Let's assume organization "my-org" has a custom vue grid wrapper in the package `@my-org/my-grid-vue`
+Let's assume organisation "my-org" has a custom vue grid wrapper in the package `@my-org/my-grid-vue`
 
 Then the configuration file could be:
 

@@ -1,13 +1,325 @@
 ---
+import { getEntry, type CollectionEntry } from 'astro:content';
+
 import Layout from '@layouts/Layout.astro';
-import { About } from '@components/about/About';
+import { Icon } from '@ag-website-shared/components/icon/Icon';
+import type { IconName } from '@ag-website-shared/components/icon/Icon';
+import { CustomerLogos } from '@components/customer-logos/CustomerLogos';
+import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
+import { ContactForm } from '@ag-website-shared/components/contact-form/ContactForm';
+import { DISABLE_MARKDOWN_DOCS } from '@constants';
+import styles from '@pages-styles/about.module.scss';
+
+import BornSvg from '../images/about-icons/born.svg';
+import RocketSvg from '../images/about-icons/rocket.svg';
+import ConferenceSvg from '../images/about-icons/conference.svg';
+import BarChartSvg from '../images/about-icons/bar-chart.svg';
+import ChartSvg from '../images/about-icons/chart.svg';
+import LicenseSvg from '../images/about-icons/license.svg';
+import DonutAcceleratingSvg from '../images/about-icons/donut-accelerating.svg';
+import BlogSvg from '../images/about-icons/blog.svg';
+import CodeSvg from '../images/about-icons/code.svg';
+import StarSvg from '../images/about-icons/star.svg';
+import BrainSvg from '../images/about-icons/brain.svg';
+
+const aboutIcons = {
+    born: BornSvg,
+    rocket: RocketSvg,
+    conference: ConferenceSvg,
+    barChart: BarChartSvg,
+    chart: ChartSvg,
+    license: LicenseSvg,
+    donutAccelerating: DonutAcceleratingSvg,
+    blog: BlogSvg,
+    code: CodeSvg,
+    star: StarSvg,
+    brain: BrainSvg,
+};
+
+const { data: aboutContent } = (await getEntry('aboutPage', 'about')) as CollectionEntry<'aboutPage'>;
+
+const { prose } = aboutContent;
+
+// Re-apply the base URL to internal links stored in the timeline/resource content (external
+// and in-page anchor links are left untouched), so the rendered hrefs stay base-independent.
+const resolveHtmlLinks = (html: string): string =>
+    html.replace(/href="([^"]+)"/g, (match, href) => {
+        if (href.startsWith('http') || href.startsWith('mailto') || href.startsWith('#')) {
+            return match;
+        }
+        return `href="${urlWithBaseUrl(href)}"`;
+    });
+
+const iconFor = (name: string) => aboutIcons[name as keyof typeof aboutIcons];
+
+const timeline = aboutContent.timeline.map(({ year, icon, title, description }) => ({
+    year,
+    icon: iconFor(icon),
+    title,
+    description: resolveHtmlLinks(description),
+}));
+
+const principles = aboutContent.principles.map(({ icon, title, description }) => ({
+    icon: iconFor(icon),
+    title,
+    description,
+}));
+
+const resources = prose.resources.items.map(({ icon, title, description, url, external }) => ({
+    icon: iconFor(icon),
+    title,
+    description,
+    href: external ? url : urlWithBaseUrl(url),
+    external: Boolean(external),
+}));
+
+const carouselImages = [
+    urlWithBaseUrl('images/about/carousel/carousel-1.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-18.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-8.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-5.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-6.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-9.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-2.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-11.webp'),
+    urlWithBaseUrl('images/about/carousel/carousel-3.webp'),
+];
+
+const allCarouselImages = [...carouselImages, ...carouselImages];
+
+const markdownUrl = DISABLE_MARKDOWN_DOCS ? undefined : urlWithBaseUrl('/about.md');
 ---
 
 <Layout
-    title="Our Mission, Our Principles and Our Team at AG Grid"
+    title="About AG Grid: Our Mission, Principles & Team"
     description="AG Grid is a feature-rich datagrid available in Community or Enterprise versions. This is the story of AG Grid and explains our mission, where we came from and who we are."
     showSearchBar={true}
     showDocsNav={false}
+    markdownUrl={markdownUrl}
 >
-    <About client:load />
+    <div class={styles.aboutPage}>
+        <div class="layout-max-width-small">
+            <section class={styles.introSection}>
+                <h1 class={`${styles.miniHeader} text-lg`}>About Us</h1>
+
+                <h2>
+                    {prose.intro.headingLine1}
+                    <br />
+                    <span>{prose.intro.headingLine2}</span>
+                </h2>
+                <p set:html={prose.intro.paragraphHtml} />
+            </section>
+
+            <div>
+                <img
+                    src={urlWithBaseUrl('images/about/about-us.webp')}
+                    class={`${styles.aboutHeaderImage} ${styles.aboutHeaderImageLight} ${styles.fadeInUp}`}
+                />
+                <img
+                    src={urlWithBaseUrl('images/about/dark-mode-about.webp')}
+                    class={`${styles.aboutHeaderImage} ${styles.aboutHeaderImageDark} ${styles.fadeInUp}`}
+                />
+            </div>
+
+            <section class={`${styles.customerLogos} ${styles.fadeInUpDelayed}`}>
+                <CustomerLogos client:load />
+                <p class={styles.footnote}>{prose.customerLogosFootnote}</p>
+            </section>
+
+            <section class={styles.memoriumSection}>
+                <div class={styles.content}>
+                    <img src={urlWithBaseUrl('images/about/niall-crosby.webp')} class={styles.aboutHeaderImage} />
+                    <div>
+                        <h2>{prose.memoriam.heading}</h2>
+                        <p>{prose.memoriam.paragraph}</p>
+                        <a class="button-tertiary" href={prose.memoriam.linkUrl}>
+                            <span>{prose.memoriam.linkText}</span>
+                            <Icon name="chevronRight" />
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <section class={styles.historySection}>
+                <div class={styles.historyContent}>
+                    <h2>{prose.history.heading}</h2>
+                    <p>{prose.history.paragraph}</p>
+                </div>
+
+                <div class={styles.timeline}>
+                    <div class={styles.timelineLine}></div>
+
+                    {
+                        timeline.map(({ year, icon: TimelineIcon, title, description }) => (
+                            <div class={styles.timelineItem}>
+                                <div class={styles.timelineYear}>{year}</div>
+                                <div class={styles.timelineIcon}>
+                                    <TimelineIcon />
+                                </div>
+                                <div class={styles.timelineContent}>
+                                    <div class={styles.timelineTitle}>
+                                        <span class={styles.mobileYear}>{year}:</span> {title}
+                                    </div>
+                                    <div class={styles.timelineDesc} set:html={description} />
+                                </div>
+                            </div>
+                        ))
+                    }
+                </div>
+            </section>
+
+            <section class={styles.principlesSection}>
+                <div class={styles.principlesContent}>
+                    <h2>{prose.principles.heading}</h2>
+                    <p>{prose.principles.subheading}</p>
+                </div>
+
+                <div class={styles.principlesList}>
+                    {
+                        principles.map(({ icon: PrincipleIcon, title, description }, idx) => (
+                            <div class={styles.principleItem}>
+                                <div class={`${styles.principleIcon} ${styles[`principleColor${idx + 1}`]}`}>
+                                    <PrincipleIcon />
+                                </div>
+                                <div class={styles.principleText}>
+                                    <div class={styles.principleTitle}>{title}</div>
+                                    <div class={styles.principleDesc}>{description}</div>
+                                </div>
+                            </div>
+                        ))
+                    }
+                </div>
+            </section>
+
+            <section class={styles.leadershipSection} id="leadership-section">
+                <div class={styles.leadershipContent}>
+                    <h2>{prose.leadership.heading}</h2>
+                    <p>{prose.leadership.subheading}</p>
+                </div>
+
+                <div class={styles.leadershipList}>
+                    {
+                        aboutContent.leadershipTeam.map(({ name, role, bio, imageSrc }) => (
+                            <div class={styles.leaderItem}>
+                                <img
+                                    src={urlWithBaseUrl(imageSrc)}
+                                    class={styles.leaderPhoto}
+                                    alt={`AG Grid ${name} - ${role}`}
+                                />
+                                <div class={styles.leaderText}>
+                                    <div class={styles.leaderName}>{name}</div>
+                                    <div class={styles.leaderTitle}>{role}</div>
+                                    <div class={styles.leaderDesc}>{bio}</div>
+                                </div>
+                            </div>
+                        ))
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class={styles.lifeSectionWrapper}>
+            <h2 class={styles.lifeHeading}>{prose.lifeAt.heading}</h2>
+            <p>{prose.lifeAt.paragraph}</p>
+            <div class={styles.carouselOuter}>
+                <div class={styles.blurLeft}></div>
+                <div class={styles.carouselTrack} id="carousel-track">
+                    {
+                        allCarouselImages.map((src, idx) => (
+                            <div class={styles.carouselImageWrapper}>
+                                <img src={src} alt={`Life at AG Grid ${idx + 1}`} class={styles.carouselImage} />
+                            </div>
+                        ))
+                    }
+                </div>
+                <div class={styles.blurRight}></div>
+            </div>
+        </div>
+
+        <div class="layout-max-width-small">
+            <section class={styles.resourcesSection}>
+                <div class={styles.resourcesContent}>
+                    <h2>{prose.resources.heading}</h2>
+                    <p>{prose.resources.subheading}</p>
+                </div>
+                <div class={styles.resourcesList}>
+                    {
+                        resources.map(({ icon: ResourceIcon, title, description, href, external }) => (
+                            <a
+                                href={href}
+                                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                                class={styles.resourceItem}
+                            >
+                                <div class={styles.resourceIcon}>
+                                    <ResourceIcon />
+                                </div>
+                                <div class={styles.resourceText}>
+                                    <div class={styles.resourceTitle}>{title}</div>
+                                    <div class={styles.resourceDesc}>{description}</div>
+                                </div>
+                            </a>
+                        ))
+                    }
+                </div>
+            </section>
+
+            <section id="contact-section" class={styles.contactSection}>
+                <div class={styles.contactFlex}>
+                    <div>
+                        <h2>{prose.contact.heading}</h2>
+                        <p>{prose.contact.subheading}</p>
+
+                        <ContactForm client:load formLocation="About page" />
+                    </div>
+
+                    <div>
+                        <h2>{prose.office.heading}</h2>
+
+                        <div class={styles.contactOffice}>
+                            <p>
+                                {
+                                    prose.office.addressLines.map((line) => (
+                                        <>
+                                            {line}
+                                            <br />
+                                        </>
+                                    ))
+                                }
+                            </p>
+                            <div class={styles.officeButton}>
+                                <a
+                                    class="button-tertiary"
+                                    href={prose.office.mapUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <Icon name="mapPin" />
+                                    <span>{prose.office.mapCta}</span>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class={styles.socialLinks}>
+                            {
+                                prose.socials.map(({ icon, label, ariaLabel, url }) => (
+                                    <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label={ariaLabel}
+                                        class={styles.socialLinkRow}
+                                    >
+                                        <Icon name={icon as IconName} />
+                                        <span>{label}</span>
+                                    </a>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <script is:inline src={urlWithBaseUrl('/scripts/about-carousel.js')}></script>
+    </div>
 </Layout>

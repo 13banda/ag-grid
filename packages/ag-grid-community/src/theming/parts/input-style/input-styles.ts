@@ -1,103 +1,163 @@
-import { createPart } from '../../Part';
-import type { WithParamTypes } from '../../theme-types';
-import { accentColor, foregroundBackgroundMix, foregroundMix } from '../../theme-utils';
-import { inputStyleBaseCSS } from './input-style-base.css-GENERATED';
-import { inputStyleBorderedCSS } from './input-style-bordered.css-GENERATED';
-import { inputStyleUnderlinedCSS } from './input-style-underlined.css-GENERATED';
+import type { BorderValue, ColorValue, LengthValue, Part, ShadowValue } from 'ag-stack';
+import { accentColor, backgroundColor, createPart, foregroundBackgroundMix, foregroundMix } from 'ag-stack';
+
+import inputStyleBaseCSS from './input-style-base.css';
+import inputStyleBorderedCSS from './input-style-bordered.css';
+import inputStyleUnderlinedCSS from './input-style-underlined.css';
 
 export type InputStyleParams = {
     /**
      * Background color for text inputs
      */
-    inputBackgroundColor: 'infer';
+    inputBackgroundColor: ColorValue;
 
     /**
      * Border around text inputs (or underneath, if using the underlined input style)
      */
-    inputBorder: 'infer';
+    inputBorder: BorderValue;
 
     /**
      * Corner radius of text inputs
      */
-    inputBorderRadius: 'infer';
+    inputBorderRadius: LengthValue;
 
     /**
      * Background color for disabled text inputs
      */
-    inputDisabledBackgroundColor: 'infer';
+    inputDisabledBackgroundColor: ColorValue;
 
     /**
      * Border around disabled text inputs (or underneath, if using the underlined input style)
      */
-    inputDisabledBorder: 'infer';
+    inputDisabledBorder: BorderValue;
 
     /**
      * Color of text within disabled text inputs
      */
-    inputDisabledTextColor: 'infer';
+    inputDisabledTextColor: ColorValue;
 
     /**
      * Background color for focussed text inputs
      */
-    inputFocusBackgroundColor: 'infer';
+    inputFocusBackgroundColor: ColorValue;
 
     /**
      * Border around focussed text inputs (or underneath, if using the underlined input style)
      */
-    inputFocusBorder: 'infer';
+    inputFocusBorder: BorderValue;
 
     /**
      * Shadow around focussed text inputs
      */
-    inputFocusShadow: 'infer';
+    inputFocusShadow: ShadowValue;
 
     /**
      * Color of text within focussed text inputs
      */
-    inputFocusTextColor: 'infer';
+    inputFocusTextColor: ColorValue;
 
     /**
      * Minimum height of text inputs
      */
-    inputHeight: 'infer';
+    inputHeight: LengthValue;
 
     /**
      * Background color for text inputs in an invalid state
      */
-    inputInvalidBackgroundColor: 'infer';
+    inputInvalidBackgroundColor: ColorValue;
 
     /**
      * Border around text inputs in an invalid state (or underneath, if using the underlined input style)
      */
-    inputInvalidBorder: 'infer';
+    inputInvalidBorder: BorderValue;
 
     /**
      * Color of text within text inputs in an invalid state
      */
-    inputInvalidTextColor: 'infer';
+    inputInvalidTextColor: ColorValue;
 
     /**
      * Padding at the start of text in text inputs
      */
-    inputPaddingStart: 'infer';
+    inputPaddingStart: LengthValue;
 
     /**
      * Color of text within text inputs
      */
-    inputTextColor: 'infer';
+    inputTextColor: ColorValue;
 
     /**
      * Color of placeholder text in empty inputs describing the purpose of the input e.g. "Search..."
      */
-    inputPlaceholderTextColor: 'infer';
+    inputPlaceholderTextColor: ColorValue;
 
     /**
      * Color of search icon within search text inputs
      */
-    inputIconColor: 'infer';
+    inputIconColor: ColorValue;
+
+    /**
+     * Border around buttons with attached dropdown menus (e.g. select fields)
+     */
+    pickerButtonBorder: BorderValue;
+
+    /**
+     * Corner radius of buttons with attached dropdown menus (e.g. select fields)
+     */
+    pickerButtonBorderRadius: LengthValue;
+
+    /**
+     * Border around buttons with attached dropdown menus (e.g. select fields) when focussed
+     */
+    pickerButtonFocusBorder: BorderValue;
+
+    /**
+     * Background color for buttons with attached dropdown menus (e.g. select fields)
+     */
+    pickerButtonBackgroundColor: ColorValue;
+
+    /**
+     * Background color for buttons with attached dropdown menus (e.g. select fields) when focussed
+     */
+    pickerButtonFocusBackgroundColor: ColorValue;
+
+    /**
+     * Border around dropdown menus attached to buttons (e.g. select fields)
+     */
+    pickerListBorder: BorderValue;
+
+    /**
+     * Background color for dropdown menus attached to buttons (e.g. select fields)
+     */
+    pickerListBackgroundColor: ColorValue;
+
+    /**
+     * Size of thumb (the draggable item) in color picker popup
+     */
+    colorPickerThumbSize: LengthValue;
+
+    /**
+     * Size of track in color picker popup
+     */
+    colorPickerTrackSize: LengthValue;
+
+    /**
+     * Border width of thumb (the draggable item) in color picker popup
+     */
+    colorPickerThumbBorderWidth: LengthValue;
+
+    /**
+     * Border radius of track in color picker popup
+     */
+    colorPickerTrackBorderRadius: LengthValue;
+
+    /**
+     * Border radius of selected/recent colors in color picker
+     */
+    colorPickerColorBorderRadius: LengthValue;
 };
 
-const baseParams: WithParamTypes<InputStyleParams> = {
+const baseParams: InputStyleParams = {
     inputBackgroundColor: 'transparent',
     inputBorder: false,
     inputBorderRadius: 0,
@@ -143,72 +203,92 @@ const baseParams: WithParamTypes<InputStyleParams> = {
     inputIconColor: {
         ref: 'inputTextColor',
     },
+    pickerButtonBorder: false,
+    pickerButtonBorderRadius: { ref: 'borderRadius' },
+    pickerButtonFocusBorder: { ref: 'inputFocusBorder' },
+    pickerButtonBackgroundColor: { ref: 'backgroundColor' },
+    pickerButtonFocusBackgroundColor: { ref: 'backgroundColor' },
+    pickerListBorder: false,
+    pickerListBackgroundColor: { ref: 'backgroundColor' },
+    colorPickerThumbSize: 18,
+    colorPickerTrackSize: 12,
+    colorPickerThumbBorderWidth: 3,
+    colorPickerTrackBorderRadius: 12,
+    colorPickerColorBorderRadius: 4,
 };
 
-export const inputStyleBase = createPart<InputStyleParams>({
-    feature: 'inputStyle',
-    params: baseParams,
-    css: inputStyleBaseCSS,
-});
+const makeInputStyleBaseTreeShakeable = () =>
+    createPart<InputStyleParams>({
+        feature: 'inputStyle',
+        params: baseParams,
+        css: inputStyleBaseCSS,
+    });
 
-export const inputStyleBordered = /*#__PURE__*/ createPart({
-    feature: 'inputStyle',
-    params: {
-        ...baseParams,
+export const inputStyleBase: Part<InputStyleParams> = /*#__PURE__*/ makeInputStyleBaseTreeShakeable();
 
-        inputBackgroundColor: {
-            ref: 'backgroundColor',
+const makeInputStyleBorderedTreeShakeable = () =>
+    createPart<InputStyleParams>({
+        feature: 'inputStyle',
+        params: {
+            ...baseParams,
+            inputBackgroundColor: backgroundColor,
+            inputBorder: true,
+            inputBorderRadius: {
+                ref: 'borderRadius',
+            },
+            inputPaddingStart: {
+                ref: 'spacing',
+            },
+            inputFocusBorder: {
+                color: accentColor,
+            },
+            inputFocusShadow: {
+                ref: 'focusShadow',
+            },
+            inputDisabledBackgroundColor: foregroundBackgroundMix(0.06),
+            inputDisabledTextColor: {
+                ref: 'textColor',
+                mix: 0.5,
+            },
+            inputInvalidBorder: {
+                color: { ref: 'invalidColor' },
+            },
+            pickerButtonBorder: true,
+            pickerListBorder: true,
         },
-        inputBorder: true,
-        inputBorderRadius: {
-            ref: 'borderRadius',
-        },
-        inputPaddingStart: {
-            ref: 'spacing',
-        },
-        inputFocusBorder: {
-            color: accentColor,
-        },
-        inputFocusShadow: {
-            ref: 'focusShadow',
-        },
-        inputDisabledBackgroundColor: foregroundBackgroundMix(0.06),
-        inputDisabledTextColor: {
-            ref: 'textColor',
-            mix: 0.5,
-        },
-        inputInvalidBorder: {
-            color: { ref: 'invalidColor' },
-        },
-    },
-    css: () => inputStyleBaseCSS + inputStyleBorderedCSS,
-});
+        css: () => inputStyleBaseCSS + inputStyleBorderedCSS,
+    });
 
-export const inputStyleUnderlined = /*#__PURE__*/ createPart({
-    feature: 'inputStyle',
-    params: {
-        ...baseParams,
+export const inputStyleBordered: Part<InputStyleParams> = /*#__PURE__*/ makeInputStyleBorderedTreeShakeable();
 
-        inputBorder: {
-            width: 2,
-            color: foregroundMix(0.3),
-        },
-        inputPaddingStart: {
-            ref: 'spacing',
-        },
-        inputFocusBorder: 'solid 2px var(--ag-accent-color)',
-        inputDisabledTextColor: {
-            ref: 'textColor',
-            mix: 0.5,
-        },
-        inputDisabledBorder: 'solid 1px var(--ag-border-color)',
-        inputInvalidBorder: {
-            width: 2,
-            color: {
-                ref: 'invalidColor',
-                mix: 0.3,
+const makeInputStyleUnderlinedTreeShakeable = () =>
+    createPart<InputStyleParams>({
+        feature: 'inputStyle',
+        params: {
+            ...baseParams,
+            inputBackgroundColor: 'transparent',
+            inputBorder: {
+                width: 2,
+                color: foregroundMix(0.3),
+            },
+            inputPaddingStart: {
+                ref: 'spacing',
+            },
+            inputFocusBorder: 'solid 2px var(--ag-accent-color)',
+            inputDisabledTextColor: {
+                ref: 'textColor',
+                mix: 0.5,
+            },
+            inputDisabledBorder: 'solid 1px var(--ag-border-color)',
+            inputInvalidBorder: {
+                width: 2,
+                color: {
+                    ref: 'invalidColor',
+                    mix: 0.3,
+                },
             },
         },
-    },
-    css: () => inputStyleBaseCSS + inputStyleUnderlinedCSS,
-});
+        css: () => inputStyleBaseCSS + inputStyleUnderlinedCSS,
+    });
+
+export const inputStyleUnderlined: Part<InputStyleParams> = /*#__PURE__*/ makeInputStyleUnderlinedTreeShakeable();

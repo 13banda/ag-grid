@@ -1,14 +1,13 @@
 import type { ColDef, GridApi, GridOptions, PostProcessPopupParams } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    ColumnsToolPanelModule,
-    ColumnMenuModule,
-    ContextMenuModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, ColumnsToolPanelModule, ColumnMenuModule, ContextMenuModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', minWidth: 200 },

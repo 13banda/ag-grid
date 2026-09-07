@@ -1,28 +1,31 @@
+import { RefPlaceholder, _clearElement, _setAriaLabel, _setAriaRole } from 'ag-stack';
+
 import type {
     AgColumn,
     AgProvidedColumnGroup,
     FilterOpenedEvent,
-    ITooltipCtrl,
     IconName,
+    TooltipCallbackParams,
     TooltipFeature,
 } from 'ag-grid-community';
 import {
     Component,
-    RefPlaceholder,
-    _clearElement,
+    _addGridCommonParams,
     _createIconNoSpan,
+    _getHeaderTooltipComponentDefinition,
     _getShouldDisplayTooltip,
+    _resolveHeaderTooltipValue,
     isProvidedColumnGroup,
 } from 'ag-grid-community';
 
-import type { AgGroupComponent, AgGroupComponentParams } from '../widgets/agGroupComponent';
-import { AgGroupComponentSelector } from '../widgets/agGroupComponent';
+import { AgGroupComponentSelector } from '../agStack/agGroupComponent';
+import type { GroupComponent, GroupComponentParams } from '../widgets/gridEnterpriseWidgetTypes';
 import { ToolPanelFilterComp } from './toolPanelFilterComp';
 
 export type ToolPanelFilterItem = ToolPanelFilterGroupComp | ToolPanelFilterComp;
 
 export class ToolPanelFilterGroupComp extends Component {
-    private filterGroupComp: AgGroupComponent = RefPlaceholder;
+    private readonly filterGroupComp: GroupComponent = RefPlaceholder;
 
     private filterGroupName: string | null;
     private tooltipFeature?: TooltipFeature;
@@ -38,14 +41,16 @@ export class ToolPanelFilterGroupComp extends Component {
     }
 
     public postConstruct(): void {
-        const groupParams: AgGroupComponentParams = {
+        const groupParams: GroupComponentParams = {
             cssIdentifier: 'filter-toolpanel',
             direction: 'vertical',
         };
         this.setTemplate(
-            /* html */ `<div class="ag-filter-toolpanel-group-wrapper">
-            <ag-group-component data-ref="filterGroupComp"></ag-group-component>
-        </div>`,
+            {
+                tag: 'div',
+                cls: 'ag-filter-toolpanel-group-wrapper',
+                children: [{ tag: 'ag-group-component', ref: 'filterGroupComp' }],
+            },
             [AgGroupComponentSelector],
             { filterGroupComp: groupParams }
         );
@@ -54,25 +59,50 @@ export class ToolPanelFilterGroupComp extends Component {
         const { filterGroupComp, depth, childFilterComps, gos } = this;
         filterGroupComp.setAlignItems('stretch');
 
-        filterGroupComp.addCssClass(`ag-filter-toolpanel-group-level-${depth}`);
+        filterGroupComp.addCss(`ag-filter-toolpanel-group-level-${depth}`);
         filterGroupComp.getGui().style.setProperty('--ag-indentation-level', String(depth));
         filterGroupComp.addCssClassToTitleBar(`ag-filter-toolpanel-group-level-${depth}-header`);
 
-        childFilterComps.forEach((filterComp) => {
+        for (const filterComp of childFilterComps) {
             filterGroupComp.addItem(filterComp as Component);
             filterComp.addCssClassToTitleBar(`ag-filter-toolpanel-group-level-${depth + 1}-header`);
             filterComp.getGui().style.setProperty('--ag-indentation-level', String(depth + 1));
-        });
+        }
 
+        const column = this.showingColumn ? (this.columnGroup as AgColumn) : undefined;
+        const getColDef = () => column?.colDef ?? (this.columnGroup as AgProvidedColumnGroup).getColGroupDef();
         this.tooltipFeature = this.createOptionalManagedBean(
-            this.beans.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
-                getGui: () => this.getGui(),
+            this.beans.tooltipSvc?.createTooltip({
+                getGui: () => filterGroupComp.getTitleBarGui(),
+                getTooltipComponentDefinition: () => _getHeaderTooltipComponentDefinition(getColDef()),
                 getLocation: () => 'filterToolPanelColumnGroup',
+                getTooltipValue: () => {
+                    const colDef = getColDef();
+                    const displayName = this.filterGroupName;
+                    return _resolveHeaderTooltipValue(
+                        colDef,
+                        _addGridCommonParams<TooltipCallbackParams>(gos, {
+                            location: 'filterToolPanelColumnGroup',
+                            colDef,
+                            column: this.columnGroup,
+                            value: displayName,
+                            valueFormatted: displayName,
+                        })
+                    );
+                },
                 shouldDisplayTooltip: _getShouldDisplayTooltip(
                     gos,
                     () => filterGroupComp.getGui().querySelector('.ag-group-title') as HTMLElement | undefined
                 ),
-            } as ITooltipCtrl)
+                getAdditionalParams: () => {
+                    const colDef = getColDef();
+                    return {
+                        ...(colDef ? { colDef } : {}),
+                        column: this.columnGroup,
+                        valueFormatted: this.filterGroupName,
+                    };
+                },
+            })
         );
 
         this.refreshFilterClass();
@@ -83,17 +113,7 @@ export class ToolPanelFilterGroupComp extends Component {
     }
 
     private setupTooltip(): void {
-        // we don't show tooltips for groups, as when the group expands, it's div contains the columns which also
-        // have tooltips, so the tooltips would clash. Eg mouse over group, tooltip shows, mouse over column, another
-        // tooltip shows but cos we didn't leave the group the group tooltip remains. this should be fixed in the future,
-        // maybe the group shouldn't contain the children form a DOM perspective.
-        if (!this.showingColumn) {
-            return;
-        }
-
-        const refresh = () => {
-            this.tooltipFeature?.setTooltipAndRefresh((this.columnGroup as AgColumn).getColDef().headerTooltip);
-        };
+        const refresh = () => this.tooltipFeature?.refreshTooltip();
 
         refresh();
 
@@ -104,14 +124,10 @@ export class ToolPanelFilterGroupComp extends Component {
         this.filterGroupComp.addCssClassToTitleBar(cssClass);
     }
 
-    public refreshFilters(isDisplayed: boolean) {
-        this.childFilterComps.forEach((filterComp) => {
-            if (filterComp instanceof ToolPanelFilterGroupComp) {
-                filterComp.refreshFilters(isDisplayed);
-            } else {
-                filterComp.refreshFilter(isDisplayed);
-            }
-        });
+    public onPanelHidden() {
+        for (const filterComp of this.childFilterComps) {
+            filterComp.onPanelHidden();
+        }
     }
 
     public isColumnGroup(): boolean {
@@ -146,16 +162,21 @@ export class ToolPanelFilterGroupComp extends Component {
         const eIcon = _createIconNoSpan(iconName, this.beans)!;
         if (eIcon) {
             eIcon.classList.add('ag-filter-toolpanel-group-instance-header-icon');
+            // as we only display the icons when the filter is active
+            // the aria-label should always be `ariaFilterActive`.
+            const translate = this.getLocaleTextFunc();
+            _setAriaLabel(eIcon, translate('ariaFilterActive', 'Filter Active'));
+            _setAriaRole(eIcon, 'img');
         }
         this.filterGroupComp.addTitleBarWidget(eIcon);
     }
 
     private forEachToolPanelFilterChild(action: (filterComp: ToolPanelFilterItem) => void) {
-        this.childFilterComps.forEach((filterComp) => {
+        for (const filterComp of this.childFilterComps) {
             if (filterComp instanceof ToolPanelFilterComp) {
                 action(filterComp);
             }
-        });
+        }
     }
 
     private addExpandCollapseListeners() {
@@ -182,9 +203,9 @@ export class ToolPanelFilterGroupComp extends Component {
     }
 
     private addFilterChangedListeners() {
-        this.getColumns().forEach((column) => {
+        for (const column of this.getColumns()) {
             this.addManagedListeners(column, { filterChanged: () => this.refreshFilterClass() });
-        });
+        }
 
         if (!isProvidedColumnGroup(this.columnGroup)) {
             this.addManagedEventListeners({ filterOpened: this.onFilterOpened.bind(this) });
@@ -195,7 +216,7 @@ export class ToolPanelFilterGroupComp extends Component {
         const columns = this.getColumns();
 
         const anyChildFiltersActive = () => columns.some((col) => col.isFilterActive());
-        this.filterGroupComp.addOrRemoveCssClass('ag-has-filter', anyChildFiltersActive());
+        this.filterGroupComp.toggleCss('ag-has-filter', anyChildFiltersActive());
     }
 
     private onFilterOpened(event: FilterOpenedEvent): void {

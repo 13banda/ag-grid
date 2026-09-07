@@ -1,0 +1,102 @@
+@use 'design-system' as *;
+
+.animatedWordsOuter {
+    --word-height: 1.2em;
+    --word-duration: 340ms;
+
+    // The incoming word waits for the outgoing one to fade rather than crossing through it.
+    --word-handover-delay: 140ms;
+
+    // Not a full line: the line box is barely taller than the glyphs, so a word travelling
+    // that far would be sliced by `overflow: hidden` while still opaque.
+    --word-travel: 40%;
+
+    display: inline-grid;
+    height: var(--word-height);
+    margin-bottom: -0.2em;
+    text-align: left;
+    overflow: hidden;
+    vertical-align: bottom;
+
+    // Stack the sizer and the visible word in the same cell: the grid track sizes to the
+    // widest child (the sizer), so the container width stays fixed as words cycle.
+    > * {
+        grid-area: 1 / 1;
+        align-self: end;
+    }
+}
+
+// Reserves the width of the widest word without being shown or announced (aria-hidden
+// in the markup). Kept in the layout so its width defines the container.
+.sizer {
+    visibility: hidden;
+}
+
+.animatedWord {
+    display: inline-block;
+}
+
+.wordIn {
+    animation: framework-word-in var(--word-duration) cubic-bezier(0.16, 1, 0.3, 1) var(--word-handover-delay) both;
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}
+
+.wordOut {
+    animation: framework-word-out var(--word-duration) cubic-bezier(0.4, 0, 1, 1) both;
+
+    // Without the animation to lift it away, it would sit on top of the current word.
+    @media (prefers-reduced-motion: reduce) {
+        display: none;
+    }
+}
+
+@keyframes framework-word-in {
+    from {
+        transform: translateY(var(--word-travel));
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes framework-word-out {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    // Gone before the incoming word becomes legible, though still drifting upwards.
+    55% {
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(calc(var(--word-travel) * -1));
+        opacity: 0;
+    }
+}
+
+.javascript {
+    color: #f7df1e; // Yellow
+}
+
+.react {
+    color: #61dafb; // Light Blue
+}
+
+.angular {
+    background: linear-gradient(90deg, #e40035, #f60a48 24%, #f20755 35%, #dc087d 49%, #9717e7 74%, #6c00f5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.vue {
+    color: #42b883; // Green
+}

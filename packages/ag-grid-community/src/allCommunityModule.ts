@@ -1,7 +1,7 @@
 import { AlignedGridsModule } from './alignedGrids/alignedGridsModule';
 import { RowApiModule, ScrollApiModule } from './api/apiModule';
-import { ClientSideRowModelModule } from './clientSideRowModel/clientSideRowModelModule';
-import { ClientSideRowModelApiModule } from './clientSideRowModel/clientSideRowModelModule';
+import { AutoGenerateColumnsModule } from './autoGenerateColumns/autoGenerateColumnsModule';
+import { ClientSideRowModelApiModule, ClientSideRowModelModule } from './clientSideRowModel/clientSideRowModelModule';
 import { ColumnAutoSizeModule } from './columnAutosize/columnAutosizeModule';
 import { ColumnHoverModule } from './columns/columnHover/columnHoverModule';
 import { ColumnApiModule } from './columns/columnModule';
@@ -18,6 +18,7 @@ import {
     UndoRedoEditModule,
 } from './edit/editModule';
 import {
+    BigIntFilterModule,
     CustomFilterModule,
     DateFilterModule,
     ExternalFilterModule,
@@ -31,14 +32,15 @@ import { EventApiModule } from './misc/apiEvents/apiEventModule';
 import { LocaleModule } from './misc/locale/localeModule';
 import { GridStateModule } from './misc/state/stateModule';
 import { PaginationModule } from './pagination/paginationModule';
+import { PaginationPageNumbersModule } from './pagination/paginationPageNumbersModule';
 import { PinnedRowModule } from './pinnedRowModel/pinnedRowModule';
 import { HighlightChangesModule } from './rendering/cell/highlightChangesModule';
 import { RenderApiModule } from './rendering/renderModule';
 import { RowAutoHeightModule } from './rendering/row/rowAutoHeightModule';
+import { CellSpanModule } from './rendering/spanning/cellSpanModule';
 import { RowSelectionModule } from './selection/rowSelectionModule';
 import { CellStyleModule, RowStyleModule } from './styling/stylingModule';
 import { TooltipModule } from './tooltip/tooltipModule';
-import { ValidationModule } from './validation/validationModule';
 import { CellApiModule, ValueCacheModule } from './valueService/valueModule';
 import { VERSION } from './version';
 
@@ -52,7 +54,6 @@ export const AllCommunityModule: _ModuleWithoutApi = {
         ClientSideRowModelModule,
         CsvExportModule,
         InfiniteRowModelModule,
-        ValidationModule,
         TextEditorModule,
         NumberEditorModule,
         DateEditorModule,
@@ -63,6 +64,7 @@ export const AllCommunityModule: _ModuleWithoutApi = {
         UndoRedoEditModule,
         TextFilterModule,
         NumberFilterModule,
+        BigIntFilterModule,
         DateFilterModule,
         CustomFilterModule,
         QuickFilterModule,
@@ -70,6 +72,7 @@ export const AllCommunityModule: _ModuleWithoutApi = {
         GridStateModule,
         AlignedGridsModule,
         PaginationModule,
+        PaginationPageNumbersModule,
         ColumnApiModule,
         RowApiModule,
         ScrollApiModule,
@@ -90,5 +93,7 @@ export const AllCommunityModule: _ModuleWithoutApi = {
         RowAutoHeightModule,
         DragAndDropModule,
         ClientSideRowModelApiModule,
+        CellSpanModule,
+        AutoGenerateColumnsModule,
     ],
 };

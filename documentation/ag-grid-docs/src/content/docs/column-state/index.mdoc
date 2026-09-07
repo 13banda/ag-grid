@@ -3,12 +3,12 @@ title: "Column State"
 ---
 
 {% if isFramework("javascript", "angular", "vue") %}
-Column Definitions contain both stateful and non-stateful attributes. Stateful attributes can have their values changed by the grid (e.g. Column sort can be changed by the user clicking on the column header). Non-stateful attributes do not change from what is set in the Column Definition (e.g. once the Header Name is set as part of a Column Definition, it typically does not change).
+Column Definitions contain both stateful and non-stateful attributes. Stateful attributes can have their values changed by the grid (e.g. Column sort can be changed by the user clicking on the column header). Non-stateful attributes do not change from what is set in the Column Definition (e.g. once the Field is set as part of a Column Definition, it does not change).
 {% /if %}
 
 {% if isFramework("react") %}
 {% videoSection id="d9Kohpbt42M" title="React Column State" showHeader=true %}
-Column Definitions contain both stateful and non-stateful attributes. Stateful attributes can have their values changed by the grid (e.g. Column sort can be changed by the user clicking on the column header). Non-stateful attributes do not change from what is set in the Column Definition (e.g. once the Header Name is set as part of a Column Definition, it typically does not change).
+Column Definitions contain both stateful and non-stateful attributes. Stateful attributes can have their values changed by the grid (e.g. Column sort can be changed by the user clicking on the column header). Non-stateful attributes do not change from what is set in the Column Definition (e.g. once the Field is set as part of a Column Definition, it does not change).
 {% /videoSection %}
 {% /if %}
 
@@ -29,34 +29,22 @@ This section details how such state items can be manipulated without having to u
 ## Save and Apply State {% #save-and-apply %}
 
 {% note %}
-If you are only interested in restoring Column State on grid initialisation, you should consider using [Initial State](./grid-state/) instead, which contains all of the Column State properties.
+If you want to save and restore the whole grid rather than manipulate individual column attributes, consider [Grid State](./grid-state/) instead. It contains all of the Column State properties alongside the other grid state sections — including [Calculated Columns](./calculated-columns/) added at runtime, which Column State alone cannot recreate — and can be applied on initialisation via `initialState` or at runtime via `api.setState()`.
 {% /note %}
 
 There are two API methods provided for getting and setting Column State. `api.getColumnState()` gets the current
 column state and `api.applyColumnState(params)` sets the column state.
 
-```{% frameworkTransform=true %}
-// save the column state
-const savedState = api.getColumnState();
-
-// restore the column state
-api.applyColumnState({ state: savedState });
-```
+{% apiDocumentation source="grid-api/api.json" section="state" names=["getColumnState", "applyColumnState", "resetColumnState"] /%}
 
 The example below demonstrates saving and restoring column state. Try the following:
 
 1. Click 'Save State' to save the Column State.
-1. Change some column state, e.g. resize columns, move columns around, apply column sorting or row grouping, etc.
+1. Change some column state, e.g. resize columns, move columns around, apply column sorting or row grouping, or rename an [editable header](./column-headers/#editable-header-name) from its column menu, etc.
 1. Click 'Restore State' and the column state is set back to where it was when you clicked 'Save State'.
 1. Click 'Reset State' and the state will go back to what was defined in the Column Definitions.
 
 {% gridExampleRunner title="Save and Apply State" name="save-apply-state" /%}
-
-## Column State Interface
-
-The Column State method interfaces are as follows:
-
-{% apiDocumentation source="grid-api/api.json" section="state" names=["getColumnState", "applyColumnState"] /%}
 
 ## Partial State
 
@@ -69,11 +57,11 @@ any other state attribute.
 When applying a Column State, in cases where some state attributes or columns are missing from the Column State,
 the following rules apply:
 
-* Attributes that are not supplied or are set to `undefined` will remain unchanged. For example if a Column has a Column State with just `pinned`, then Pinned is applied to that Column but other attributes, such as `sort` are left intact.
+- Attributes that are not supplied or are set to `undefined` will remain unchanged. For example if a Column has a Column State with just `pinned`, then Pinned is applied to that Column but other attributes, such as `sort` are left intact.
 
-* When state is applied and there are additional Columns in the grid that do not appear in the provided state, then the `params.defaultState` is applied to those additional Columns.
+- When state is applied and there are additional Columns in the grid that do not appear in the provided state, then the `params.defaultState` is applied to those additional Columns.
 
-* If `params.defaultState` is not provided, then any additional Columns in the grid will not be updated.
+- If `params.defaultState` is not provided, then any additional Columns in the grid will not be updated.
 
 Combining these rules together allows flexible fine-grained state control. Take the following code snippets as
 examples:
@@ -152,6 +140,10 @@ re-applying the state.
 
 There are a few items to note on specific state attributes. They are as follows:
 
+### Column IDs
+
+Column state is keyed by [Column ID](./column-updating-definitions/#matching-columns), so give every column a `colId` or a `field` if you intend to save and re-apply its state. A column with neither is identified by its position in `columnDefs`, which means state saved before a reorder is re-applied to a different column. See [Grid State](./grid-state/#state-contents) for details.
+
 ### null vs undefined
 
 For all state attributes, `undefined` means _"do not apply this attribute"_ and `null` means _"clear this attribute"_.
@@ -159,8 +151,7 @@ For all state attributes, `undefined` means _"do not apply this attribute"_ and 
 For example setting `sort=null` will clear sort on a column whereas setting
 `sort=undefined` will leave whatever sort, if any, that is currently present.
 
-The only exception is with regards to Column Width. For width, both `undefined`
-and `null` will skip the attribute. This is because width is mandatory - there
+The only exception is Column Width. Setting `null` is not supported because width is mandatory - there
 is no such thing as a Column with no width.
 
 ### Row Group and Pivot
@@ -182,8 +173,7 @@ normally get raised. For example `columnPinned` event will get raised if applyin
 the state results in a column getting pinned or unpinned.
 
 The example below demonstrates events getting raised based on Column State changes.
-The example logs event information to the console, so best open the example in
-a new tab and observe the dev console.
+The example logs event information to the console.
 
 {% gridExampleRunner title="Column Events" name="column-events" /%}
 
@@ -195,13 +185,13 @@ which is whether the group is open or closed.
 To get the state of Column Groups use the API method `api.getColumnGroupState()`. To
 set the Column Group state use the API method `api.setColumnGroupState(stateItems)`.
 
-{% apiDocumentation source="grid-api/api.json" section="state" names=["getColumnGroupState", "setColumnGroupState"] /%}
+{% apiDocumentation source="grid-api/api.json" section="state" names=["getColumnGroupState", "setColumnGroupState", "resetColumnGroupState"] /%}
 
 The example below demonstrates getting and setting Column Group State. Note the following:
 
-* Clicking 'Save State' will save the opened / closed state of column groups.
-* Clicking 'Restore State' will restore the previously saved state.
-* Clicking 'Reset State' will reset the column state to match the Column Definitions,
+- Clicking 'Save State' will save the opened / closed state of column groups.
+- Clicking 'Restore State' will restore the previously saved state.
+- Clicking 'Reset State' will reset the column state to match the Column Definitions,
   i.e. all Column Groups will be closed.
 
 {% gridExampleRunner title="Column Group State" name="column-group-state" /%}

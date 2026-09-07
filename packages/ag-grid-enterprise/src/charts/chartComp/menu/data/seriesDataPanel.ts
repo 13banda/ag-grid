@@ -1,6 +1,7 @@
+import type { GridToggleButton } from 'ag-grid-community';
 import { AgToggleButton } from 'ag-grid-community';
 
-import { AgGroupComponent } from '../../../../widgets/agGroupComponent';
+import { AgGroupComponent } from '../../../../agStack/agGroupComponent';
 import type { ChartController } from '../../chartController';
 import type { ColState } from '../../model/chartDataModel';
 import type { ChartOptionsService } from '../../services/chartOptionsService';
@@ -13,8 +14,8 @@ export class SeriesDataPanel extends DragDataPanel {
         private readonly title: string,
         allowMultipleSelect: boolean,
         maxSelection: number | undefined,
-        private valueCols: ColState[],
-        private isOpen?: boolean
+        private readonly valueCols: ColState[],
+        private readonly isOpen?: boolean
     ) {
         super(chartController, allowMultipleSelect, maxSelection, /* html */ `<div id="seriesGroup"></div>`);
     }
@@ -31,7 +32,7 @@ export class SeriesDataPanel extends DragDataPanel {
             })
         );
         if (this.chartController.isActiveXYChart()) {
-            const pairedModeToggle = this.groupComp.createManagedBean(
+            const pairedModeToggle = this.groupComp.createManagedBean<GridToggleButton>(
                 new AgToggleButton({
                     label: this.chartTranslation.translate('paired'),
                     labelAlignment: 'left',
@@ -93,12 +94,10 @@ export class SeriesDataPanel extends DragDataPanel {
 
             if (isInPairedMode) {
                 axisLabel = indexToAxisLabel.get(index % (isBubble ? 3 : 2));
+            } else if (index === 0) {
+                axisLabel = 'X';
             } else {
-                if (index === 0) {
-                    axisLabel = 'X';
-                } else {
-                    axisLabel = isBubble && index % 2 === 0 ? 'size' : 'Y';
-                }
+                axisLabel = isBubble && index % 2 === 0 ? 'size' : 'Y';
             }
 
             return `${escapedLabel} (${axisLabel})`;

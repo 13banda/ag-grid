@@ -1,108 +1,223 @@
+import { RefPlaceholder, _areEqual, _exists, _getActiveDomElement, _makeNull, _setDisplayed } from 'ag-stack';
+
 import type {
     AgColumn,
-    AgInputTextField,
-    BeanCollection,
+    AgPromise,
     ComponentSelector,
-    DataTypeService,
+    ElementParams,
+    FilterDisplayParams,
+    GridInputTextField,
     IAfterGuiAttachedParams,
-    IColsService,
-    IDoesFilterPassParams,
-    IRowNode,
     ISetFilter,
-    KeyCreatorParams,
-    RowNode,
+    SetFilterHandler as ISetFilterHandler,
+    ISetFilterParams,
     SetFilterModel,
     SetFilterModelValue,
     SetFilterParams,
-    ValueFormatterParams,
-    ValueService,
+    SetFilterUi,
+    TextFormatter,
 } from 'ag-grid-community';
-import {
-    AgInputTextFieldSelector,
-    AgPromise,
-    GROUP_AUTO_COLUMN_ID,
-    KeyCode,
-    ProvidedFilter,
-    RefPlaceholder,
-    _areEqual,
-    _error,
-    _getActiveDomElement,
-    _last,
-    _makeNull,
-    _setDisplayed,
-    _toStringOrNull,
-    _warn,
-} from 'ag-grid-community';
+import { AgInputTextFieldSelector, KeyCode, ProvidedFilter, _createIconNoSpan } from 'ag-grid-community';
 
-import type { VirtualListModel } from '../widgets/iVirtualList';
+import type { VirtualListModel } from '../agStack/iVirtualList';
 import { VirtualList } from '../widgets/virtualList';
-import type { SetFilterModelTreeItem } from './iSetDisplayValueModel';
-import { SET_FILTER_ADD_SELECTION_TO_FILTER, SET_FILTER_SELECT_ALL } from './iSetDisplayValueModel';
-import type { ISetFilterLocaleText } from './localeText';
-import { DEFAULT_LOCALE_TEXT } from './localeText';
+import { FlatSetDisplayValueModel } from './flatSetDisplayValueModel';
+import type { ISetDisplayValueModel, SetFilterModelTreeItem } from './iSetDisplayValueModel';
+import { NO_SET_FILTER_KEYS, SET_FILTER_ADD_SELECTION_TO_FILTER, SET_FILTER_SELECT_ALL } from './iSetDisplayValueModel';
+import type { SetFilterHandler } from './setFilterHandler';
 import type {
     SetFilterListItemExpandedChangedEvent,
     SetFilterListItemParams,
     SetFilterListItemSelectionChangedEvent,
 } from './setFilterListItem';
 import { SetFilterListItem } from './setFilterListItem';
-import { SetFilterModelFormatter } from './setFilterModelFormatter';
-import { processDataPath } from './setFilterUtils';
-import { SetFilterModelValuesType, SetValueModel } from './setValueModel';
+import { setFilterNullIfBlank, translateForSetFilter } from './setFilterUtils';
+import { TreeSetDisplayValueModel } from './treeSetDisplayValueModel';
 
 /** @param V type of value in the Set Filter */
-export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> implements ISetFilter<V> {
-    private rowGroupColsSvc?: IColsService;
-    private valueSvc: ValueService;
-    private dataTypeSvc?: DataTypeService;
+export class SetFilter<V = string>
+    extends ProvidedFilter<SetFilterModel, V, ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>>
+    implements ISetFilter<V>, SetFilterUi<V>
+{
+    public readonly filterType = 'set' as const;
 
-    protected filterType = 'set' as const;
-
-    public wireBeans(beans: BeanCollection) {
-        this.rowGroupColsSvc = beans.rowGroupColsSvc;
-        this.valueSvc = beans.valueSvc;
-        this.dataTypeSvc = beans.dataTypeSvc;
-    }
-
-    private readonly eMiniFilter: AgInputTextField = RefPlaceholder;
+    private readonly eMiniFilter: GridInputTextField = RefPlaceholder;
     private readonly eFilterLoading: HTMLElement = RefPlaceholder;
+    private readonly eFilterLoadingIcon: HTMLElement = RefPlaceholder;
     private readonly eSetFilterList: HTMLElement = RefPlaceholder;
     private readonly eFilterNoMatches: HTMLElement = RefPlaceholder;
 
-    private valueModel: SetValueModel<V>;
-    private setFilterParams: SetFilterParams<any, V>;
-    private virtualList: VirtualList<any>;
-    private caseSensitive: boolean = false;
-    private treeDataTreeList = false;
-    private groupingTreeList = false;
+    private virtualList: VirtualList<SetFilterListItem<V | string | null>, SetFilterModelTreeItem | string | null>;
+
     private hardRefreshVirtualList = false;
-    private noValueFormatterSupplied = false;
 
-    private createKey: (value: V | null | undefined, node?: IRowNode | null) => string | null;
+    public handler: SetFilterHandler<V>;
+    private handlerDestroyFuncs?: (() => void)[];
 
-    private valueFormatter?: (params: ValueFormatterParams) => string;
-    private readonly filterModelFormatter = new SetFilterModelFormatter();
+    private formatter: TextFormatter;
+    private displayValueModel: ISetDisplayValueModel<V>;
+
+    private miniFilterText: string | null = null;
+
+    /** When true, in excelMode = 'windows', it adds previously selected filter items to newly checked filter selection */
+    private addCurrentSelectionToFilter: boolean = false;
+
+    /** Keys that have been selected for this filter. */
+    private selectedKeys = new Set<string | null>();
 
     constructor() {
-        super('setFilter');
+        super('setFilter', 'set-filter');
     }
 
-    public override postConstruct() {
-        super.postConstruct();
+    protected override setParams(
+        params: ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>
+    ): void {
+        super.setParams(params);
+
+        const handler = this.updateHandler(params.getHandler() as unknown as SetFilterHandler<V>);
+
+        const { column, textFormatter, treeList, treeListPathGetter, treeListFormatter } = params;
+
+        this.formatter = textFormatter ?? ((value) => value ?? null);
+
+        this.displayValueModel = treeList
+            ? new TreeSetDisplayValueModel(
+                  this.beans.log,
+                  this.formatter,
+                  treeListPathGetter,
+                  treeListFormatter,
+                  handler.isTreeDataOrGrouping()
+              )
+            : (new FlatSetDisplayValueModel<V>(
+                  this.beans.valueSvc,
+                  () => this.handler.valueFormatter,
+                  this.formatter,
+                  column as AgColumn
+              ) as any);
+
+        handler.valueModel.allKeys.then((values) => {
+            if (!this.isAlive()) {
+                return;
+            }
+            this.updateDisplayedValues('reload', values ?? []);
+            this.resetSelectionState(values ?? []);
+        });
+
+        if (handler.valueModel.isLoading()) {
+            this.setIsLoading(true);
+        }
+
+        this.initialiseFilterBodyUi();
     }
 
-    // unlike the simple filters, nothing in the set filter UI shows/hides.
-    // maybe this method belongs in abstractSimpleFilter???
-    protected updateUiVisibility(): void {}
+    public override refresh(legacyNewParams: SetFilterParams<any, V>): boolean {
+        if (this.params.treeList !== legacyNewParams.treeList) {
+            // too hard to refresh when tree list changes, just destroy
+            return false;
+        }
+        this.updateHandler(
+            (
+                legacyNewParams as unknown as ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>
+            ).getHandler() as unknown as SetFilterHandler<V>
+        );
+        return super.refresh(legacyNewParams);
+    }
 
-    protected createBodyTemplate(): string {
-        return /* html */ `
-            <div class="ag-set-filter">
-                <div data-ref="eFilterLoading" class="ag-filter-loading ag-hidden">${this.translateForSetFilter('loadingOoo')}</div>
-                <ag-input-text-field class="ag-mini-filter" data-ref="eMiniFilter"></ag-input-text-field>
-                <div data-ref="eFilterNoMatches" class="ag-filter-no-matches ag-hidden">${this.translateForSetFilter('noMatches')}</div>
-                <div data-ref="eSetFilterList" class="ag-set-filter-list" role="presentation"></div>
-            </div>`;
+    protected override updateParams(
+        newParams: ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>,
+        oldParams: ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>
+    ): void {
+        super.updateParams(newParams, oldParams);
+
+        this.updateMiniFilter();
+        this.eMiniFilter.setAutoComplete(newParams.browserAutoComplete);
+
+        if (newParams.suppressSelectAll !== oldParams.suppressSelectAll) {
+            this.createVirtualListModel(newParams);
+        }
+
+        const { textFormatter, treeListPathGetter, treeListFormatter } = newParams;
+
+        this.formatter = textFormatter ?? ((value) => value ?? null);
+
+        if (this.displayValueModel instanceof TreeSetDisplayValueModel) {
+            this.displayValueModel.updateParams(treeListPathGetter, treeListFormatter);
+        }
+        this.handler.refreshFilterValues(true);
+    }
+
+    private updateHandler(handler: SetFilterHandler<V>): SetFilterHandler<V> {
+        const oldHandler = this.handler;
+        if (oldHandler !== handler) {
+            for (const func of this.handlerDestroyFuncs ?? []) {
+                func();
+            }
+            this.handlerDestroyFuncs = [
+                ...this.addManagedListeners(handler, {
+                    anyFilterChanged: (event) => {
+                        handler.valueModel.allKeys.then((values) => {
+                            if (this.isAlive()) {
+                                this.updateDisplayedValues('otherFilter', values ?? []);
+                                if (event.updated) {
+                                    this.checkAndRefreshVirtualList();
+                                    this.showOrHideResults();
+                                }
+                            }
+                        });
+                    },
+                    dataChanged: ({ hardRefresh }) => {
+                        handler.valueModel.allKeys.then((values) => {
+                            if (this.isAlive()) {
+                                this.updateDisplayedValues('reload', values ?? []);
+                                this.setSelectedModel(this.state.model?.values ?? null);
+                                if (hardRefresh) {
+                                    this.hardRefreshVirtualList = true;
+                                }
+                                this.checkAndRefreshVirtualList();
+                                this.showOrHideResults();
+                            }
+                        });
+                    },
+                }),
+                ...this.addManagedListeners(handler.valueModel, {
+                    loadingStart: () => this.setIsLoading(true),
+                    loadingEnd: () => this.setIsLoading(false),
+                }),
+            ];
+            this.handler = handler;
+        }
+        return handler;
+    }
+
+    protected updateUiVisibility(): void {
+        // unlike the simple filters, nothing in the set filter UI shows/hides.
+        // maybe this method belongs in abstractSimpleFilter???
+    }
+
+    protected createBodyTemplate(): ElementParams | null {
+        return {
+            tag: 'div',
+            cls: 'ag-set-filter',
+            children: [
+                {
+                    tag: 'div',
+                    ref: 'eFilterLoading',
+                    cls: 'ag-filter-loading ag-loading ag-hidden',
+                    children: [
+                        { tag: 'span', ref: 'eFilterLoadingIcon', cls: 'ag-loading-icon' },
+                        { tag: 'span', cls: 'ag-loading-text', children: translateForSetFilter(this, 'loadingOoo') },
+                    ],
+                },
+                { tag: 'ag-input-text-field', ref: 'eMiniFilter', cls: 'ag-mini-filter' },
+                {
+                    tag: 'div',
+                    ref: 'eFilterNoMatches',
+                    cls: 'ag-filter-no-matches ag-hidden',
+                    children: translateForSetFilter(this, 'noMatches'),
+                },
+                { tag: 'div', ref: 'eSetFilterList', cls: 'ag-set-filter-list', role: 'presentation' },
+            ],
+        };
     }
     protected getAgComponents(): ComponentSelector[] {
         return [AgInputTextFieldSelector];
@@ -115,172 +230,83 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
             return;
         }
 
+        const getComponentForKeyEvent = () => {
+            if (!this.eSetFilterList.contains(_getActiveDomElement(this.beans))) {
+                return;
+            }
+
+            const currentItem = this.virtualList.getLastFocusedRow();
+            if (currentItem == null) {
+                return;
+            }
+
+            const component = this.virtualList.getComponentAt(currentItem) as SetFilterListItem<V>;
+            if (component == null) {
+                return;
+            }
+
+            e.preventDefault();
+
+            const { readOnly } = this.params;
+            if (readOnly) {
+                return;
+            }
+            return component;
+        };
+
         switch (e.key) {
             case KeyCode.SPACE:
-                this.handleKeySpace(e);
+                getComponentForKeyEvent()?.toggleSelected();
                 break;
             case KeyCode.ENTER:
                 this.handleKeyEnter(e);
                 break;
             case KeyCode.LEFT:
-                this.handleKeyLeft(e);
+                getComponentForKeyEvent()?.setExpanded(false);
                 break;
             case KeyCode.RIGHT:
-                this.handleKeyRight(e);
+                getComponentForKeyEvent()?.setExpanded(true);
                 break;
         }
     }
 
-    private handleKeySpace(e: KeyboardEvent): void {
-        this.getComponentForKeyEvent(e)?.toggleSelected();
-    }
-
     private handleKeyEnter(e: KeyboardEvent): void {
-        const { excelMode, readOnly } = this.setFilterParams;
+        e.preventDefault();
+
+        const { excelMode, readOnly } = this.params;
         if (!excelMode || !!readOnly) {
             return;
         }
 
-        e.preventDefault();
-
         // in Excel Mode, hitting Enter is the same as pressing the Apply button
-        this.onBtApply(false, false, e);
+        this.params.onAction('apply', undefined, e);
 
-        if (this.setFilterParams.excelMode === 'mac') {
+        if (this.params.excelMode === 'mac') {
             // in Mac version, select all the input text
             this.eMiniFilter.getInputElement().select();
         }
     }
 
-    private handleKeyLeft(e: KeyboardEvent): void {
-        this.getComponentForKeyEvent(e)?.setExpanded(false);
-    }
-
-    private handleKeyRight(e: KeyboardEvent): void {
-        this.getComponentForKeyEvent(e)?.setExpanded(true);
-    }
-
-    private getComponentForKeyEvent(e: KeyboardEvent): SetFilterListItem<V> | undefined {
-        if (!this.eSetFilterList.contains(_getActiveDomElement(this.beans))) {
-            return;
-        }
-
-        const currentItem = this.virtualList.getLastFocusedRow();
-        if (currentItem == null) {
-            return;
-        }
-
-        const component = this.virtualList.getComponentAt(currentItem) as SetFilterListItem<V>;
-        if (component == null) {
-            return;
-        }
-
-        e.preventDefault();
-
-        const { readOnly } = this.setFilterParams;
-        if (readOnly) {
-            return;
-        }
-        return component;
-    }
-
-    protected getCssIdentifier(): string {
-        return 'set-filter';
-    }
-
-    public override setModel(model: SetFilterModel | null): AgPromise<void> {
-        if (model == null && this.valueModel.getModel() == null) {
-            // refreshing is expensive. if new and old model are both null (e.g. nothing set), skip.
-            // mini filter isn't contained within the model, so always reset
-            this.setMiniFilter(null);
-            return AgPromise.resolve();
-        }
-        return super.setModel(model);
-    }
-
-    override refresh(params: SetFilterParams<any, V>): boolean {
-        this.applyExcelModeOptions(params);
-
-        if (!super.refresh(params)) {
-            return false;
-        }
-
-        const oldParams = this.setFilterParams;
-
-        // Those params have a large impact and should trigger a reload when they change.
-        const paramsThatForceReload: (keyof SetFilterParams<any, V>)[] = [
-            'treeList',
-            'treeListPathGetter',
-            'caseSensitive',
-            'comparator',
-            'excelMode',
-        ];
-
-        if (paramsThatForceReload.some((param) => params[param] !== oldParams?.[param])) {
-            return false;
-        }
-
-        if (this.haveColDefParamsChanged(params)) {
-            return false;
-        }
-
-        super.updateParams(params);
-        this.updateSetFilterOnParamsChange(params);
-        this.updateMiniFilter();
-
-        if (params.suppressSelectAll !== oldParams?.suppressSelectAll) {
-            this.createVirtualListModel(params);
-        }
-
-        this.valueModel.updateOnParamsChange(params).then(() => {
-            this.refreshFilterValues();
-        });
-
-        return true;
-    }
-
-    private haveColDefParamsChanged(params: SetFilterParams<any, V>): boolean {
-        const { colDef, keyCreator } = params;
-        const { colDef: existingColDef, keyCreator: existingKeyCreator } = this.setFilterParams;
-
-        const currentKeyCreator = keyCreator ?? colDef.keyCreator;
-        const previousKeyCreator = existingKeyCreator ?? existingColDef?.keyCreator;
-
-        const filterValueGetterChanged = colDef.filterValueGetter !== existingColDef?.filterValueGetter;
-        const keyCreatorChanged = currentKeyCreator !== previousKeyCreator;
-        const valueFormatterIsKeyCreatorAndHasChanged =
-            !!this.dataTypeSvc &&
-            !!currentKeyCreator &&
-            this.dataTypeSvc.getFormatValue(colDef.cellDataType as string) === currentKeyCreator &&
-            colDef.valueFormatter !== existingColDef?.valueFormatter;
-
-        return filterValueGetterChanged || keyCreatorChanged || valueFormatterIsKeyCreatorAndHasChanged;
-    }
-
     private setModelAndRefresh(values: SetFilterModelValue | null): AgPromise<void> {
-        return this.valueModel.setModel(values).then(() => {
+        return this.setSelectedModel(values).then(() => {
             if (this.isAlive()) {
                 // Async values could arrive after the grid has been destroyed
                 this.checkAndRefreshVirtualList();
+                this.showOrHideResults();
             }
         });
     }
 
-    protected resetUiToDefaults(): AgPromise<void> {
-        this.setMiniFilter(null);
-
-        return this.setModelAndRefresh(null);
-    }
-
     protected setModelIntoUi(model: SetFilterModel | null): AgPromise<void> {
-        this.setMiniFilter(null);
+        // model is being updated, so set mini filter UI state only
+        this.setMiniFilter(this.params.state.state?.miniFilterValue ?? null, true);
 
         const values = model == null ? null : model.values;
         return this.setModelAndRefresh(values);
     }
 
     public getModelFromUi(): SetFilterModel | null {
-        const values = this.valueModel.getModel();
+        const values = this.getSelectedModel();
 
         if (!values) {
             return null;
@@ -289,179 +315,8 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         return { values, filterType: this.filterType };
     }
 
-    public getValueModel(): SetValueModel<V> {
-        return this.valueModel;
-    }
-
-    protected areModelsEqual(a: SetFilterModel, b: SetFilterModel): boolean {
-        // both are missing
-        if (a == null && b == null) {
-            return true;
-        }
-
-        return a != null && b != null && _areEqual(a.values, b.values);
-    }
-
-    private updateSetFilterOnParamsChange = (newParams: SetFilterParams<any, V>) => {
-        this.setFilterParams = newParams;
-        this.caseSensitive = !!newParams.caseSensitive;
-        const keyCreator = newParams.keyCreator ?? newParams.colDef.keyCreator;
-        this.setValueFormatter(newParams.valueFormatter, keyCreator, !!newParams.treeList, !!newParams.colDef.refData);
-        const isGroupCol = newParams.column.getId().startsWith(GROUP_AUTO_COLUMN_ID);
-        this.treeDataTreeList = this.gos.get('treeData') && !!newParams.treeList && isGroupCol;
-        this.groupingTreeList = !!this.rowGroupColsSvc?.columns.length && !!newParams.treeList && isGroupCol;
-        this.createKey = this.generateCreateKey(keyCreator, this.treeDataTreeList || this.groupingTreeList);
-    };
-
-    public override setParams(params: SetFilterParams<any, V>): void {
-        this.applyExcelModeOptions(params);
-
-        super.setParams(params);
-
-        this.updateSetFilterOnParamsChange(params);
-
-        const keyCreator = params.keyCreator ?? params.colDef.keyCreator;
-
-        this.valueModel = new SetValueModel({
-            filterParams: params,
-            setIsLoading: (loading) => this.setIsLoading(loading),
-            translate: (key) => this.translateForSetFilter(key),
-            caseFormat: (v) => this.caseFormat(v),
-            createKey: this.createKey,
-            valueFormatter: this.valueFormatter,
-            usingComplexObjects: !!keyCreator,
-            gos: this.gos,
-            rowGroupColsSvc: this.rowGroupColsSvc,
-            valueSvc: this.valueSvc,
-            treeDataTreeList: this.treeDataTreeList,
-            groupingTreeList: this.groupingTreeList,
-            addManagedEventListeners: (handlers) => this.addManagedEventListeners(handlers),
-        });
-
-        this.initialiseFilterBodyUi();
-
-        this.addEventListenersForDataChanges();
-    }
-
-    private onAddCurrentSelectionToFilterChange(newValue: boolean) {
-        this.valueModel.setAddCurrentSelectionToFilter(newValue);
-    }
-
-    private setValueFormatter(
-        providedValueFormatter: ((params: ValueFormatterParams) => string) | undefined,
-        keyCreator: ((params: KeyCreatorParams<any, any>) => string) | undefined,
-        treeList: boolean,
-        isRefData: boolean
-    ) {
-        let valueFormatter = providedValueFormatter;
-        if (!valueFormatter) {
-            if (keyCreator && !treeList) {
-                _error(249);
-                return;
-            }
-            this.noValueFormatterSupplied = true;
-            // ref data is handled by ValueService
-            if (!isRefData) {
-                valueFormatter = (params) => _toStringOrNull(params.value)!;
-            }
-        }
-        this.valueFormatter = valueFormatter;
-    }
-
-    private generateCreateKey(
-        keyCreator: ((params: KeyCreatorParams<any, any>) => string) | undefined,
-        treeDataOrGrouping: boolean
-    ): (value: V | null | undefined, node?: IRowNode | null) => string | null {
-        if (treeDataOrGrouping && !keyCreator) {
-            _error(250);
-            return () => null;
-        }
-        if (keyCreator) {
-            return (value, node = null) => {
-                const params = this.getKeyCreatorParams(value, node);
-                return _makeNull(keyCreator!(params));
-            };
-        }
-        return (value) => _makeNull(_toStringOrNull(value));
-    }
-
-    public getFormattedValue(key: string | null): string | null {
-        let value: V | string | null = this.valueModel.getValue(key);
-        if (this.noValueFormatterSupplied && (this.treeDataTreeList || this.groupingTreeList) && Array.isArray(value)) {
-            // essentially get back the cell value
-            value = _last(value) as string;
-        }
-
-        const formattedValue = this.valueSvc.formatValue(
-            this.setFilterParams.column as AgColumn,
-            null,
-            value,
-            this.valueFormatter,
-            false
-        );
-
-        return (
-            (formattedValue == null ? _toStringOrNull(value) : formattedValue) ?? this.translateForSetFilter('blanks')
-        );
-    }
-
-    private applyExcelModeOptions(params: SetFilterParams<any, V>): void {
-        // apply default options to match Excel behaviour, unless they have already been specified
-        if (params.excelMode === 'windows') {
-            if (!params.buttons) {
-                params.buttons = ['apply', 'cancel'];
-            }
-
-            if (params.closeOnApply == null) {
-                params.closeOnApply = true;
-            }
-        } else if (params.excelMode === 'mac') {
-            if (!params.buttons) {
-                params.buttons = ['reset'];
-            }
-
-            if (params.applyMiniFilterWhileTyping == null) {
-                params.applyMiniFilterWhileTyping = true;
-            }
-
-            if (params.debounceMs == null) {
-                params.debounceMs = 500;
-            }
-        }
-        if (params.excelMode && params.defaultToNothingSelected) {
-            params.defaultToNothingSelected = false;
-            _warn(207);
-        }
-    }
-
-    private addEventListenersForDataChanges(): void {
-        if (!this.isValuesTakenFromGrid()) {
-            return;
-        }
-
-        this.addManagedPropertyListeners(['groupAllowUnbalanced'], () => {
-            this.syncAfterDataChange();
-        });
-
-        this.addManagedEventListeners({
-            cellValueChanged: (event) => {
-                // only interested in changes to do with this column
-                if (event.column === this.setFilterParams.column) {
-                    this.syncAfterDataChange();
-                }
-            },
-        });
-    }
-
-    private syncAfterDataChange(): AgPromise<void> {
-        const promise = this.valueModel.refreshValues();
-
-        return promise.then(() => {
-            this.checkAndRefreshVirtualList();
-            if (!this.applyActive || this.areModelsEqual(this.getModel()!, this.getModelFromUi()!)) {
-                this.onBtApply(false, true);
-            }
-        });
+    protected areNonNullModelsEqual(a: SetFilterModel, b: SetFilterModel): boolean {
+        return _areEqual(a.values, b.values);
     }
 
     private setIsLoading(isLoading: boolean): void {
@@ -475,12 +330,19 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     private initialiseFilterBodyUi(): void {
         this.initVirtualList();
         this.initMiniFilter();
+        this.initLoading();
+    }
+
+    private initLoading(): void {
+        const loadingIcon = _createIconNoSpan('setFilterLoading', this.beans, this.params.column as AgColumn);
+        if (loadingIcon) {
+            this.eFilterLoadingIcon.appendChild(loadingIcon);
+        }
     }
 
     private initVirtualList(): void {
-        const translate = this.getLocaleTextFunc();
-        const filterListName = translate('ariaFilterList', 'Filter List');
-        const isTree = !!this.setFilterParams.treeList;
+        const filterListName = translateForSetFilter(this, 'ariaFilterList');
+        const isTree = !!this.params.treeList;
 
         const virtualList = (this.virtualList = this.createBean(
             new VirtualList({
@@ -495,11 +357,9 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
             eSetFilterList.classList.add('ag-set-filter-tree-list');
         }
 
-        if (eSetFilterList) {
-            eSetFilterList.appendChild(virtualList.getGui());
-        }
+        eSetFilterList.appendChild(virtualList.getGui());
 
-        const { cellHeight } = this.setFilterParams;
+        const { cellHeight } = this.params;
 
         if (cellHeight != null) {
             virtualList.setRowHeight(cellHeight);
@@ -515,15 +375,20 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         ) => this.updateSetListItem(item, component);
         virtualList.setComponentUpdater(componentUpdater);
 
-        this.createVirtualListModel(this.setFilterParams);
+        this.createVirtualListModel(this.params);
     }
 
-    private createVirtualListModel(params: SetFilterParams<any, V>): void {
+    private createVirtualListModel(
+        params: ISetFilterParams<any, V> & FilterDisplayParams<any, any, SetFilterModel>
+    ): void {
         let model: VirtualListModel;
         if (params.suppressSelectAll) {
-            model = new ModelWrapper(this.valueModel);
+            model = new ModelWrapper(this.displayValueModel);
         } else {
-            model = new ModelWrapperWithSelectAll(this.valueModel, () => this.isSelectAllSelected());
+            model = new ModelWrapperWithSelectAll(
+                this.displayValueModel,
+                this.showAddCurrentSelectionToFilter.bind(this)
+            );
         }
         if (params.treeList) {
             model = new TreeModelWrapper(model);
@@ -533,16 +398,13 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     }
 
     private getSelectAllLabel(): string {
-        const key =
-            this.valueModel.getMiniFilter() == null || !this.setFilterParams.excelMode
-                ? 'selectAll'
-                : 'selectAllSearchResults';
+        const key = this.miniFilterText == null || !this.params.excelMode ? 'selectAll' : 'selectAllSearchResults';
 
-        return this.translateForSetFilter(key);
+        return translateForSetFilter(this, key);
     }
 
     private getAddSelectionToFilterLabel(): string {
-        return this.translateForSetFilter('addCurrentSelectionToFilter');
+        return translateForSetFilter(this, 'addCurrentSelectionToFilter');
     }
 
     private createSetListItem(
@@ -550,7 +412,7 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         isTree: boolean,
         focusWrapper: HTMLElement
     ): SetFilterListItem<V | string | null> {
-        const groupsExist = this.valueModel.hasGroups();
+        const groupsExist = this.displayValueModel.hasGroups();
         const { isSelected, isExpanded } = this.isSelectedExpanded(item);
 
         const { value, depth, isGroup, hasIndeterminateExpandState, selectedListener, expandedListener } =
@@ -559,9 +421,9 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         const itemParams: SetFilterListItemParams<V | string | null> = {
             focusWrapper,
             value,
-            params: this.setFilterParams,
-            translate: (translateKey: any) => this.translateForSetFilter(translateKey),
-            valueFormatter: this.valueFormatter,
+            params: this.params,
+            translate: (translateKey: any) => translateForSetFilter(this, translateKey),
+            valueFormatter: this.handler.valueFormatter,
             item,
             isSelected,
             isTree,
@@ -583,16 +445,17 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
 
     private newSetTreeItemAttributes(item: SetFilterModelTreeItem): {
         value: V | string | (() => string) | null;
-        depth?: number | undefined;
-        isGroup?: boolean | undefined;
-        hasIndeterminateExpandState?: boolean | undefined;
+        depth?: number;
+        isGroup?: boolean;
+        hasIndeterminateExpandState?: boolean;
         selectedListener: (e: SetFilterListItemSelectionChangedEvent) => void;
         expandedListener?: (e: SetFilterListItemExpandedChangedEvent) => void;
     } {
-        const groupsExist = this.valueModel.hasGroups();
+        const displayValueModel = this.displayValueModel;
+        const groupsExist = displayValueModel.hasGroups();
 
         // Select all option
-        if (item.key === SET_FILTER_SELECT_ALL) {
+        if (item === displayValueModel.getSelectAllItem()) {
             return {
                 value: () => this.getSelectAllLabel(),
                 isGroup: groupsExist,
@@ -605,48 +468,39 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         }
 
         // Add selection to filter option
-        if (item.key === SET_FILTER_ADD_SELECTION_TO_FILTER) {
+        if (item === displayValueModel.getAddSelectionToFilterItem()) {
             return {
                 value: () => this.getAddSelectionToFilterLabel(),
                 depth: item.depth,
                 isGroup: false,
                 hasIndeterminateExpandState: false,
                 selectedListener: (e: SetFilterListItemSelectionChangedEvent) => {
-                    this.onAddCurrentSelectionToFilterChange(e.isSelected);
+                    this.addCurrentSelectionToFilter = e.isSelected;
+                    this.refreshAfterSelection();
                 },
             };
         }
 
-        // Group
-        if (item.children) {
-            return {
-                value:
-                    this.setFilterParams.treeListFormatter?.(item.treeKey, item.depth, item.parentTreeKeys) ??
-                    item.treeKey,
-                depth: item.depth,
-                isGroup: true,
-                selectedListener: (e: SetFilterListItemSelectionChangedEvent<SetFilterModelTreeItem>) =>
-                    this.onGroupItemSelected(e.item, e.isSelected),
-                expandedListener: (e: SetFilterListItemExpandedChangedEvent<SetFilterModelTreeItem>) =>
-                    this.onExpandedChanged(e.item, e.isExpanded),
-            };
-        }
-
-        // Leaf
+        // A group additionally expands; both act for every key their row stands for.
+        const children = item.children;
         return {
-            value:
-                this.setFilterParams.treeListFormatter?.(item.treeKey, item.depth, item.parentTreeKeys) ?? item.treeKey,
+            value: this.params.treeListFormatter?.(item.treeKey, item.depth, item.parentTreeKeys) ?? item.treeKey,
             depth: item.depth,
+            isGroup: !!children,
             selectedListener: (e: SetFilterListItemSelectionChangedEvent<SetFilterModelTreeItem>) =>
-                this.onItemSelected(e.item.key!, e.isSelected),
+                this.onTreeItemSelected(e.item, e.isSelected),
+            expandedListener: children
+                ? (e: SetFilterListItemExpandedChangedEvent<SetFilterModelTreeItem>) =>
+                      this.onExpandedChanged(e.item, e.isExpanded)
+                : undefined,
         };
     }
 
     private newSetListItemAttributes(item: SetFilterModelTreeItem | string | null): {
         value: V | string | (() => string) | null;
-        depth?: number | undefined;
-        isGroup?: boolean | undefined;
-        hasIndeterminateExpandState?: boolean | undefined;
+        depth?: number;
+        isGroup?: boolean;
+        hasIndeterminateExpandState?: boolean;
         selectedListener: (e: SetFilterListItemSelectionChangedEvent) => void;
         expandedListener?: (e: SetFilterListItemExpandedChangedEvent) => void;
     } {
@@ -668,14 +522,15 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
             return {
                 value: () => this.getAddSelectionToFilterLabel(),
                 selectedListener: (e: SetFilterListItemSelectionChangedEvent<string | null>) => {
-                    this.onAddCurrentSelectionToFilterChange(e.isSelected);
+                    this.addCurrentSelectionToFilter = e.isSelected;
+                    this.refreshAfterSelection();
                 },
             };
         }
 
         // List item
         return {
-            value: this.valueModel.getValue(item),
+            value: this.handler.valueModel.allValues.get(item) ?? null,
             selectedListener: (e: SetFilterListItemSelectionChangedEvent<string | null>) =>
                 this.onItemSelected(e.item, e.isSelected),
         };
@@ -696,24 +551,21 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         let isSelected: boolean | undefined;
         let isExpanded: boolean | undefined;
         if (this.isSetFilterModelTreeItem(item)) {
+            const displayValueModel = this.displayValueModel;
             isExpanded = item.expanded;
-            if (item.key === SET_FILTER_SELECT_ALL) {
+            if (item === displayValueModel.getSelectAllItem()) {
                 isSelected = this.isSelectAllSelected();
-            } else if (item.key === SET_FILTER_ADD_SELECTION_TO_FILTER) {
-                isSelected = this.valueModel.isAddCurrentSelectionToFilterChecked();
-            } else if (item.children) {
-                isSelected = this.areAllChildrenSelected(item);
+            } else if (item === displayValueModel.getAddSelectionToFilterItem()) {
+                isSelected = this.isAddCurrentSelectionToFilterChecked();
             } else {
-                isSelected = this.valueModel.isKeySelected(item.key!);
+                isSelected = this.isTreeItemSelected(item);
             }
+        } else if (item === SET_FILTER_SELECT_ALL) {
+            isSelected = this.isSelectAllSelected();
+        } else if (item === SET_FILTER_ADD_SELECTION_TO_FILTER) {
+            isSelected = this.isAddCurrentSelectionToFilterChecked();
         } else {
-            if (item === SET_FILTER_SELECT_ALL) {
-                isSelected = this.isSelectAllSelected();
-            } else if (item === SET_FILTER_ADD_SELECTION_TO_FILTER) {
-                isSelected = this.valueModel.isAddCurrentSelectionToFilterChecked();
-            } else {
-                isSelected = this.valueModel.isKeySelected(item);
-            }
+            isSelected = this.selectedKeys.has(item);
         }
         return { isSelected, isExpanded };
     }
@@ -723,13 +575,12 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     }
 
     private initMiniFilter() {
-        const { eMiniFilter } = this;
-        const translate = this.getLocaleTextFunc();
+        const { eMiniFilter, params } = this;
 
-        eMiniFilter.setDisplayed(!this.setFilterParams.suppressMiniFilter);
-        eMiniFilter.setValue(this.valueModel.getMiniFilter());
-        eMiniFilter.onValueChange(() => this.onMiniFilterInput());
-        eMiniFilter.setInputAriaLabel(translate('ariaSearchFilterValues', 'Search filter values'));
+        eMiniFilter.setClearButtonEnabled(true).setSearchIcon(true).setAutoComplete(params.browserAutoComplete);
+        this.updateMiniFilter();
+        eMiniFilter.onValueChange(() => this.onMiniFilterInput()).onValueClear(() => this.onMiniFilterInput(true));
+        eMiniFilter.setInputAriaLabel(translateForSetFilter(this, 'ariaSearchFilterValues'));
 
         this.addManagedElementListeners(eMiniFilter.getInputElement(), {
             keydown: (e) => this.onMiniFilterKeyDown(e!),
@@ -737,16 +588,10 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     }
 
     private updateMiniFilter() {
-        const { eMiniFilter } = this;
+        const { eMiniFilter, miniFilterText, params } = this;
 
-        if (eMiniFilter.isDisplayed() !== !this.setFilterParams.suppressMiniFilter) {
-            eMiniFilter.setDisplayed(!this.setFilterParams.suppressMiniFilter);
-        }
-
-        const miniFilterValue = this.valueModel.getMiniFilter();
-        if (eMiniFilter.getValue() !== miniFilterValue) {
-            eMiniFilter.setValue(miniFilterValue);
-        }
+        eMiniFilter.setDisplayed(!params.suppressMiniFilter);
+        eMiniFilter.setValue(miniFilterText);
     }
 
     // we need to have the GUI attached before we can draw the virtual rows, as the
@@ -761,9 +606,9 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
 
         const { eMiniFilter } = this;
 
-        eMiniFilter.setInputPlaceholder(this.translateForSetFilter('searchOoo'));
+        eMiniFilter.setInputPlaceholder(translateForSetFilter(this, 'searchOoo'));
 
-        if (!params || !params.suppressFocus) {
+        if (!params?.suppressFocus) {
             if (eMiniFilter.isDisplayed()) {
                 eMiniFilter.getFocusableElement().focus();
             } else {
@@ -775,232 +620,118 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     public override afterGuiDetached(): void {
         super.afterGuiDetached();
 
+        const { column, excelMode, model, onStateChange } = this.params;
+
+        if (this.beans.colFilter?.shouldKeepStateOnDetach(column)) {
+            return;
+        }
+
         // discard any unapplied UI state (reset to model)
-        if (this.setFilterParams.excelMode) {
+        if (excelMode) {
             this.resetMiniFilter();
         }
-        const appliedModel = this.getModel();
-        if (this.setFilterParams.excelMode || !this.areModelsEqual(appliedModel!, this.getModelFromUi()!)) {
-            this.resetUiToActiveModel(appliedModel);
+        if (excelMode || model !== this.state.model) {
+            onStateChange({
+                model,
+                state: this.getState(),
+            });
             this.showOrHideResults();
         }
     }
 
-    public override applyModel(source: 'api' | 'ui' | 'rowDataUpdated' = 'api'): boolean {
-        if (
-            this.setFilterParams.excelMode &&
-            source !== 'rowDataUpdated' &&
-            this.valueModel.isEverythingVisibleSelected()
-        ) {
-            // In Excel, if the filter is applied with all visible values selected, then any active filter on the
-            // column is removed. This ensures the filter is removed in this situation.
-            this.valueModel.selectAllMatchingMiniFilter();
-        }
-
-        // Here we implement AG-9090 TC2
-        // When 'Add current selection to filter' is visible and checked, but no filter is applied:
-        // Do NOT apply the current selection as filter.
-        const shouldKeepCurrentSelection =
-            this.valueModel.showAddCurrentSelectionToFilter() && this.valueModel.isAddCurrentSelectionToFilterChecked();
-        if (shouldKeepCurrentSelection && !this.getModel()) {
-            return false;
-        }
-
-        const result = super.applyModel(source);
-
-        // keep appliedModelKeys in sync with the applied model
-        const appliedModel = this.getModel();
-
-        if (appliedModel) {
-            if (!shouldKeepCurrentSelection) {
-                this.valueModel.setAppliedModelKeys(new Set());
-            }
-
-            appliedModel.values.forEach((key) => {
-                this.valueModel!.addToAppliedModelKeys(key);
-            });
-        } else {
-            if (!shouldKeepCurrentSelection) {
-                this.valueModel.setAppliedModelKeys(null);
-            }
-        }
-
-        return result;
+    protected override canApply(model: SetFilterModel | null): boolean {
+        return this.params.excelMode ? model == null || model.values.length > 0 : true;
     }
 
-    protected override isModelValid(model: SetFilterModel): boolean {
-        return this.setFilterParams.excelMode ? model == null || model.values.length > 0 : true;
-    }
-
-    public doesFilterPass(params: IDoesFilterPassParams): boolean {
-        if (!this.valueModel.getCaseFormattedAppliedModelKeys()) {
-            return true;
-        }
-
-        // if nothing selected, don't need to check value
-        if (!this.valueModel.hasAnyAppliedModelKey()) {
-            return false;
-        }
-
-        const { node } = params;
-        if (this.treeDataTreeList) {
-            return this.doesFilterPassForTreeData(node);
-        }
-        if (this.groupingTreeList) {
-            return this.doesFilterPassForGrouping(node);
-        }
-
-        const value = this.getValueFromNode(node);
-
-        if (value != null && Array.isArray(value)) {
-            if (value.length === 0) {
-                return this.valueModel.hasAppliedModelKey(null);
-            }
-            return value.some((v) => this.isInAppliedModel(this.createKey(v, node)));
-        }
-
-        return this.isInAppliedModel(this.createKey(value, node));
-    }
-
-    private doesFilterPassForTreeData(node: IRowNode): boolean {
-        if (node.childrenAfterGroup?.length) {
-            // only perform checking on leaves. The core filtering logic for tree data won't work properly otherwise
-            return false;
-        }
-        return this.isInAppliedModel(
-            this.createKey(
-                processDataPath(
-                    (node as RowNode).getRoute() ?? [node.key ?? node.id!],
-                    true,
-                    this.gos.get('groupAllowUnbalanced')
-                ) as any
-            ) as any
-        );
-    }
-
-    private doesFilterPassForGrouping(node: IRowNode): boolean {
-        const dataPath = (this.rowGroupColsSvc?.columns ?? []).map((groupCol) =>
-            this.valueSvc.getKeyForNode(groupCol, node)
-        );
-        dataPath.push(this.getValueFromNode(node));
-        return this.isInAppliedModel(
-            this.createKey(processDataPath(dataPath, false, this.gos.get('groupAllowUnbalanced')) as any) as any
-        );
-    }
-
-    private isInAppliedModel(key: string | null): boolean {
-        return this.valueModel.hasAppliedModelKey(key);
-    }
-
-    private getValueFromNode(node: IRowNode): V | null | undefined {
-        return this.setFilterParams.getValue(node);
-    }
-
-    private getKeyCreatorParams(value: V | null | undefined, node: IRowNode | null = null): KeyCreatorParams {
-        const { colDef, column, api, context } = this.setFilterParams;
-        return {
-            value,
-            colDef,
-            column,
-            node,
-            data: node?.data,
-            api,
-            context,
-        };
-    }
-
-    public override onNewRowsLoaded(): void {
-        if (this.isValuesTakenFromGrid()) {
-            this.syncAfterDataChange();
-        }
-    }
-
-    private isValuesTakenFromGrid(): boolean {
-        const valuesType = this.valueModel.getValuesType();
-        return valuesType === SetFilterModelValuesType.TAKEN_FROM_GRID_VALUES;
-    }
-
-    //noinspection JSUnusedGlobalSymbols
     /**
-     * Public method provided so the user can change the value of the filter once
-     * the filter has been already started
-     * @param values The values to use.
+     * @deprecated v34 Internal method - should only be called by the grid.
+     */
+    public override onNewRowsLoaded(): void {
+        // we don't warn here because the multi filter can call this
+    }
+
+    /**
+     * @deprecated v34 Use the same method on the filter handler (`api.getColumnFilterHandler()`) instead.
      */
     public setFilterValues(values: (V | null)[]): void {
-        this.valueModel.overrideValues(values).then(() => {
-            this.checkAndRefreshVirtualList();
-            this.onUiChanged();
-        });
+        this.beans.log.warn(283);
+        this.handler.setFilterValues(values);
     }
 
-    //noinspection JSUnusedGlobalSymbols
     /**
-     * Public method provided so the user can reset the values of the filter once that it has started.
+     * @deprecated v34 Use the same method on the filter handler (`api.getColumnFilterHandler()`) instead.
      */
     public resetFilterValues(): void {
-        this.valueModel.setValuesType(SetFilterModelValuesType.TAKEN_FROM_GRID_VALUES);
-        this.syncAfterDataChange();
+        this.beans.log.warn(283);
+        this.handler.resetFilterValues();
     }
 
+    /**
+     * @deprecated v34 Use the same method on the filter handler (`api.getColumnFilterHandler()`) instead.
+     */
     public refreshFilterValues(): void {
-        // the model is still being initialised
-        if (!this.valueModel.isInitialised()) {
-            return;
-        }
-
-        this.valueModel.refreshValues().then(() => {
-            this.hardRefreshVirtualList = true;
-            this.checkAndRefreshVirtualList();
-            this.onUiChanged();
-        });
+        this.beans.log.warn(283);
+        this.doRefreshFilterValues();
     }
 
+    private doRefreshFilterValues(): void {
+        this.handler.refreshFilterValues();
+    }
+
+    /**
+     * @deprecated v34 Internal method - should only be called by the grid.
+     */
     public onAnyFilterChanged(): void {
-        // don't block the current action when updating the values for this filter
-        setTimeout(() => {
-            if (!this.isAlive()) {
-                return;
-            }
-
-            this.valueModel.refreshAfterAnyFilterChanged().then((refresh) => {
-                if (refresh) {
-                    this.checkAndRefreshVirtualList();
-                    this.showOrHideResults();
-                }
-            });
-        }, 0);
+        // we don't warn here because the multi filter can call this
     }
 
-    private onMiniFilterInput() {
-        if (!this.valueModel.setMiniFilter(this.eMiniFilter.getValue())) {
+    private onMiniFilterInput(forceImmediate = false, silent?: boolean) {
+        if (!this.doSetMiniFilter(this.eMiniFilter.getValue())) {
+            return;
+        }
+        if (silent) {
+            // update UI state only
+            this.showOrHideResults();
             return;
         }
 
-        const { applyMiniFilterWhileTyping, readOnly } = this.setFilterParams;
-        if (!readOnly && applyMiniFilterWhileTyping) {
-            this.filterOnAllVisibleValues(false);
-        } else {
-            this.updateUiAfterMiniFilterChange();
-        }
+        const { applyMiniFilterWhileTyping, readOnly, excelMode } = this.params;
+
+        const updateSelections = !readOnly && (applyMiniFilterWhileTyping || !!excelMode);
+        const apply =
+            forceImmediate && updateSelections
+                ? 'immediately'
+                : applyMiniFilterWhileTyping && !readOnly
+                  ? 'debounce'
+                  : undefined;
+
+        this.updateUiAfterMiniFilterChange(updateSelections, apply);
     }
 
-    private updateUiAfterMiniFilterChange(): void {
-        const { excelMode, readOnly } = this.setFilterParams;
-        if (excelMode == null || !!readOnly) {
-            this.checkAndRefreshVirtualList();
-        } else if (this.valueModel.getMiniFilter() == null) {
-            this.resetUiToActiveModel(this.getModel());
-        } else {
-            this.valueModel.selectAllMatchingMiniFilter(true);
-            this.checkAndRefreshVirtualList();
-            this.onUiChanged();
+    private updateUiAfterMiniFilterChange(updateSelections: boolean, apply?: 'immediately' | 'debounce'): void {
+        let effectiveApply = apply;
+        if (updateSelections) {
+            const { excelMode, readOnly, model } = this.params;
+            if (excelMode && !readOnly && this.miniFilterText == null) {
+                // reset to applied model
+                this.setModelAndRefresh(model?.values ?? null);
+                if (effectiveApply === 'immediately') {
+                    // the reset can land asynchronously (async values), when an immediate apply
+                    // would submit the pre-reset UI and bypass an active apply button
+                    effectiveApply = undefined;
+                }
+            } else {
+                this.selectAllMatchingMiniFilter(true);
+            }
         }
+        this.checkAndRefreshVirtualList();
+        this.onUiChanged(updateSelections ? effectiveApply : 'prevent');
 
         this.showOrHideResults();
     }
 
     private showOrHideResults(): void {
-        const hideResults = this.valueModel.getMiniFilter() != null && this.valueModel.getDisplayedValueCount() < 1;
+        const hideResults = this.miniFilterText != null && this.displayValueModel.getDisplayedValueCount() < 1;
 
         _setDisplayed(this.eFilterNoMatches, hideResults);
         _setDisplayed(this.eSetFilterList, !hideResults);
@@ -1008,94 +739,76 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
 
     private resetMiniFilter(): void {
         this.eMiniFilter.setValue(null, true);
-        this.valueModel.setMiniFilter(null);
-    }
-
-    protected override resetUiToActiveModel(
-        currentModel: SetFilterModel | null,
-        afterUiUpdatedFunc?: () => void
-    ): void {
-        // override the default behaviour as we don't always want to clear the mini filter
-        this.setModelAndRefresh(currentModel == null ? null : currentModel.values).then(() => {
-            this.onUiChanged(false, 'prevent');
-
-            afterUiUpdatedFunc?.();
-        });
-    }
-
-    protected override handleCancelEnd(e: Event): void {
-        this.setMiniFilter(null);
-        super.handleCancelEnd(e);
+        this.doSetMiniFilter(null);
     }
 
     private onMiniFilterKeyDown(e: KeyboardEvent): void {
-        const { excelMode, readOnly } = this.setFilterParams;
+        const { excelMode, readOnly } = this.params;
         if (e.key === KeyCode.ENTER && !excelMode && !readOnly) {
-            this.filterOnAllVisibleValues();
+            this.updateUiAfterMiniFilterChange(true, 'immediately');
         }
     }
 
-    private filterOnAllVisibleValues(applyImmediately = true): void {
-        this.valueModel.selectAllMatchingMiniFilter(true);
-        this.checkAndRefreshVirtualList();
-        this.onUiChanged(false, applyImmediately ? 'immediately' : 'debounce');
-        this.showOrHideResults();
-    }
-
-    private focusRowIfAlive(rowIndex: number | null): void {
+    private focusRowIfAlive(rowIndex: number | null): Promise<void> {
         if (rowIndex == null) {
-            return;
+            return Promise.resolve();
         }
 
-        window.setTimeout(() => {
-            if (this.isAlive()) {
-                this.virtualList.focusRow(rowIndex);
-            }
-        }, 0);
+        return new Promise((res) => {
+            window.setTimeout(() => {
+                if (this.isAlive()) {
+                    this.virtualList.focusRow(rowIndex);
+                }
+                res();
+            }, 0);
+        });
     }
 
     private onSelectAll(isSelected: boolean): void {
         if (isSelected) {
-            this.valueModel.selectAllMatchingMiniFilter();
+            this.selectAllMatchingMiniFilter();
         } else {
-            this.valueModel.deselectAllMatchingMiniFilter();
+            this.deselectAllMatchingMiniFilter();
         }
 
         this.refreshAfterSelection();
     }
 
-    private onGroupItemSelected(item: SetFilterModelTreeItem, isSelected: boolean): void {
-        const recursiveGroupSelection = (i: SetFilterModelTreeItem) => {
-            if (i.children) {
-                i.children.forEach((childItem) => recursiveGroupSelection(childItem));
-            } else {
-                this.selectItem(i.key!, isSelected);
+    /** A row acts for every key it stands for: its own, and its descendants' where it is a group. */
+    private onTreeItemSelected(item: SetFilterModelTreeItem, isSelected: boolean): void {
+        const recursiveSelection = (i: SetFilterModelTreeItem) => {
+            if (!i.filterPasses) {
+                return;
+            }
+            const keys = i.keys ?? NO_SET_FILTER_KEYS;
+            for (let k = 0, len = keys.length; k < len; ++k) {
+                this.setKeySelected(keys[k], isSelected);
+            }
+            const children = i.children;
+            if (children) {
+                for (const childItem of children.values()) {
+                    recursiveSelection(childItem);
+                }
             }
         };
 
-        recursiveGroupSelection(item);
+        recursiveSelection(item);
 
         this.refreshAfterSelection();
     }
 
     private onItemSelected(key: string | null, isSelected: boolean): void {
-        this.selectItem(key, isSelected);
+        this.setKeySelected(key, isSelected);
 
         this.refreshAfterSelection();
-    }
-
-    private selectItem(key: string | null, isSelected: boolean): void {
-        if (isSelected) {
-            this.valueModel.selectKey(key);
-        } else {
-            this.valueModel.deselectKey(key);
-        }
     }
 
     private onExpandAll(item: SetFilterModelTreeItem, isExpanded: boolean): void {
         const recursiveExpansion = (i: SetFilterModelTreeItem) => {
             if (i.filterPasses && i.available && i.children) {
-                i.children.forEach((childItem) => recursiveExpansion(childItem));
+                for (const childItem of i.children.values()) {
+                    recursiveExpansion(childItem);
+                }
                 i.expanded = isExpanded;
             }
         };
@@ -1114,7 +827,7 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
     private refreshAfterExpansion(): void {
         const focusedRow = this.virtualList.getLastFocusedRow();
 
-        this.valueModel.updateDisplayedValues('expansion');
+        this.updateDisplayedValues('expansion');
 
         this.checkAndRefreshVirtualList();
         this.focusRowIfAlive(focusedRow);
@@ -1128,13 +841,44 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         this.focusRowIfAlive(focusedRow);
     }
 
-    public setMiniFilter(newMiniFilter: string | null): void {
-        this.eMiniFilter.setValue(newMiniFilter);
-        this.onMiniFilterInput();
+    public setMiniFilter(newMiniFilter: string | null, silent?: boolean): void {
+        this.eMiniFilter.setValue(newMiniFilter, silent);
+        this.onMiniFilterInput(false, silent);
+    }
+
+    /** Sets mini filter value. Returns true if it changed from last value, otherwise false. */
+    private doSetMiniFilter(value: string | null | undefined): boolean {
+        value = _makeNull(value);
+
+        if (this.miniFilterText === value) {
+            //do nothing if filter has not changed
+            return false;
+        }
+
+        if (value === null) {
+            // Reset 'Add current selection to filter' checkbox when clearing mini filter
+            this.addCurrentSelectionToFilter = false;
+        }
+
+        this.miniFilterText = value;
+        this.updateDisplayedValues('miniFilter');
+
+        return true;
     }
 
     public getMiniFilter(): string | null {
-        return this.valueModel.getMiniFilter();
+        return this.miniFilterText;
+    }
+
+    protected override getUiChangeEventParams(): any {
+        return {
+            miniFilterValue: this.miniFilterText,
+        };
+    }
+
+    protected override getState(): any {
+        const miniFilterValue = this.miniFilterText;
+        return miniFilterValue ? { miniFilterValue } : undefined;
     }
 
     private checkAndRefreshVirtualList() {
@@ -1145,49 +889,47 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         }
     }
 
+    /**
+     * @deprecated v34 Use the same method on the filter handler (`api.getColumnFilterHandler()`) instead.
+     */
     public getFilterKeys(): SetFilterModelValue {
-        return this.valueModel.getKeys();
+        this.beans.log.warn(283);
+        return this.handler.getFilterKeys();
     }
 
+    /**
+     * @deprecated v34 Use the same method on the filter handler (`api.getColumnFilterHandler()`) instead.
+     */
     public getFilterValues(): (V | null)[] {
-        return this.valueModel.getValues();
+        this.beans.log.warn(283);
+        return this.handler.getFilterValues();
     }
 
-    public getValues(): SetFilterModelValue {
-        return this.getFilterKeys();
-    }
-
-    public refreshVirtualList(): void {
-        if (this.setFilterParams.refreshValuesOnOpen) {
-            this.refreshFilterValues();
+    private refreshVirtualList(): void {
+        if (this.params.refreshValuesOnOpen) {
+            this.doRefreshFilterValues();
         } else {
             this.checkAndRefreshVirtualList();
         }
     }
 
-    private translateForSetFilter(key: keyof ISetFilterLocaleText): string {
-        const translate = this.getLocaleTextFunc();
-
-        return translate(key, DEFAULT_LOCALE_TEXT[key]);
-    }
-
     private isSelectAllSelected(): boolean | undefined {
-        if (!this.setFilterParams.defaultToNothingSelected) {
+        if (!this.params.defaultToNothingSelected) {
             // everything selected by default
-            if (this.valueModel.hasSelections() && this.valueModel.isNothingVisibleSelected()) {
+            if (this.hasSelections() && this.isNothingVisibleSelected()) {
                 return false;
             }
 
-            if (this.valueModel.isEverythingVisibleSelected()) {
+            if (this.isEverythingVisibleSelected()) {
                 return true;
             }
         } else {
             // nothing selected by default
-            if (this.valueModel.hasSelections() && this.valueModel.isEverythingVisibleSelected()) {
+            if (this.hasSelections() && this.isEverythingVisibleSelected()) {
                 return true;
             }
 
-            if (this.valueModel.isNothingVisibleSelected()) {
+            if (this.isNothingVisibleSelected()) {
                 return false;
             }
         }
@@ -1195,86 +937,267 @@ export class SetFilter<V = string> extends ProvidedFilter<SetFilterModel, V> imp
         return undefined;
     }
 
-    private areAllChildrenSelected(item: SetFilterModelTreeItem): boolean | undefined {
-        const recursiveChildSelectionCheck = (i: SetFilterModelTreeItem): boolean | undefined => {
-            if (i.children) {
-                let someTrue = false;
-                let someFalse = false;
-                const mixed = i.children.some((child) => {
+    /** `undefined` where the keys a row stands for disagree, which a model naming only some of them can do. */
+    private isTreeItemSelected(item: SetFilterModelTreeItem): boolean | undefined {
+        const recursiveSelectionCheck = (i: SetFilterModelTreeItem): boolean | undefined => {
+            let someTrue = false;
+            let someFalse = false;
+            const keys = i.keys ?? NO_SET_FILTER_KEYS;
+            for (let k = 0, len = keys.length; k < len; ++k) {
+                if (this.selectedKeys.has(keys[k])) {
+                    someTrue = true;
+                } else {
+                    someFalse = true;
+                }
+            }
+            const children = i.children;
+            if (children) {
+                for (const child of children.values()) {
                     if (!child.filterPasses || !child.available) {
-                        return false;
+                        continue;
                     }
-                    const childSelected = recursiveChildSelectionCheck(child);
+                    const childSelected = recursiveSelectionCheck(child);
                     if (childSelected === undefined) {
-                        return true;
+                        return undefined;
                     }
                     if (childSelected) {
                         someTrue = true;
                     } else {
                         someFalse = true;
                     }
-                    return someTrue && someFalse;
-                });
-                // returning `undefined` means the checkbox status is indeterminate.
-                // if not mixed and some true, all must be true
-                return mixed ? undefined : someTrue;
-            } else {
-                return this.valueModel.isKeySelected(i.key!);
+                }
             }
+            return someTrue && someFalse ? undefined : someTrue;
         };
 
-        if (!this.setFilterParams!.defaultToNothingSelected) {
+        if (!this.params.defaultToNothingSelected) {
             // everything selected by default
-            return recursiveChildSelectionCheck(item);
+            return recursiveSelectionCheck(item);
         } else {
             // nothing selected by default
-            return this.valueModel.hasSelections() && recursiveChildSelectionCheck(item);
+            return this.hasSelections() && recursiveSelectionCheck(item);
         }
-    }
-
-    public override destroy(): void {
-        (this.virtualList as any) = this.destroyBean(this.virtualList);
-
-        super.destroy();
-    }
-
-    private caseFormat<T extends string | number | null>(valueToFormat: T): typeof valueToFormat {
-        if (valueToFormat == null || typeof valueToFormat !== 'string') {
-            return valueToFormat;
-        }
-        return this.caseSensitive ? valueToFormat : (valueToFormat.toUpperCase() as T);
     }
 
     private resetExpansion(): void {
-        if (!this.setFilterParams.treeList) {
+        if (!this.params.treeList) {
             return;
         }
 
-        const selectAllItem = this.valueModel.getSelectAllItem();
+        const selectAllItem = this.displayValueModel.getSelectAllItem();
 
         if (this.isSetFilterModelTreeItem(selectAllItem)) {
             const recursiveCollapse = (i: SetFilterModelTreeItem) => {
-                if (i.children) {
-                    i.children.forEach((childItem) => recursiveCollapse(childItem));
+                const children = i.children;
+                if (children) {
+                    for (const childItem of children.values()) {
+                        recursiveCollapse(childItem);
+                    }
                     i.expanded = false;
                 }
             };
             recursiveCollapse(selectAllItem);
-            this.valueModel.updateDisplayedValues('expansion');
+            this.updateDisplayedValues('expansion');
         }
     }
 
-    public getModelAsString(model: SetFilterModel): string {
-        return this.filterModelFormatter.getModelAsString(model, this);
+    public getModelAsString(model: SetFilterModel | null): string {
+        return this.handler.getModelAsString(model);
     }
 
     protected override getPositionableElement(): HTMLElement {
         return this.eSetFilterList;
     }
+
+    private updateDisplayedValues(
+        source: 'reload' | 'otherFilter' | 'miniFilter' | 'expansion',
+        allKeys?: (string | null)[]
+    ): void {
+        if (source === 'expansion') {
+            this.displayValueModel.refresh();
+            return;
+        }
+
+        const handler = this.handler;
+        const valueModel = handler.valueModel;
+
+        // if no filter, just display all available values
+        if (this.miniFilterText == null) {
+            this.displayValueModel.updateDisplayedValuesToAllAvailable(
+                (key: string | null) => valueModel.allValues.get(key) ?? null,
+                allKeys,
+                valueModel.availableKeys,
+                source
+            );
+            return;
+        }
+
+        // if filter present, we filter down the list
+        // to allow for case insensitive searches, upper-case both filter text and value
+        const formattedFilterText = handler.caseFormat(this.formatter(this.miniFilterText) || '');
+
+        const matchesFilter = (valueToCheck: string | null): boolean =>
+            valueToCheck != null && handler.caseFormat(valueToCheck).includes(formattedFilterText);
+
+        const nullMatchesFilter = !!this.params.excelMode && matchesFilter(translateForSetFilter(this, 'blanks'));
+
+        this.displayValueModel.updateDisplayedValuesToMatchMiniFilter(
+            (key: string | null) => valueModel.allValues.get(key) ?? null,
+            allKeys,
+            valueModel.availableKeys,
+            matchesFilter,
+            nullMatchesFilter,
+            source
+        );
+    }
+
+    private hasSelections(): boolean {
+        return this.params.defaultToNothingSelected
+            ? this.selectedKeys.size > 0
+            : this.handler.valueModel.allValues.size !== this.selectedKeys.size;
+    }
+
+    private isInWindowsExcelMode(): boolean {
+        return this.params.excelMode === 'windows';
+    }
+
+    private isAddCurrentSelectionToFilterChecked(): boolean {
+        return this.isInWindowsExcelMode() && this.addCurrentSelectionToFilter;
+    }
+
+    private showAddCurrentSelectionToFilter(): boolean {
+        // We only show the 'Add current selection to filter' option
+        // when excel mode is enabled with 'windows' mode
+        // and when the users types a value in the mini filter.
+        return this.isInWindowsExcelMode() && _exists(this.miniFilterText) && this.miniFilterText.length > 0;
+    }
+
+    private selectAllMatchingMiniFilter(clearExistingSelection = false): void {
+        if (this.miniFilterText == null) {
+            // ensure everything is selected
+            this.selectedKeys = new Set(this.handler.valueModel.allValues.keys());
+        } else {
+            // ensure everything that matches the mini filter is selected
+            if (clearExistingSelection) {
+                this.selectedKeys.clear();
+            }
+
+            this.displayValueModel.forEachDisplayedKey((key) => this.selectedKeys.add(key));
+        }
+    }
+
+    private deselectAllMatchingMiniFilter(): void {
+        if (this.miniFilterText == null) {
+            // ensure everything is deselected
+            this.selectedKeys.clear();
+        } else {
+            // ensure everything that matches the mini filter is deselected
+            this.displayValueModel.forEachDisplayedKey((key) => this.selectedKeys.delete(key));
+        }
+    }
+
+    private setKeySelected(key: string | null, selected: boolean): void {
+        if (selected) {
+            this.selectedKeys.add(key);
+        } else {
+            if (this.params.excelMode && this.isEverythingVisibleSelected()) {
+                // ensure we're starting from the correct "everything selected" state
+                this.resetSelectionState(this.displayValueModel.getDisplayedKeys());
+            }
+
+            this.selectedKeys.delete(key);
+        }
+    }
+
+    private isEverythingVisibleSelected(): boolean {
+        return !this.displayValueModel.someDisplayedKey((it) => !this.selectedKeys.has(it));
+    }
+
+    private isNothingVisibleSelected(): boolean {
+        return !this.displayValueModel.someDisplayedKey((it) => this.selectedKeys.has(it));
+    }
+
+    private getSelectedModel(): SetFilterModelValue | null {
+        if (!this.hasSelections()) {
+            return null;
+        }
+
+        // When excelMode = 'windows' and the user has ticked 'Add current selection to filter'
+        // the filtering keys can be different from the selected keys, and they should be included
+        // in the model.
+        const filteringKeys = this.isAddCurrentSelectionToFilterChecked() ? this.params.model?.values : undefined;
+
+        if (filteringKeys?.length) {
+            if (this.selectedKeys) {
+                // When existing filtering keys are present along with selected keys,
+                // we combine them and return the result.
+                // We use a set structure to avoid duplicates
+                const modelKeys = new Set<string | null>([...filteringKeys, ...this.selectedKeys]);
+                return Array.from(modelKeys);
+            }
+
+            return Array.from(filteringKeys);
+        }
+
+        // No extra filtering keys are present - so just return the selected keys
+        return Array.from(this.selectedKeys);
+    }
+
+    private setSelectedModel(model: SetFilterModelValue | null): AgPromise<void> {
+        const handler = this.handler;
+        const valueModel = handler.valueModel;
+        return valueModel.allKeys.then((keys) => {
+            if (model == null) {
+                this.resetSelectionState(keys ?? []);
+            } else {
+                // select all values from the model that exist in the filter
+                this.selectedKeys.clear();
+
+                const existingFormattedKeys: Map<string | null, string | null> = new Map();
+                valueModel.allValues.forEach((_value, key) => {
+                    existingFormattedKeys.set(handler.caseFormat(key), key);
+                });
+
+                model.forEach((unformattedKey) => {
+                    const formattedKey = handler.caseFormat(setFilterNullIfBlank(unformattedKey));
+                    const existingUnformattedKey = existingFormattedKeys.get(formattedKey);
+                    if (existingUnformattedKey !== undefined) {
+                        this.selectedKeys.add(existingUnformattedKey);
+                    }
+                });
+            }
+        });
+    }
+
+    private resetSelectionState(keys: (string | null)[]): void {
+        if (this.params.defaultToNothingSelected) {
+            this.selectedKeys.clear();
+        } else {
+            this.selectedKeys = new Set(keys);
+        }
+    }
+
+    public getFilterHandler(): ISetFilterHandler<V> {
+        return this.handler;
+    }
+
+    public override destroy(): void {
+        (this.virtualList as any) = this.destroyBean(this.virtualList);
+
+        for (const func of this.handlerDestroyFuncs ?? []) {
+            func();
+        }
+
+        (this.handler as any) = undefined;
+        (this.displayValueModel as any) = undefined;
+        this.selectedKeys.clear();
+
+        super.destroy();
+    }
 }
 
 class ModelWrapper<V> implements VirtualListModel {
-    constructor(private readonly model: SetValueModel<V>) {}
+    constructor(private readonly model: ISetDisplayValueModel<V>) {}
 
     public getRowCount(): number {
         return this.model.getDisplayedValueCount();
@@ -1291,12 +1214,12 @@ class ModelWrapper<V> implements VirtualListModel {
 
 class ModelWrapperWithSelectAll<V> implements VirtualListModel {
     constructor(
-        private readonly model: SetValueModel<V>,
-        private readonly isSelectAllSelected: () => boolean | undefined
+        private readonly model: ISetDisplayValueModel<V>,
+        private readonly showAddCurrentSelectionToFilter: () => boolean
     ) {}
 
     public getRowCount(): number {
-        const showAddCurrentSelectionToFilter = this.model.showAddCurrentSelectionToFilter();
+        const showAddCurrentSelectionToFilter = this.showAddCurrentSelectionToFilter();
         const outboundItems = showAddCurrentSelectionToFilter ? 2 : 1;
         return this.model.getDisplayedValueCount() + outboundItems;
     }
@@ -1306,7 +1229,7 @@ class ModelWrapperWithSelectAll<V> implements VirtualListModel {
             return this.model.getSelectAllItem() as any;
         }
 
-        const showAddCurrentSelectionToFilter = this.model.showAddCurrentSelectionToFilter();
+        const showAddCurrentSelectionToFilter = this.showAddCurrentSelectionToFilter();
         const outboundItems = showAddCurrentSelectionToFilter ? 2 : 1;
         if (index === 1 && showAddCurrentSelectionToFilter) {
             return this.model.getAddSelectionToFilterItem() as any;
@@ -1336,6 +1259,6 @@ class TreeModelWrapper implements VirtualListModel {
         if (oldRow == null && newRow == null) {
             return true;
         }
-        return oldRow != null && newRow != null && oldRow.treeKey === newRow.treeKey && oldRow.depth === newRow.depth;
+        return oldRow?.treeKey === newRow?.treeKey && oldRow?.depth === newRow?.depth;
     }
 }

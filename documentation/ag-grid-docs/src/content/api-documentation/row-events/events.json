@@ -1,7 +1,6 @@
 {
     "_config_": {
-        "codeSrc": "row-node.AUTO.json",
-        "suppressMissingPropCheck": true
+        "codeSrc": "row-node.AUTO.json"
     },
     "rowNodeEvents": {
         "meta": {
@@ -13,6 +12,24 @@
             "type": {
                 "arguments": {
                     "event": "RowNodeSelectedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "selectableChanged": {
+            "description": "Row selectable value has changed.",
+            "type": {
+                "arguments": {
+                    "event": "SelectableChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "displayedChanged": {
+            "description": "Row is now, or is no longer, displayed.",
+            "type": {
+                "arguments": {
+                    "event": "DisplayedChangedEvent"
                 },
                 "returnType": "void"
             }
@@ -53,6 +70,15 @@
                 "returnType": "void"
             }
         },
+        "masterChanged": {
+            "description": "Row `master` value has changed.",
+            "type": {
+                "arguments": {
+                    "event": "MasterChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
         "heightChanged": {
             "description": "`rowHeight` has changed.",
             "type": {
@@ -80,11 +106,29 @@
                 "returnType": "void"
             }
         },
+        "groupChanged": {
+            "description": "Row `group` value has changed.",
+            "type": {
+                "arguments": {
+                    "event": "GroupChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
         "expandedChanged": {
             "description": "`expanded` has changed.",
             "type": {
                 "arguments": {
                     "event": "ExpandedChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "hasChildrenChanged": {
+            "description": "Row `hasChildren` value has changed.",
+            "type": {
+                "arguments": {
+                    "event": "HasChildrenChangedEvent"
                 },
                 "returnType": "void"
             }
@@ -103,6 +147,33 @@
             "type": {
                 "arguments": {
                     "event": "UiLevelChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "rowPinned": {
+            "description": "Row has been pinned to the top or bottom by the user",
+            "type": {
+                "arguments": {
+                    "event": "RowNodePinnedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "rowHighlightChanged": {
+            "description": "Row highlight value has changed (e.g. during drag and drop).",
+            "type": {
+                "arguments": {
+                    "event": "RowHighlightChangedEvent"
+                },
+                "returnType": "void"
+            }
+        },
+        "draggingChanged": {
+            "description": "Row `dragging` value has changed.",
+            "type": {
+                "arguments": {
+                    "event": "DraggingChangedEvent"
                 },
                 "returnType": "void"
             }

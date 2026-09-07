@@ -7,6 +7,8 @@ interface Props {
     isOpen: boolean;
     animationDuration?: number;
     children: ReactElement;
+    ariaHidden?: boolean;
+    onAnimationEnd?: () => void;
 }
 
 export const Collapsible: FunctionComponent<Props> = ({
@@ -15,6 +17,8 @@ export const Collapsible: FunctionComponent<Props> = ({
     isOpen,
     animationDuration = 330,
     children,
+    ariaHidden,
+    onAnimationEnd,
 }) => {
     if (isDisabled) {
         return children;
@@ -26,6 +30,7 @@ export const Collapsible: FunctionComponent<Props> = ({
 
     const onEnd = () => {
         document.body.classList.remove('no-overflow-anchor');
+        onAnimationEnd?.();
     };
 
     const height = isOpen ? 'auto' : 0;
@@ -37,6 +42,7 @@ export const Collapsible: FunctionComponent<Props> = ({
             height={height}
             onHeightAnimationStart={onStart}
             onHeightAnimationEnd={onEnd}
+            aria-hidden={ariaHidden}
         >
             {children}
         </AnimateHeight>

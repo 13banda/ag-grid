@@ -10,13 +10,28 @@ interface Params {
 
 export const agChartsVersion = 'latest'; // TODO have this set properly
 
+// Versions are constant for the lifetime of a generation run, but getPackageJson is called once per
+// framework per example - without this cache that is ~36k redundant reads and parses of six files.
+const versionCache = new Map<string, string>();
+
 function getPackageJsonVersion(packageName: string, isModule: boolean = false) {
     const path = isModule
         ? `${process.cwd()}/community-modules/${packageName}/package.json`
         : `${process.cwd()}/packages/${packageName}/package.json`;
+
+    const cached = versionCache.get(path);
+    if (cached !== undefined) {
+        return cached;
+    }
+
     const packageJsonStr = readFileSync(path, 'utf-8');
     const packageJson = JSON.parse(packageJsonStr);
-    return packageJson.version;
+    // Strip pre-release suffix (e.g. "35.1.0-beta.20260218.1143" → "35.1.0")
+    // This enables Plunker to locate types via the dummy package.json.
+    // These have to be published externally.
+    const version = (packageJson.version as string).replace(/-.*$/, '');
+    versionCache.set(path, version);
+    return version;
 }
 
 export function getPackageJson({ isLocale, internalFramework, isIntegratedCharts }: Params) {
@@ -35,6 +50,9 @@ export function getPackageJson({ isLocale, internalFramework, isIntegratedCharts
     const packageJson = {
         name: `ag-grid-example`,
         dependencies: {},
+        devDependencies: {
+            '@types/node': '^22',
+        },
     };
 
     const addDependency = (name, version) => {
@@ -42,10 +60,10 @@ export function getPackageJson({ isLocale, internalFramework, isIntegratedCharts
     };
 
     if (internalFramework === 'angular') {
-        addDependency('@angular/core', '^17');
-        addDependency('@angular/common', '^17');
-        addDependency('@angular/forms', '^17');
-        addDependency('@angular/platform-browser', '^17');
+        addDependency('@angular/core', '20.0.0');
+        addDependency('@angular/common', '20.0.0');
+        addDependency('@angular/forms', '20.0.0');
+        addDependency('@angular/platform-browser', '20.0.0');
     }
 
     if (internalFramework === 'vue3') {
@@ -57,11 +75,11 @@ export function getPackageJson({ isLocale, internalFramework, isIntegratedCharts
     }
 
     if (isFrameworkReact()) {
-        addDependency('react', '18');
-        addDependency('react-dom', '18');
+        addDependency('react', '19.2.1');
+        addDependency('react-dom', '19.2.1');
 
-        addDependency('@types/react', '18');
-        addDependency('@types/react-dom', '18');
+        addDependency('@types/react', '19.2.1');
+        addDependency('@types/react-dom', '19.2.1');
     }
 
     const agGridVersion = getPackageJsonVersion('ag-grid-community');

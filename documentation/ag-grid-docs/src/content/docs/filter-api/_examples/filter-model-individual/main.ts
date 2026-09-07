@@ -11,8 +11,8 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -21,6 +21,11 @@ import {
     FiltersToolPanelModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -31,7 +36,6 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     TextFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const filterParams: IDateFilterParams = {

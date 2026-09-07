@@ -4,8 +4,8 @@ import {
     ClientSideRowModelModule,
     ICellRendererParams,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule } from 'ag-grid-enterprise';
 
@@ -13,13 +13,17 @@ import { CountryCellRenderer } from './countryCellRenderer_typescript';
 import { createBase64FlagsFromResponse } from './imageUtils';
 import type { FlagContext } from './interfaces';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     CellStyleModule,
     ClientSideRowModelModule,
     ExcelExportModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const countryCodes: any = {};

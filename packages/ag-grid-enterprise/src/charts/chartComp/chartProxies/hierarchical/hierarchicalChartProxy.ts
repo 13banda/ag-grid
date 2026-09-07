@@ -2,7 +2,8 @@ import type { AgChartThemeOverrides, AgHierarchyChartOptions, AgHierarchySeriesO
 
 import { GROUP_AUTO_COLUMN_ID } from 'ag-grid-community';
 
-import type { ChartProxyParams, FieldDefinition, UpdateParams } from '../chartProxy';
+import type { ChartValueWrapper } from '../../datasource/chartDatasource';
+import type { FieldDefinition, UpdateParams } from '../chartProxy';
 import { ChartProxy } from '../chartProxy';
 import { CATEGORY_LABEL_KEY, createAutoGroupHierarchy, createCategoryHierarchy } from './hierarchicalChartUtils';
 
@@ -10,10 +11,6 @@ export class HierarchicalChartProxy<TSeries extends 'sunburst' | 'treemap'> exte
     AgHierarchyChartOptions,
     TSeries
 > {
-    constructor(chartProxyParams: ChartProxyParams) {
-        super(chartProxyParams);
-    }
-
     protected override getUpdateOptions(
         params: UpdateParams,
         commonChartOptions: AgHierarchyChartOptions
@@ -34,6 +31,7 @@ export class HierarchicalChartProxy<TSeries extends 'sunburst' | 'treemap'> exte
                 gradient: {
                     preferredLength: 200,
                 },
+                position: 'right',
             },
         };
     }
@@ -41,7 +39,7 @@ export class HierarchicalChartProxy<TSeries extends 'sunburst' | 'treemap'> exte
     private getSeries(sizeField?: FieldDefinition, colorField?: FieldDefinition): AgHierarchySeriesOptions[] {
         return [
             {
-                type: this.standaloneChartType as AgHierarchySeriesOptions['type'],
+                type: this.standaloneChartType,
                 labelKey: CATEGORY_LABEL_KEY,
                 // Size and color fields are inferred from the range data
                 sizeKey: sizeField?.colId,
@@ -64,7 +62,10 @@ export class HierarchicalChartProxy<TSeries extends 'sunburst' | 'treemap'> exte
                       }) ?? []
                   )
                 : data;
-            return createAutoGroupHierarchy(processedData, (item) => item[GROUP_AUTO_COLUMN_ID]?.labels ?? null);
+            return createAutoGroupHierarchy(
+                processedData,
+                (item) => (item[GROUP_AUTO_COLUMN_ID] as ChartValueWrapper<string[]> | undefined)?.value ?? null
+            );
         } else {
             const categoryKeys = categories.map(({ id }) => id);
             return createCategoryHierarchy(data, categoryKeys);
