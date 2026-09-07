@@ -380,7 +380,7 @@
             }
         }
 
-        &:not(:disabled):active {
+        &:active {
             border-color: var(--ag-active-color);
         }
 
