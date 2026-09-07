@@ -10,15 +10,25 @@ export interface GeneratedContents {
     files: FileContents;
     entryFileName: string;
     mainFileName: string;
+    sourceFileList: string[];
     scriptFiles: string[];
     styleFiles: string[];
     isEnterprise: boolean;
-    isLocale: boolean;
-    isIntegratedCharts: boolean;
+    isLocale?: boolean;
+    isIntegratedCharts?: boolean;
+    hasExampleConsoleLog?: boolean;
+    hasSimpleHtml?: boolean;
+    scriptNonce?: string;
     boilerPlateFiles: FileContents;
     packageJson: Record<string, string>;
     extras?: string[];
     supportedFrameworks?: InternalFramework[];
+    excluded?: boolean;
+}
+
+// Make sure to update the Nx plugin copy of this interface when making changes.
+export interface ExampleSubstitutions {
+    '${baseWWWUrl}': string;
 }
 
 export type InternalFramework = 'vanilla' | 'typescript' | 'reactFunctional' | 'reactFunctionalTs' | 'angular' | 'vue3';

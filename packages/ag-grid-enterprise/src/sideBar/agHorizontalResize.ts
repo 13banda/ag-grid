@@ -8,7 +8,7 @@ export class AgHorizontalResize extends Component {
     public maxWidth: number | null = null;
 
     constructor() {
-        super(/* html */ `<div class="ag-tool-panel-horizontal-resize"></div>`);
+        super({ tag: 'div', cls: 'ag-tool-panel-horizontal-resize' });
     }
 
     public postConstruct(): void {
@@ -49,7 +49,7 @@ export class AgHorizontalResize extends Component {
         if (this.maxWidth != null) {
             newWidth = Math.min(this.maxWidth, newWidth);
         }
-        this.elementToResize.style.width = `${newWidth}px`;
+        this.elementToResize.style.setProperty('--ag-horizontal-size', `${newWidth}px`);
         this.dispatchResizeEvent(false, isEnd, newWidth);
     }
 }

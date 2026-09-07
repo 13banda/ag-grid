@@ -1,0 +1,61 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.1
+ignore:
+  SNYK-JS-AJV-15274295:
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > ajv@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+    - '@angular/build@* > @angular-devkit/architect@* > @angular-devkit/core@* > ajv-formats@* > ajv@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+    - '@angular/cli@* > @angular-devkit/architect@* > @angular-devkit/core@* > ajv-formats@* > ajv@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-EXPRESSRATELIMIT-15440710:
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > express-rate-limit@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-ISAACSBRACEEXPANSION-15208653:
+    - '@angular/cli@* > pacote@* > sigstore@* > @sigstore/tuf@* > tuf-js@* > @tufjs/models@* > minimatch@* > @isaacs/brace-expansion@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-MINIMATCH-15309438:
+    - '@angular/cli@* > pacote@* > sigstore@* > @sigstore/tuf@* > tuf-js@* > @tufjs/models@* > minimatch@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-MINIMATCH-15353387:
+    - '@angular/cli@* > pacote@* > sigstore@* > @sigstore/tuf@* > tuf-js@* > @tufjs/models@* > minimatch@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-MINIMATCH-15353389:
+    - '@angular/cli@* > pacote@* > sigstore@* > @sigstore/tuf@* > tuf-js@* > @tufjs/models@* > minimatch@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-PATHTOREGEXP-15789763:
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > express@* > router@* > path-to-regexp@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-PATHTOREGEXP-15789765:
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > express@* > router@* > path-to-regexp@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+  SNYK-JS-QS-15268416:
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > express@* > qs@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+    - '@angular/cli@* > @modelcontextprotocol/sdk@* > express@* > body-parser@* > qs@*':
+        reason: Angular build dependency - not included in final production build
+        expires: 2027-03-02T00:00:00.000Z
+        created: 2026-05-28T00:00:00.000Z
+patch: {}

@@ -10,11 +10,21 @@ type Params = Record<string, string>;
 function cleanParams(params: Params) {
     return Object.fromEntries(
         Object.entries(params).map(([key, value]) => {
-            let cleanParam = value;
+            let cleanParam: unknown = value;
 
-            // Clean up serialised strings
-            if (cleanParam.startsWith('"') && cleanParam.endsWith('"')) {
-                cleanParam = cleanParam.slice(1, cleanParam.length - 1).replaceAll('\\"', '"');
+            if (value.startsWith('[') || value.startsWith('{')) {
+                // Reconstruct arrays/objects that were serialised as JSON (see stringifyValue)
+                try {
+                    cleanParam = JSON.parse(value);
+                } catch {
+                    cleanParam = value;
+                }
+            } else if (value.startsWith('"') && value.endsWith('"')) {
+                // Clean up serialised strings
+                cleanParam = value.slice(1, value.length - 1).replaceAll('\\"', '"');
+            } else if (value === 'false') {
+                // Ensure false is correctly handled as a boolean
+                cleanParam = false;
             }
 
             return [key, cleanParam];
@@ -33,7 +43,7 @@ export function getErrorText({ errorCode, params = {} }: { errorCode: ErrorId; p
         const textOutputArray = typeof textOutput === 'string' ? [textOutput] : textOutput;
 
         return textOutputArray.filter(Boolean).join('\n');
-    } catch (_) {
+    } catch {
         // The `errorTextFn` can fail if the function requires params, that
         // don't exist during static render. Just return nothing in these cases
         return '';

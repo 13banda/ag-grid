@@ -6,12 +6,15 @@ import type {
     AgCartesianSeriesOptions,
     AgChartTheme,
     AgChartThemeName,
+    AgChartThemeOverrides,
     AgLineSeriesOptions,
     AgRangeBarSeriesThemeableOptions,
 } from 'ag-charts-types';
+import { _parseDateTimeFromString } from 'ag-stack';
 
-import type { ChartProxyParams, UpdateParams } from '../chartProxy';
+import type { UpdateParams } from '../chartProxy';
 import { ChartProxy } from '../chartProxy';
+import { getSeriesHighlight } from '../chartTheme';
 
 export abstract class CartesianChartProxy<
     TSeries extends
@@ -28,15 +31,12 @@ export abstract class CartesianChartProxy<
 > extends ChartProxy<AgCartesianChartOptions, TSeries> {
     protected crossFilteringAllPoints = new Set<string>();
     protected crossFilteringSelectedPoints: string[] = [];
-
-    protected constructor(params: ChartProxyParams) {
-        super(params);
-    }
+    protected isSingleSeries: boolean = false;
 
     protected abstract getAxes(
         params: UpdateParams,
         commonChartOptions: AgCartesianChartOptions
-    ): AgCartesianAxisOptions[];
+    ): Record<string, AgCartesianAxisOptions>;
     protected abstract getSeries(params: UpdateParams): AgCartesianSeriesOptions[];
 
     protected getUpdateOptions(
@@ -53,23 +53,22 @@ export abstract class CartesianChartProxy<
         };
     }
 
-    protected getData(params: UpdateParams, axes: AgCartesianAxisOptions[]): any[] {
+    protected getData(params: UpdateParams, axes: Record<string, AgCartesianAxisOptions>): any[] {
         const supportsCrossFiltering = ['area', 'line'].includes(this.standaloneChartType);
         return this.crossFiltering && supportsCrossFiltering
             ? this.getCrossFilterData(params)
             : this.getDataTransformedData(params, axes);
     }
 
-    private getDataTransformedData(params: UpdateParams, axes: AgCartesianAxisOptions[]) {
-        // assumed that the first axis is always the "category" axis
-        const xAxisType = axes[0].type;
+    private getDataTransformedData(params: UpdateParams, axes: Record<string, AgCartesianAxisOptions>) {
+        const xAxisType = axes.x.type;
         const { categories, data } = params;
         const [category] = categories;
         switch (xAxisType) {
             case 'category':
                 return this.transformCategoryData(data, category.id);
             case 'time':
-                return this.transformTimeData(data, category.id);
+                return this.transformTimeData(data, category.id, category.convertTime);
             default:
                 return data;
         }
@@ -105,7 +104,11 @@ export abstract class CartesianChartProxy<
         return isInstance(testDatum[category.id]);
     }
 
-    private transformTimeData(data: any[], categoryKey: string): any[] {
+    private transformTimeData(
+        data: any[],
+        categoryKey: string,
+        convertTime?: (date: string | undefined) => Date | undefined
+    ): any[] {
         const firstValue = data[0]?.[categoryKey];
         if (firstValue instanceof Date) {
             return data;
@@ -116,7 +119,7 @@ export abstract class CartesianChartProxy<
             return typeof value === 'string'
                 ? {
                       ...datum,
-                      [categoryKey]: new Date(value),
+                      [categoryKey]: convertTime ? convertTime(value) : _parseDateTimeFromString(value),
                   }
                 : datum;
         });
@@ -153,10 +156,10 @@ export abstract class CartesianChartProxy<
         };
 
         return series.map((s) => {
-            s.yKey = getYKey(s.yKey!);
+            s.yKey = getYKey(s.yKey);
             s.listeners = {
-                nodeClick: (e: any) => {
-                    const value = e.datum![s.xKey!];
+                seriesNodeClick: (e: any) => {
+                    const value = e.datum![s.xKey];
                     const multiSelection = e.event.metaKey || e.event.ctrlKey;
                     this.crossFilteringAddSelectedPoint(multiSelection, value);
                     this.crossFilterCallback(e);
@@ -165,9 +168,10 @@ export abstract class CartesianChartProxy<
             s.marker = {
                 itemStyler: (p) => {
                     const value = p.datum[category.id];
+                    const highlighted = p.highlightState === 'highlighted-item';
                     return {
-                        fill: p.highlighted ? 'yellow' : p.fill,
-                        size: p.highlighted ? 14 : this.crossFilteringPointSelected(value) ? 8 : 0,
+                        fill: highlighted ? 'yellow' : p.fill,
+                        size: highlighted ? 14 : this.crossFilteringPointSelected(value) ? 8 : 0,
                     };
                 },
             };
@@ -206,7 +210,11 @@ export abstract class CartesianChartProxy<
     }
 
     private crossFilteringAddSelectedPoint(multiSelection: boolean, value: string): void {
-        multiSelection ? this.crossFilteringSelectedPoints.push(value) : (this.crossFilteringSelectedPoints = [value]);
+        if (multiSelection) {
+            this.crossFilteringSelectedPoints.push(value);
+        } else {
+            this.crossFilteringSelectedPoints = [value];
+        }
     }
 
     protected isHorizontal(commonChartOptions: AgCartesianChartOptions): boolean {
@@ -228,5 +236,13 @@ export abstract class CartesianChartProxy<
             return false;
         };
         return isHorizontal(theme);
+    }
+
+    protected override getSeriesChartThemeDefaults(): AgChartThemeOverrides[TSeries] {
+        return {
+            series: {
+                highlight: getSeriesHighlight(this.crossFiltering, this.isSingleSeries),
+            },
+        };
     }
 }

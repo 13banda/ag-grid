@@ -37,6 +37,14 @@
 }
 
 .pageSections article {
+    > h2,
+    > h3,
+    > h3 {
+        display: flex;
+        align-items: center;
+        gap: $spacing-size-2;
+    }
+
     > h2 {
         margin-top: $spacing-size-12;
     }
@@ -57,7 +65,8 @@
     > ol,
     > table {
         font-size: var(--text-fs-base);
-        line-height: var(--text-lh-xs);
+        // Set as integer px value to fix fractional y position examples border issues
+        line-height: 27px;
     }
 }
 
@@ -186,10 +195,11 @@ blockquote:where(:not(:last-child)) {
     font-size: var(--text-fs-lg);
     margin-bottom: $spacing-size-8;
     color: var(--color-text-secondary);
-    line-height: var(--text-lh-sm);
+    line-height: var(--text-lh-lg);
 
     :global(code) {
-        font-size: 0.8em;
+        font-size: var(--text-fs-base);
+        line-height: var(--text-lh-base);
     }
 }
 
@@ -200,4 +210,25 @@ blockquote:where(:not(:last-child)) {
 
 .sideMenu {
     padding-top: $spacing-size-8 + $spacing-size-1;
+}
+
+:global(#errorCodeText) {
+    white-space: pre-wrap;
+}
+
+:global(.missing-params-message) {
+    display: none;
+}
+
+.docsArchiveContainer {
+    width: 100%;
+
+    @media screen and (min-width: $breakpoint-docs-nav-medium) {
+        width: calc(var(--layout-width-9-12));
+        padding-top: $spacing-size-10;
+    }
+
+    @media screen and (min-width: $breakpoint-docs-nav-large) {
+        width: calc(var(--layout-width-9-12) + $spacing-size-16);
+    }
 }

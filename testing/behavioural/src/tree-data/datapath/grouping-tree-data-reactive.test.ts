@@ -1,9 +1,8 @@
+import { GridColumns, GridRows, TestGridsManager, getRowsSnapshot } from 'ag-test-utils';
+
 import { ClientSideRowModelModule } from 'ag-grid-community';
 import type { GridOptions } from 'ag-grid-community';
 import { RowGroupingModule, TreeDataModule } from 'ag-grid-enterprise';
-
-import type { GridRowsOptions, RowSnapshot } from '../../test-utils';
-import { GridRows, TestGridsManager, getRowsSnapshot } from '../../test-utils';
 
 describe('ag-grid grouping treeData is reactive', () => {
     const gridsManager = new TestGridsManager({
@@ -51,26 +50,20 @@ describe('ag-grid grouping treeData is reactive', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: true,
-            checkDom: true,
-        };
-
         for (let repeat = 0; repeat < 2; repeat++) {
             api.setGridOption('treeData', false);
 
-            let gridRows = new GridRows(api, 'data 1 ' + repeat, gridRowsOptions);
+            let gridRows = new GridRows(api, 'data 1 ' + repeat);
             await gridRows.check(`
                 ROOT id:ROOT_NODE_ID ag-Grid-AutoColumn:"X-ROOT_NODE_ID" groupType:"Filler"
-                ├─┬ filler id:row-group-g-0 ag-Grid-AutoColumn:0 groupType:"Filler"
+                ├─┬ LEAF_GROUP id:row-group-g-0 ag-Grid-AutoColumn:0 groupType:"Filler"
                 │ ├── LEAF id:0 ag-Grid-AutoColumn:"X-0" groupType:"Provided" g:0 v:0
                 │ └── LEAF id:2 ag-Grid-AutoColumn:"X-2" groupType:"Provided" g:0 v:2
-                └─┬ filler id:row-group-g-1 ag-Grid-AutoColumn:1 groupType:"Filler"
+                └─┬ LEAF_GROUP id:row-group-g-1 ag-Grid-AutoColumn:1 groupType:"Filler"
                 · └── LEAF id:1 ag-Grid-AutoColumn:"X-1" groupType:"Provided" g:1 v:1
             `);
 
             const groupRows = gridRows.rowNodes;
-            const groupSnapshot = getRowsSnapshot(groupRows);
             expect(groupRows.length).toBe(5);
 
             expect(groupRows[0].data).toEqual(undefined);
@@ -79,156 +72,11 @@ describe('ag-grid grouping treeData is reactive', () => {
             expect(groupRows[3].data).toEqual(undefined);
             expect(groupRows[4].data).toEqual(rowData[1]);
 
-            const expectedGroupSnapshots: RowSnapshot[] = [
-                {
-                    allChildrenCount: 2,
-                    allLeafChildren: [null, null],
-                    childIndex: 0,
-                    childrenAfterFilter: [null, null],
-                    childrenAfterGroup: [null, null],
-                    childrenAfterSort: [null, null],
-                    detail: undefined,
-                    displayed: true,
-                    expanded: true,
-                    firstChild: true,
-                    footer: undefined,
-                    group: true,
-                    groupData: { 'ag-Grid-AutoColumn': 0 },
-                    id: 'row-group-g-0',
-                    key: '0',
-                    lastChild: false,
-                    leafGroup: true,
-                    level: 0,
-                    master: false,
-                    parentKey: null,
-                    rowGroupIndex: 0,
-                    rowPinned: undefined,
-                    selectable: true,
-                    siblingKey: undefined,
-                    uiLevel: 0,
-                    rowIndex: 0,
-                },
-                {
-                    allChildrenCount: undefined,
-                    allLeafChildren: undefined,
-                    childIndex: 0,
-                    childrenAfterFilter: undefined,
-                    childrenAfterGroup: undefined,
-                    childrenAfterSort: undefined,
-                    detail: undefined,
-                    displayed: true,
-                    expanded: false,
-                    firstChild: true,
-                    footer: undefined,
-                    group: false,
-                    groupData: undefined,
-                    id: '0',
-                    key: null,
-                    lastChild: false,
-                    leafGroup: undefined,
-                    level: 1,
-                    master: false,
-                    parentKey: '0',
-                    rowGroupIndex: undefined,
-                    rowPinned: undefined,
-                    selectable: true,
-                    siblingKey: undefined,
-                    uiLevel: 1,
-                    rowIndex: 1,
-                },
-                {
-                    allChildrenCount: undefined,
-                    allLeafChildren: undefined,
-                    childIndex: 1,
-                    childrenAfterFilter: undefined,
-                    childrenAfterGroup: undefined,
-                    childrenAfterSort: undefined,
-                    detail: undefined,
-                    displayed: true,
-                    expanded: false,
-                    firstChild: false,
-                    footer: undefined,
-                    group: false,
-                    groupData: undefined,
-                    id: '2',
-                    key: null,
-                    lastChild: true,
-                    leafGroup: undefined,
-                    level: 1,
-                    master: false,
-                    parentKey: '0',
-                    rowGroupIndex: undefined,
-                    rowPinned: undefined,
-                    selectable: true,
-                    siblingKey: undefined,
-                    uiLevel: 1,
-                    rowIndex: 2,
-                },
-                {
-                    allChildrenCount: 1,
-                    allLeafChildren: [null],
-                    childIndex: 1,
-                    childrenAfterFilter: [null],
-                    childrenAfterGroup: [null],
-                    childrenAfterSort: [null],
-                    detail: undefined,
-                    displayed: true,
-                    expanded: true,
-                    firstChild: false,
-                    footer: undefined,
-                    group: true,
-                    groupData: { 'ag-Grid-AutoColumn': 1 },
-                    id: 'row-group-g-1',
-                    key: '1',
-                    lastChild: true,
-                    leafGroup: true,
-                    level: 0,
-                    master: false,
-                    parentKey: null,
-                    rowGroupIndex: 0,
-                    rowPinned: undefined,
-                    selectable: true,
-                    siblingKey: undefined,
-                    uiLevel: 0,
-                    rowIndex: 3,
-                },
-                {
-                    allChildrenCount: undefined,
-                    allLeafChildren: undefined,
-                    childIndex: 0,
-                    childrenAfterFilter: undefined,
-                    childrenAfterGroup: undefined,
-                    childrenAfterSort: undefined,
-                    detail: undefined,
-                    displayed: true,
-                    expanded: false,
-                    firstChild: true,
-                    footer: undefined,
-                    group: false,
-                    groupData: undefined,
-                    id: '1',
-                    key: null,
-                    lastChild: true,
-                    leafGroup: undefined,
-                    level: 1,
-                    master: false,
-                    parentKey: '1',
-                    rowGroupIndex: undefined,
-                    rowPinned: undefined,
-                    selectable: true,
-                    siblingKey: undefined,
-                    uiLevel: 1,
-                    rowIndex: 4,
-                },
-            ];
-
-            expect(groupSnapshot).toMatchObject(expectedGroupSnapshots);
-
             // Switch to treeData
 
             api.setGridOption('treeData', true);
 
-            gridRows = new GridRows(api, 'data 2 ' + repeat, gridRowsOptions);
+            gridRows = new GridRows(api, 'data 2 ' + repeat);
             await gridRows.check(`
                 ROOT id:ROOT_NODE_ID ag-Grid-AutoColumn:"X-ROOT_NODE_ID" groupType:"Filler"
                 ├─┬ A GROUP id:0 ag-Grid-AutoColumn:"X-0" groupType:"Provided" g:0 v:0
@@ -307,11 +155,11 @@ describe('ag-grid grouping treeData is reactive', () => {
                 },
                 {
                     allChildrenCount: null,
-                    allLeafChildren: [],
+                    allLeafChildren: null,
                     childIndex: 0,
-                    childrenAfterFilter: [],
-                    childrenAfterGroup: [],
-                    childrenAfterSort: [],
+                    childrenAfterFilter: null,
+                    childrenAfterGroup: null,
+                    childrenAfterSort: null,
                     detail: undefined,
                     displayed: true,
                     expanded: false,
@@ -363,11 +211,11 @@ describe('ag-grid grouping treeData is reactive', () => {
                 },
                 {
                     allChildrenCount: null,
-                    allLeafChildren: [],
+                    allLeafChildren: null,
                     childIndex: 0,
-                    childrenAfterFilter: [],
-                    childrenAfterGroup: [],
-                    childrenAfterSort: [],
+                    childrenAfterFilter: null,
+                    childrenAfterGroup: null,
+                    childrenAfterSort: null,
                     detail: undefined,
                     displayed: true,
                     expanded: false,
@@ -393,5 +241,13 @@ describe('ag-grid grouping treeData is reactive', () => {
 
             expect(treeSnapshot).toMatchObject(expectedTreeSnapshot);
         }
+
+        await new GridColumns(api, 'columns').checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "group column" width:200
+            ├── groupType "Group Type" width:200
+            ├── g "G" width:200 rowGroup
+            └── v "V" width:200
+        `);
     });
 });

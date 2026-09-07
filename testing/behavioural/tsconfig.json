@@ -5,8 +5,10 @@
     "emitDecoratorMetadata": false,
     "noImplicitAny": false,
     "module": "ES2022",
+    "useDefineForClassFields": false,
     "moduleResolution": "Node",
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node", "@testing-library/jest-dom"],
+    "noEmit": true
   },
   "references": [
     {

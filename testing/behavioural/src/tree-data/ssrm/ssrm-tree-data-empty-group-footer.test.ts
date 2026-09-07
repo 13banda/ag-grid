@@ -1,0 +1,338 @@
+import { waitFor } from '@testing-library/dom';
+import { ALL_SEVERITIES, GridColumns, GridRows, TestGridsManager, asyncSetTimeout } from 'ag-test-utils';
+import { waitForNoLoadingRows } from 'ag-test-utils/ssrm-test-utils';
+
+import type { GridOptions, IServerSideDatasource, IServerSideGetRowsParams } from 'ag-grid-community';
+import { enableDevValidations } from 'ag-grid-community';
+import { ServerSideRowModelModule, TreeDataModule } from 'ag-grid-enterprise';
+
+describe('ag-grid SSRM tree data empty group with groupTotalRow', () => {
+    const gridsManager = new TestGridsManager({
+        modules: [ServerSideRowModelModule, TreeDataModule],
+    });
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    function createDatasource() {
+        const tracker = { loadCount: 0 };
+
+        const datasource: IServerSideDatasource = {
+            getRows: (params: IServerSideGetRowsParams) => {
+                tracker.loadCount++;
+                const groupKeys = params.request.groupKeys ?? [];
+
+                if (groupKeys.length === 0) {
+                    setTimeout(() => {
+                        params.success({
+                            rowData: [{ id: 'A', name: 'Node A', group: true }],
+                        });
+                    }, 1);
+                } else {
+                    setTimeout(() => {
+                        params.success({ rowData: [] });
+                    }, 1);
+                }
+            },
+        };
+
+        return { datasource, tracker };
+    }
+
+    async function waitForLoadCount(tracker: { loadCount: number }, target: number) {
+        await waitFor(() => expect(tracker.loadCount).toBeGreaterThanOrEqual(target));
+    }
+
+    test('expanding group with empty children and groupTotalRow bottom does not cause infinite requests', async () => {
+        const { datasource, tracker } = createDatasource();
+
+        const gridOptions: GridOptions = {
+            columnDefs: [{ field: 'id', hide: true }, { field: 'name' }],
+            autoGroupColumnDef: { field: 'name' },
+            treeData: true,
+            rowModelType: 'serverSide',
+            animateRows: false,
+            groupTotalRow: 'bottom',
+            getRowId: ({ data }) => data.id,
+            isServerSideGroup: (data: any) => data.group,
+            getServerSideGroupKey: (data: any) => data.id,
+            serverSideDatasource: datasource,
+        };
+
+        const api = gridsManager.createGrid('ssrmEmptyGroupFooter', gridOptions);
+        await new GridColumns(
+            api,
+            `expanding group with empty children and groupTotalRow bottom does not cause infi setup`
+        ).checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "Group" width:200
+            └── name "Name" width:200
+        `);
+        await new GridRows(
+            api,
+            `expanding group with empty children and groupTotalRow bottom does not cause infi setup`
+        ).check(`
+            ROOT id:<no-id>
+            └── filler id:rowIndex:0
+        `);
+
+        // Wait for root load (1 request)
+        await waitForLoadCount(tracker, 1);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(1);
+
+        // Expand Node A (which has group: true but empty children)
+        api.getRowNode('A')!.setExpanded(true);
+
+        // Wait for children load (2nd request)
+        await waitForLoadCount(tracker, 2);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(2);
+
+        // Wait more — if there's an infinite loop, loadCount will keep growing
+        // eslint-disable-next-line no-restricted-syntax -- observation window: an infinite request loop would keep pushing loadCount past 2
+        await asyncSetTimeout(200);
+
+        expect(tracker.loadCount).toBe(2);
+        await new GridRows(
+            api,
+            `expanding group with empty children and groupTotalRow bottom does not cause infi final state`
+        ).check(`
+            ROOT id:<no-id>
+            └── A GROUP id:A ag-Grid-AutoColumn:"Node A" id:"A" name:"Node A"
+        `);
+    });
+
+    test('expanding empty group with groupHideOpenParents and groupTotalRow bottom does not cause infinite requests', async () => {
+        // This test deliberately combines groupHideOpenParents with treeData, which validation rejects
+        // (#315) and which also drives an incompatible multi-column group display (#182).
+        enableDevValidations({ throwOn: ALL_SEVERITIES, suppress: [182, 315] });
+        const tracker = { loadCount: 0, active: true };
+
+        const datasource: IServerSideDatasource = {
+            getRows: (params: IServerSideGetRowsParams) => {
+                tracker.loadCount++;
+                const groupKeys = params.request.groupKeys ?? [];
+
+                let rowData: any[];
+                if (groupKeys.length === 0) {
+                    rowData = [{ id: 'A', name: 'Node A', group: true }];
+                } else if (groupKeys.length === 1 && groupKeys[0] === 'A') {
+                    rowData = [{ id: 'B', name: 'Node B', group: true }];
+                } else {
+                    rowData = [];
+                }
+
+                setTimeout(() => {
+                    if (tracker.active) {
+                        params.success({ rowData });
+                    }
+                }, 1);
+            },
+        };
+
+        const gridOptions: GridOptions = {
+            columnDefs: [{ field: 'id', hide: true }, { field: 'name' }],
+            autoGroupColumnDef: { field: 'name' },
+            treeData: true,
+            rowModelType: 'serverSide',
+            animateRows: false,
+            groupTotalRow: 'bottom',
+            groupHideOpenParents: true,
+            getRowId: ({ data }) => data.id,
+            isServerSideGroup: (data: any) => data?.group,
+            getServerSideGroupKey: (data: any) => data?.id,
+            serverSideDatasource: datasource,
+        };
+
+        // This config combination legitimately logs validation warnings — silence the noise.
+        const consoleWarnSpy = vitest.spyOn(console, 'warn').mockImplementation(() => {});
+        const api = gridsManager.createGrid('ssrmHideOpenParents', gridOptions);
+        await new GridColumns(
+            api,
+            `expanding empty group with groupHideOpenParents and groupTotalRow bottom does no setup`
+        ).checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "Group" width:200
+            └── name "Name" width:200
+        `);
+        await new GridRows(
+            api,
+            `expanding empty group with groupHideOpenParents and groupTotalRow bottom does no setup`
+        ).check(`
+            ROOT id:<no-id>
+            └── filler id:rowIndex:0
+        `);
+        consoleWarnSpy.mockRestore();
+
+        // Wait for root load
+        await waitForLoadCount(tracker, 1);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(1);
+
+        // Expand Node A — its row becomes hidden due to groupHideOpenParents
+        api.getRowNode('A')!.setExpanded(true);
+
+        // Wait for Node A's children to load (Node B)
+        await waitForLoadCount(tracker, 2);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(2);
+
+        // Expand Node B — also hidden, its child store loads empty
+        api.getRowNode('B')!.setExpanded(true);
+
+        // Wait for Node B's children to load (empty)
+        await waitForLoadCount(tracker, 3);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(3);
+
+        // Node B's store has loaded empty, so it shows no total row and contributes no
+        // rows at all — leaving nothing for the parent cache to resolve a display index
+        // into, and so no spurious stub. Node A's store is not empty, so its total row stays.
+        // eslint-disable-next-line no-restricted-syntax -- observation window: an infinite request loop would keep pushing loadCount past 3
+        await asyncSetTimeout(200);
+
+        expect(tracker.loadCount).toBe(3);
+
+        tracker.active = false;
+        await new GridRows(
+            api,
+            `expanding empty group with groupHideOpenParents and groupTotalRow bottom does no final state`
+        ).check(`
+            ROOT id:<no-id>
+            └─┬ A GROUP id:A ag-Grid-AutoColumn:"Node A" id:"A" name:"Node A"
+            · ├── B GROUP id:B ag-Grid-AutoColumn:"Node B" id:"B" name:"Node B"
+            · └─ footer id:rowGroupFooter_A ag-Grid-AutoColumn:"Total Node A" id:"A" name:"Node A"
+        `);
+    });
+
+    // AG-17363 TC2: setting groupTotalRow must not change the row set of a group that has no children.
+    test('expanding group with empty children and groupTotalRow bottom shows no total row', async () => {
+        const { datasource, tracker } = createDatasource();
+
+        const gridOptions: GridOptions = {
+            columnDefs: [{ field: 'id', hide: true }, { field: 'name' }],
+            autoGroupColumnDef: { field: 'name' },
+            treeData: true,
+            rowModelType: 'serverSide',
+            animateRows: false,
+            groupTotalRow: 'bottom',
+            getRowId: ({ data }) => data.id,
+            isServerSideGroup: (data: any) => data.group,
+            getServerSideGroupKey: (data: any) => data.id,
+            serverSideDatasource: datasource,
+        };
+
+        const api = gridsManager.createGrid('ssrmEmptyGroupNoTotalRow', gridOptions);
+
+        await waitForLoadCount(tracker, 1);
+        await waitForNoLoadingRows(api);
+
+        api.getRowNode('A')!.setExpanded(true);
+
+        await waitForLoadCount(tracker, 2);
+        await waitForNoLoadingRows(api);
+
+        // Same row set as the groupTotalRow-unset case: an expanded group row with no children.
+        await new GridRows(api, `empty group with groupTotalRow bottom shows no total row`).check(`
+            ROOT id:<no-id>
+            └── A GROUP id:A ag-Grid-AutoColumn:"Node A" id:"A" name:"Node A"
+        `);
+    });
+
+    test('expanding group with empty children and groupTotalRow top shows no total row', async () => {
+        const { datasource, tracker } = createDatasource();
+
+        const gridOptions: GridOptions = {
+            columnDefs: [{ field: 'id', hide: true }, { field: 'name' }],
+            autoGroupColumnDef: { field: 'name' },
+            treeData: true,
+            rowModelType: 'serverSide',
+            animateRows: false,
+            groupTotalRow: 'top',
+            getRowId: ({ data }) => data.id,
+            isServerSideGroup: (data: any) => data.group,
+            getServerSideGroupKey: (data: any) => data.id,
+            serverSideDatasource: datasource,
+        };
+
+        const api = gridsManager.createGrid('ssrmEmptyGroupNoTotalRowTop', gridOptions);
+
+        await waitForLoadCount(tracker, 1);
+        await waitForNoLoadingRows(api);
+
+        api.getRowNode('A')!.setExpanded(true);
+
+        await waitForLoadCount(tracker, 2);
+        await waitForNoLoadingRows(api);
+
+        await new GridRows(api, `empty group with groupTotalRow top shows no total row`).check(`
+            ROOT id:<no-id>
+            └── A GROUP id:A ag-Grid-AutoColumn:"Node A" id:"A" name:"Node A"
+        `);
+    });
+
+    test('expanding group with empty children without groupTotalRow does not cause infinite requests', async () => {
+        const { datasource, tracker } = createDatasource();
+
+        const gridOptions: GridOptions = {
+            columnDefs: [{ field: 'id', hide: true }, { field: 'name' }],
+            autoGroupColumnDef: { field: 'name' },
+            treeData: true,
+            rowModelType: 'serverSide',
+            animateRows: false,
+            getRowId: ({ data }) => data.id,
+            isServerSideGroup: (data: any) => data.group,
+            getServerSideGroupKey: (data: any) => data.id,
+            serverSideDatasource: datasource,
+        };
+
+        const api = gridsManager.createGrid('ssrmEmptyGroupNoFooter', gridOptions);
+        await new GridColumns(
+            api,
+            `expanding group with empty children without groupTotalRow does not cause infinit setup`
+        ).checkColumns(`
+            CENTER
+            ├── ag-Grid-AutoColumn "Group" width:200
+            └── name "Name" width:200
+        `);
+        await new GridRows(
+            api,
+            `expanding group with empty children without groupTotalRow does not cause infinit setup`
+        ).check(`
+            ROOT id:<no-id>
+            └── filler id:rowIndex:0
+        `);
+
+        // Wait for root load
+        await waitForLoadCount(tracker, 1);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(1);
+
+        // Expand Node A
+        api.getRowNode('A')!.setExpanded(true);
+
+        // Wait for children load
+        await waitForLoadCount(tracker, 2);
+        await waitForNoLoadingRows(api);
+        expect(tracker.loadCount).toBe(2);
+
+        // Wait more
+        // eslint-disable-next-line no-restricted-syntax -- observation window: an infinite request loop would keep pushing loadCount past 2
+        await asyncSetTimeout(200);
+
+        expect(tracker.loadCount).toBe(2);
+        await new GridRows(
+            api,
+            `expanding group with empty children without groupTotalRow does not cause infinit final state`
+        ).check(`
+            ROOT id:<no-id>
+            └── A GROUP id:A ag-Grid-AutoColumn:"Node A" id:"A" name:"Node A"
+        `);
+    });
+});

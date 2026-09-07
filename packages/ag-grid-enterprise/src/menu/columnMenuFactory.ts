@@ -1,22 +1,38 @@
-import type { AgColumn, AgProvidedColumnGroup, DefaultMenuItem, MenuItemDef, NamedBean } from 'ag-grid-community';
-import { BeanStub, _isClientSideRowModel, _isLegacyMenuEnabled } from 'ag-grid-community';
+import type {
+    AgColumn,
+    AgProvidedColumnGroup,
+    DefaultColumnMenuItem,
+    DefaultMenuItem,
+    MenuItemDef,
+    NamedBean,
+} from 'ag-grid-community';
+import {
+    BeanStub,
+    _getAvailableSortTypes,
+    _getDisplaySortForColumn,
+    _getGrandTotalRow,
+    _isClientSideRowModel,
+    _isLegacyMenuEnabled,
+} from 'ag-grid-community';
 
 import { isRowGroupColLocked } from '../rowGrouping/rowGroupingUtils';
-import { AgMenuList } from '../widgets/agMenuList';
-import { MENU_ITEM_SEPARATOR, _removeRepeatsFromArray } from './menuItemMapper';
+import { MenuList } from '../widgets/menuList';
+import { _resolveColumnMenuItems } from './columnMenuItemsResolver';
 import type { MenuItemMapper } from './menuItemMapper';
+import { MENU_ITEM_SEPARATOR, _normaliseSeparators } from './menuSeparators';
 
 export class ColumnMenuFactory extends BeanStub implements NamedBean {
     beanName = 'colMenuFactory' as const;
 
     public createMenu(
-        parent: BeanStub<any>,
-        menuItems: (DefaultMenuItem | MenuItemDef)[],
+        parent: { createManagedBean(bean: MenuList): MenuList },
+        menuItems: (DefaultColumnMenuItem | MenuItemDef)[],
         column: AgColumn | undefined,
-        sourceElement: () => HTMLElement
-    ): AgMenuList {
+        sourceElement: () => HTMLElement,
+        columnGroup?: AgProvidedColumnGroup
+    ): MenuList {
         const menuList = parent.createManagedBean(
-            new AgMenuList(0, {
+            new MenuList(0, {
                 column: column ?? null,
                 node: null,
                 value: null,
@@ -26,8 +42,11 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
         const menuItemsMapped = (this.beans.menuItemMapper as MenuItemMapper).mapWithStockItems(
             menuItems,
             column ?? null,
+            null,
+            undefined,
             sourceElement,
-            'columnMenu'
+            'columnMenu',
+            columnGroup ?? null
         );
 
         menuList.addMenuItems(menuItemsMapped);
@@ -38,42 +57,22 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
     public getMenuItems(
         column: AgColumn | null = null,
         columnGroup: AgProvidedColumnGroup | null = null
-    ): (DefaultMenuItem | MenuItemDef)[] {
-        const defaultItems = this.getDefaultMenuOptions(column);
-        let result: (DefaultMenuItem | MenuItemDef)[];
+    ): (DefaultColumnMenuItem | MenuItemDef)[] {
+        const defaultItems = this.getDefaultMenuOptions(column, columnGroup);
+        // Copy so normalising never mutates a user-provided columnMenuItems/mainMenuItems array in place.
+        const result = [..._resolveColumnMenuItems(this.gos, column, columnGroup, 'columnMenu', defaultItems)];
 
-        const columnMainMenuItems = (column?.getColDef() ?? columnGroup?.getColGroupDef())?.mainMenuItems;
-        if (Array.isArray(columnMainMenuItems)) {
-            result = columnMainMenuItems;
-        } else if (typeof columnMainMenuItems === 'function') {
-            result = columnMainMenuItems(
-                this.gos.addGridCommonParams({
-                    column,
-                    columnGroup,
-                    defaultItems,
-                })
-            );
-        } else {
-            const userFunc = this.gos.getCallback('getMainMenuItems');
-            if (userFunc) {
-                result = userFunc({
-                    column,
-                    columnGroup,
-                    defaultItems,
-                });
-            } else {
-                result = defaultItems;
-            }
-        }
-
-        // GUI looks weird when two separators are side by side. this can happen accidentally
-        // if we remove items from the menu then two separators can edit up adjacent.
-        _removeRepeatsFromArray(result, MENU_ITEM_SEPARATOR);
+        // normalise separators after item removal so we don't leave duplicates,
+        // or separators stranded at the start or end of the menu.
+        _normaliseSeparators(result, MENU_ITEM_SEPARATOR);
 
         return result;
     }
 
-    private getDefaultMenuOptions(column: AgColumn | null): DefaultMenuItem[] {
+    private getDefaultMenuOptions(
+        column: AgColumn | null,
+        columnGroup: AgProvidedColumnGroup | null = null
+    ): DefaultMenuItem[] {
         const result: DefaultMenuItem[] = [];
 
         const { beans, gos } = this;
@@ -98,6 +97,10 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
         };
 
         if (!column) {
+            if (columnGroup && beans.colHeaderEditSvc?.isEditable(columnGroup)) {
+                result.push('editColumnName');
+                result.push(MENU_ITEM_SEPARATOR);
+            }
             addColumnItems();
             return result;
         }
@@ -107,27 +110,40 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
 
         const rowGroupCount = rowGroupColsSvc?.columns.length ?? 0;
         const doingGrouping = rowGroupCount > 0;
+        const grandTotalRow = _getGrandTotalRow(gos);
+        const treeData = gos.get('treeData');
 
-        const isPrimary = column.isPrimary();
+        const isPrimary = column.primary;
 
+        // 1. secondary columns can always have aggValue, as it means it's a pivot value column
+        // 2. otherwise, only allow aggValue if it's a value column and we're grouping or have a grand total row
         const allowValueAgg =
-            (aggFuncSvc &&
-                // if primary, then only allow aggValue if grouping and it's a value columns
-                isPrimary &&
-                doingGrouping &&
-                column.isAllowValue()) ||
-            // secondary columns can always have aggValue, as it means it's a pivot value column
-            !isPrimary;
+            !isPrimary || (aggFuncSvc && column.isAllowValue() && (doingGrouping || grandTotalRow || treeData));
 
         if (sortSvc && !isLegacyMenuEnabled && column.isSortable()) {
-            const sort = column.getSort();
-            if (sort !== 'asc') {
-                result.push('sortAscending');
+            const { isAbsoluteSort, isDefaultSort, isAscending, isDescending, direction } = _getDisplaySortForColumn(
+                column,
+                beans
+            );
+            const allowedSortTypes = _getAvailableSortTypes(gos, column);
+
+            if (allowedSortTypes.has('default')) {
+                if (!(isAscending && isDefaultSort)) {
+                    result.push('sortAscending');
+                }
+                if (!(isDescending && isDefaultSort)) {
+                    result.push('sortDescending');
+                }
             }
-            if (sort !== 'desc') {
-                result.push('sortDescending');
+            if (allowedSortTypes.has('absolute')) {
+                if (!(isAscending && isAbsoluteSort)) {
+                    result.push('sortAbsoluteAscending');
+                }
+                if (!(isDescending && isAbsoluteSort)) {
+                    result.push('sortAbsoluteDescending');
+                }
             }
-            if (sort) {
+            if (direction) {
                 result.push('sortUnSort');
             }
             result.push(MENU_ITEM_SEPARATOR);
@@ -146,12 +162,37 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
             result.push('valueAggSubMenu');
         }
 
+        // Shown on value/numeric columns (numeric ones promote on demand) and any column opted in via config.
+        if (beans.showValuesAsSvc?.isMenuEligible(column)) {
+            result.push('showValuesAsSubMenu');
+        }
+
+        if (beans.calculatedColsSvc?.isEnabled() === true && isPrimary) {
+            result.push(MENU_ITEM_SEPARATOR);
+            if (!colModel.pivotMode) {
+                result.push('calculatedColumn');
+            }
+            if (column?.isCalculatedCol) {
+                result.push('editCalculatedColumn');
+                result.push('removeCalculatedColumn');
+            }
+            result.push(MENU_ITEM_SEPARATOR);
+        }
+
+        if (column && beans.colHeaderEditSvc?.isEditable(column)) {
+            result.push(MENU_ITEM_SEPARATOR);
+            result.push('editColumnName');
+            result.push(MENU_ITEM_SEPARATOR);
+        }
+
         if (allowPinning || allowValueAgg) {
             result.push(MENU_ITEM_SEPARATOR);
         }
 
         if (colAutosize) {
-            result.push('autoSizeThis');
+            if (!colDef.suppressAutoSize) {
+                result.push('autoSizeThis');
+            }
             result.push('autoSizeAll');
             result.push(MENU_ITEM_SEPARATOR);
         }
@@ -179,14 +220,14 @@ export class ColumnMenuFactory extends BeanStub implements NamedBean {
 
         addColumnItems();
 
-        // only add grouping expand/collapse if grouping in the InMemoryRowModel
+        // only add grouping expand/collapse if grouping in the InMemoryRowModel or ssrmExpandAllAffectsAllRows flag is set
         // if pivoting, we only have expandable groups if grouping by 2 or more columns
         // as the lowest level group is not expandable while pivoting.
         // if not pivoting, then any active row group can be expanded.
         if (
             expansionSvc &&
-            _isClientSideRowModel(gos) &&
-            (gos.get('treeData') || rowGroupCount > (colModel.isPivotMode() ? 1 : 0))
+            (_isClientSideRowModel(gos) || gos.get('ssrmExpandAllAffectsAllRows')) &&
+            (treeData || rowGroupCount > (colModel.pivotMode ? 1 : 0))
         ) {
             result.push('expandAll');
             result.push('contractAll');

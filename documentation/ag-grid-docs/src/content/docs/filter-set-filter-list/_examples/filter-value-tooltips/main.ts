@@ -3,8 +3,8 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TooltipModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -17,6 +17,11 @@ import {
 import { CustomTooltip } from './customTooltip';
 import { getData } from './data';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     TooltipModule,
     ClientSideRowModelModule,
@@ -25,7 +30,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -34,12 +38,12 @@ const gridOptions: GridOptions = {
     columnDefs: [
         {
             field: 'colA',
-            tooltipField: 'colA',
+            tooltip: true,
             filter: 'agSetColumnFilter',
         },
         {
             field: 'colB',
-            tooltipField: 'colB',
+            tooltip: true,
             filter: 'agSetColumnFilter',
             filterParams: {
                 showTooltips: true,
@@ -47,7 +51,7 @@ const gridOptions: GridOptions = {
         },
         {
             field: 'colC',
-            tooltipField: 'colC',
+            tooltip: true,
             tooltipComponent: CustomTooltip,
             filter: 'agSetColumnFilter',
             filterParams: {

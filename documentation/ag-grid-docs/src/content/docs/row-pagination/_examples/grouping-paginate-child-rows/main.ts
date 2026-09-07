@@ -2,26 +2,18 @@ import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
-    NumberEditorModule,
-    NumberFilterModule,
     PaginationModule,
-    TextEditorModule,
-    TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    NumberEditorModule,
-    TextEditorModule,
-    TextFilterModule,
-    NumberFilterModule,
-    PaginationModule,
-    ClientSideRowModelModule,
-    RowGroupingModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([PaginationModule, ClientSideRowModelModule, RowGroupingModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete' },
@@ -44,10 +36,7 @@ const gridOptions: GridOptions<IOlympicData> = {
     paginationPageSize: 10,
     paginationPageSizeSelector: [10, 20, 50, 100],
     paginateChildRows: true,
-    animateRows: false,
     defaultColDef: {
-        editable: true,
-        filter: true,
         flex: 1,
         minWidth: 190,
     },

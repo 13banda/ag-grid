@@ -3,10 +3,10 @@ title: "Grid Layout"
 description: "Format the grid layout for your $framework Table. Change grid width/height, assign a DOM layout value, format dynamic resizing."
 ---
 
-Under normal usage, your application should set the width and height of the grid using CSS styles. The grid will then fit the width you provide 
-and use scrolling inside the grid to allow all rows and columns to be viewed.
+Set the width, height and scrolling behaviour of the grid.
 
 {% if isFramework("javascript") %}
+
 ```html
 <!-- set width using percentages -->
 <div id="myGrid" style="width: 100%; height: 100%;"></div>
@@ -14,9 +14,11 @@ and use scrolling inside the grid to allow all rows and columns to be viewed.
 <!-- OR set width using fixed pixels -->
 <div id="myGrid" style="width: 500px; height: 200px;"></div>
 ```
+
 {% /if %}
 
 {% if isFramework("angular") %}
+
 ```html
 <!-- set width using percentages -->
 <ag-grid-angular style="width: 100%; height: 100%;" />
@@ -24,19 +26,23 @@ and use scrolling inside the grid to allow all rows and columns to be viewed.
 <!-- OR set width using fixed pixels -->
 <ag-grid-angular style="width: 500px; height: 200px" />
 ```
+
 {% /if %}
 
 {% if isFramework("react") %}
-```jsx
+
+```html
 <!-- set width using percentages -->
 <AgGridReact style={{ width: '100%', height: '100%' }} />
 
 <!-- OR set width using fixed pixels -->
 <AgGridReact style={{ width: 500, height: 200 }} />
 ```
+
 {% /if %}
 
 {% if isFramework("vue") %}
+
 ```html
 <!-- set width using percentages -->
 <ag-grid-vue style="width: 100%; height: 100%;"></ag-grid-vue>
@@ -44,6 +50,7 @@ and use scrolling inside the grid to allow all rows and columns to be viewed.
 <!-- OR set width using fixed pixels -->
 <ag-grid-vue style="width: 500px; height: 200px"></ag-grid-vue>
 ```
+
 {% /if %}
 
 {% warning %}
@@ -60,9 +67,9 @@ you want, then you have a CSS layout issue in your application.
 
 There are three DOM Layout values the grid can have 'normal', 'autoHeight' and 'print'. They are used as follows:
 
-* **normal**: This is the default if nothing is specified. The grid fits the width and height of the div you provide and scrolls in both directions.
-* **autoHeight**: The grid's height is set to fit the number of rows so no vertical scrollbar is provided by the grid. The grid scrolls horizontally as normal. Note that if using this with the SSRM the grid will attempt to load every row and may cause undesired side-effects (such as excessive datasource requests or too many loaded rows).
-* **print**: No scroll bars are used and the grid renders all rows and columns. This layout is explained in [Printing](./printing/).
+- **normal**: This is the default if nothing is specified. The grid fits the width and height of the div you provide and scrolls in both directions.
+- **autoHeight**: The grid's height is set to fit the number of rows so no vertical scrollbar is provided by the grid. The grid scrolls horizontally as normal. Note that if using this with the SSRM the grid will attempt to load every row and may cause undesired side-effects (such as excessive datasource requests or too many loaded rows).
+- **print**: No scroll bars are used and the grid renders all rows and columns. This layout is explained in [Printing](./printing/).
 
 ## Normal Layout
 
@@ -84,7 +91,7 @@ This example is best seen when opened in a new tab - then change the horizontal 
 
 ### Dynamic Vertical Resizing
 
-Sometimes the vertical height of the grid is greater than the number of rows you have it in.  You can dynamically set the row heights to fill the available height as the following example shows:
+Sometimes the grid is taller than the rows it contains. You can dynamically set the row heights to fill the available height as the following example shows:
 
 {% gridExampleRunner title="Dynamic vertical resizing" name="example2" /%}
 
@@ -110,28 +117,30 @@ for you.
 
 The example below demonstrates the autoHeight feature. Notice the following:
 
-* As you set different numbers of rows into the grid, the grid will resize its height to just fit the rows.
-* As the grid height exceeds the height of the browser, you will need to use the browser vertical scroll to view data (or the iFrames scroll if you are looking at the example embedded below).
-* The height will also adjust as you filter, to add and remove rows.
-* If you have pinned rows, the grid will size to accommodate the pinned rows.
-* Vertical scrolling will not happen, however horizontal scrolling, including pinned columns, will work as normal.
-* It is possible to move the grid into and out of 'full height' mode by using the `api.setGridOption('domLayout', layout)` or by changing the bound property `domLayout`.
+- As you set different numbers of rows into the grid, the grid will resize its height to just fit the rows.
+- As the grid height exceeds the height of the browser, you will need to use the browser vertical scroll to view data (or the iFrames scroll if you are looking at the example embedded below).
+- The height will also adjust as you filter, to add and remove rows.
+- If you have pinned rows, the grid will size to accommodate the pinned rows.
+- Vertical scrolling will not happen, however horizontal scrolling, including pinned columns, will work as normal.
+- You can switch the grid into and out of auto-height mode by calling `api.setGridOption('domLayout', layout)` or by changing the bound `domLayout` property.
 
 {% note %}
-The following test is best viewed if you open it in a new tab, so it is obvious that there are no scroll bars.
-Note that if you use the example inlined the scroll bars shown are for the containing `iframe`, not the grid.
+The following example is best viewed in a new tab, so it is obvious that there are no scroll bars.
+When viewed inline below, the scroll bars shown are for the containing iframe, not the grid.
 {% /note %}
 
-{% gridExampleRunner title="Auto Height" name="auto-height"  exampleHeight=660 /%}
+{% gridExampleRunner title="Auto Height" name="auto-height"  exampleHeight=580 /%}
 
 ### Min Height with Auto Height
 
-When using Auto Height, there is a minimum of 150px set to the grid rows section. This is to avoid an empty grid which would look weird. To remove this minimum height, add the following CSS:
+When using Auto Height, the grid rows section has a minimum height of 150px. This is to avoid a zero-height grid which looks weird.
 
-```css
-.ag-center-cols-viewport {
-    min-height: unset !important;
-}
+Use the `autoHeightMinBodyHeight` [theme parameter](./theming-parameters/) to change this minimum:
+
+```js
+const myTheme = themeQuartz.withParams({
+    autoHeightMinBodyHeight: 40,
+});
 ```
 
 It is not possible to specify a max height when using auto-height.

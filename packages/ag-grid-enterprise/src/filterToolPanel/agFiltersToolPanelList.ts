@@ -1,3 +1,5 @@
+import { _clearElement, _exists, _getActiveDomElement, _setAriaLabel } from 'ag-stack';
+
 import type {
     AbstractColDef,
     AgColumn,
@@ -7,16 +9,7 @@ import type {
     ComponentSelector,
     FiltersToolPanelState,
 } from 'ag-grid-community';
-import {
-    Component,
-    _clearElement,
-    _exists,
-    _getActiveDomElement,
-    _mergeDeep,
-    _setAriaLabel,
-    _warn,
-    isProvidedColumnGroup,
-} from 'ag-grid-community';
+import { Component, _addGridCommonParams, _mergeDeep, isProvidedColumnGroup } from 'ag-grid-community';
 
 import { syncLayoutWithGrid, toolPanelCreateColumnTree } from '../sideBar/common/toolPanelColDefService';
 import { EXPAND_STATE } from './agFiltersToolPanelHeader';
@@ -25,7 +18,7 @@ import { ToolPanelFilterComp } from './toolPanelFilterComp';
 import type { ToolPanelFilterItem } from './toolPanelFilterGroupComp';
 import { ToolPanelFilterGroupComp } from './toolPanelFilterGroupComp';
 
-export type AgFiltersToolPanelListEvent = 'filterExpanded' | 'groupExpanded';
+type AgFiltersToolPanelListEvent = 'filterExpanded' | 'groupExpanded';
 export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEvent> {
     private colModel: ColumnModel;
 
@@ -48,13 +41,13 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
     private onColumnsChangedPending: boolean = false;
 
     constructor() {
-        super(/* html */ `<div class="ag-filter-list-panel"></div>`);
+        super({ tag: 'div', cls: 'ag-filter-list-panel', role: 'group' });
     }
 
     public init(params: ToolPanelFiltersCompParams): void {
         this.initialised = true;
 
-        const defaultParams: Partial<ToolPanelFiltersCompParams> = this.gos.addGridCommonParams({
+        const defaultParams: Partial<ToolPanelFiltersCompParams> = _addGridCommonParams(this.gos, {
             suppressExpandAll: false,
             suppressFilterSearch: false,
             suppressSyncLayoutWithGrid: false,
@@ -69,10 +62,8 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         this.addManagedEventListeners({
             newColumnsLoaded: () => this.onColumnsChanged(),
             toolPanelVisibleChanged: (event) => {
-                // when re-entering the filters tool panel we need to refresh the virtual lists in the set filters in case
-                // filters have been changed elsewhere, i.e. via an api call.
-                if (event.key === 'filters') {
-                    this.refreshFilters(event.visible);
+                if (event.key === 'filters' && !event.visible) {
+                    this.onPanelHidden();
                 }
             },
             dragStarted: () => {
@@ -97,9 +88,13 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
             this.onColumnsChangedPending = true;
             return;
         }
-        const pivotModeActive = this.colModel.isPivotMode();
+        const pivotModeActive = this.colModel.pivotMode;
         const shouldSyncColumnLayoutWithGrid = !this.params.suppressSyncLayoutWithGrid && !pivotModeActive;
-        shouldSyncColumnLayoutWithGrid ? this.syncFilterLayout() : this.buildTreeFromProvidedColumnDefs();
+        if (shouldSyncColumnLayoutWithGrid) {
+            this.syncFilterLayout();
+        } else {
+            this.buildTreeFromProvidedColumnDefs();
+        }
         this.refreshAriaLabel();
     }
 
@@ -109,12 +104,12 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
     }
 
     private buildTreeFromProvidedColumnDefs(): void {
-        const columnTree = this.colModel.getColDefColTree();
+        const columnTree = this.colModel.colDefTree;
         this.recreateFilters(columnTree);
     }
 
     public setFiltersLayout(colDefs: AbstractColDef[]): void {
-        const columnTree = toolPanelCreateColumnTree(this.colModel, colDefs);
+        const columnTree = toolPanelCreateColumnTree(this.beans, colDefs);
         this.recreateFilters(columnTree);
     }
 
@@ -141,7 +136,9 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         if (len) {
             // skip the destroy function because this will be managed
             // by the `destroyFilters` function
-            filterGroupComps.forEach((comp) => this.appendChild(comp));
+            for (const comp of filterGroupComps) {
+                this.appendChild(comp);
+            }
             this.setFirstAndLastVisible(0, len - 1);
         }
 
@@ -233,7 +230,7 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         }
 
         const colGroupDef = columnGroup.getColGroupDef();
-        if (colGroupDef && colGroupDef.suppressFiltersToolPanel) {
+        if (colGroupDef?.suppressFiltersToolPanel) {
             return [];
         }
 
@@ -275,7 +272,7 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
     }
 
     private shouldDisplayFilter(column: AgColumn) {
-        const suppressFiltersToolPanel = column.getColDef() && column.getColDef().suppressFiltersToolPanel;
+        const suppressFiltersToolPanel = column.colDef?.suppressFiltersToolPanel;
         return column.isFilterAllowed() && !suppressFiltersToolPanel;
     }
 
@@ -284,20 +281,24 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
 
         if (this.isInitialState) {
             const { expandedColIds, expandedGroupIds } = this.params.initialState as FiltersToolPanelState;
-            expandedColIds.forEach((id) => expansionState.set(id, true));
-            expandedGroupIds.forEach((id) => expansionState.set(id, true));
+            for (const id of expandedColIds) {
+                expansionState.set(id, true);
+            }
+            for (const id of expandedGroupIds) {
+                expansionState.set(id, true);
+            }
             return expansionState;
         }
 
         const recursiveGetExpansionState = (filterGroupComp: ToolPanelFilterGroupComp) => {
             expansionState.set(filterGroupComp.getFilterGroupId(), filterGroupComp.isExpanded());
-            filterGroupComp.getChildren().forEach((child) => {
+            for (const child of filterGroupComp.getChildren()) {
                 if (child instanceof ToolPanelFilterGroupComp) {
                     recursiveGetExpansionState(child);
                 } else {
                     expansionState.set(child.getColumn().getId(), child.isExpanded());
                 }
-            });
+            }
         };
 
         this.filterGroupComps.forEach(recursiveGetExpansionState);
@@ -305,8 +306,9 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         return expansionState;
     }
 
-    // we don't support refreshing, but must implement because it's on the tool panel interface
-    public refresh(): void {}
+    public refresh(): void {
+        // we don't support refreshing, but must implement because it's on the tool panel interface
+    }
 
     // lazy initialise the panel
     public override setVisible(visible: boolean): void {
@@ -333,11 +335,11 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
             }
 
             // recursively look for more groups to expand / collapse
-            filterGroup.getChildren().forEach((child) => {
+            for (const child of filterGroup.getChildren()) {
                 if (child instanceof ToolPanelFilterGroupComp) {
                     updateGroupExpandState(child);
                 }
-            });
+            }
         };
 
         this.filterGroupComps.forEach(updateGroupExpandState);
@@ -348,7 +350,7 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         if (groupIds) {
             const unrecognisedGroupIds = groupIds.filter((groupId) => updatedGroupIds.indexOf(groupId) < 0);
             if (unrecognisedGroupIds.length > 0) {
-                _warn(166, { unrecognisedGroupIds });
+                this.beans.log.warn(166, { unrecognisedGroupIds });
             }
         }
     }
@@ -359,7 +361,7 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         const updateGroupExpandState = (filterComp: ToolPanelFilterGroupComp | ToolPanelFilterComp): boolean => {
             if (filterComp instanceof ToolPanelFilterGroupComp) {
                 let anyChildrenChanged = false;
-                filterComp.getChildren().forEach((child) => {
+                for (const child of filterComp.getChildren()) {
                     const childUpdated = updateGroupExpandState(child);
                     if (childUpdated) {
                         if (expand) {
@@ -370,15 +372,19 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
                             filterComp.collapse();
                         }
                     }
-                });
+                }
                 return anyChildrenChanged;
             }
 
-            const colId = filterComp.getColumn().getColId();
+            const colId = filterComp.getColumn().colId;
             const updateFilterExpandState = !colIds || colIds.includes(colId);
 
             if (updateFilterExpandState) {
-                expand ? filterComp.expand() : filterComp.collapse();
+                if (expand) {
+                    filterComp.expand();
+                } else {
+                    filterComp.collapse();
+                }
                 updatedColIds.push(colId);
             }
 
@@ -393,7 +399,7 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
         if (colIds) {
             const unrecognisedColIds = colIds.filter((colId) => updatedColIds.indexOf(colId) < 0);
             if (unrecognisedColIds.length > 0) {
-                _warn(167, { unrecognisedColIds });
+                this.beans.log.warn(167, { unrecognisedColIds });
             }
         }
     }
@@ -415,13 +421,17 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
                 return;
             }
 
-            filterGroup.isExpanded() ? expandedCount++ : notExpandedCount++;
+            if (filterGroup.isExpanded()) {
+                expandedCount++;
+            } else {
+                notExpandedCount++;
+            }
 
-            filterGroup.getChildren().forEach((child) => {
+            for (const child of filterGroup.getChildren()) {
                 if (child instanceof ToolPanelFilterGroupComp) {
                     updateExpandCounts(child);
                 }
-            });
+            }
         };
 
         this.filterGroupComps.forEach(updateExpandCounts);
@@ -491,13 +501,13 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
 
         this.filterGroupComps.forEach((filterGroup, idx) => {
             recursivelySearch(filterGroup, false);
-
+            const isHidden = filterGroup.getGui()?.classList.contains('ag-hidden');
             if (firstVisible === undefined) {
-                if (!filterGroup.containsCssClass('ag-hidden')) {
+                if (!isHidden) {
                     firstVisible = idx;
                     lastVisible = idx;
                 }
-            } else if (!filterGroup.containsCssClass('ag-hidden') && lastVisible !== idx) {
+            } else if (!isHidden && lastVisible !== idx) {
                 lastVisible = idx;
             }
         });
@@ -508,20 +518,22 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
 
     private setFirstAndLastVisible(firstIdx?: number, lastIdx?: number) {
         this.filterGroupComps.forEach((filterGroup, idx) => {
-            filterGroup.removeCssClass('ag-first-group-visible');
-            filterGroup.removeCssClass('ag-last-group-visible');
+            filterGroup.removeCss('ag-first-group-visible');
+            filterGroup.removeCss('ag-last-group-visible');
 
             if (idx === firstIdx) {
-                filterGroup.addCssClass('ag-first-group-visible');
+                filterGroup.addCss('ag-first-group-visible');
             }
             if (idx === lastIdx) {
-                filterGroup.addCssClass('ag-last-group-visible');
+                filterGroup.addCss('ag-last-group-visible');
             }
         });
     }
 
-    private refreshFilters(isDisplayed: boolean) {
-        this.filterGroupComps.forEach((filterGroupComp) => filterGroupComp.refreshFilters(isDisplayed));
+    private onPanelHidden(): void {
+        for (const filterGroupComp of this.filterGroupComps) {
+            filterGroupComp.onPanelHidden();
+        }
     }
 
     public getExpandedFiltersAndGroups(): { expandedGroupIds: string[]; expandedColIds: string[] } {
@@ -530,15 +542,15 @@ export class AgFiltersToolPanelList extends Component<AgFiltersToolPanelListEven
 
         const getExpandedFiltersAndGroups = (filterComp: ToolPanelFilterGroupComp | ToolPanelFilterComp) => {
             if (filterComp instanceof ToolPanelFilterGroupComp) {
-                filterComp.getChildren().forEach((child) => getExpandedFiltersAndGroups(child));
+                for (const child of filterComp.getChildren()) {
+                    getExpandedFiltersAndGroups(child);
+                }
                 const groupId = filterComp.getFilterGroupId();
                 if (filterComp.isExpanded() && !expandedColIds.has(groupId)) {
                     expandedGroupIds.push(groupId);
                 }
-            } else {
-                if (filterComp.isExpanded()) {
-                    expandedColIds.add(filterComp.getColumn().getColId());
-                }
+            } else if (filterComp.isExpanded()) {
+                expandedColIds.add(filterComp.getColumn().colId);
             }
         };
 

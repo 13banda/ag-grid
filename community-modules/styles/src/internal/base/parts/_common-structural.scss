@@ -18,6 +18,7 @@
 
     // ARIA
     .ag-aria-description-container {
+        // keep the live-region in the top layer so screen readers always receive updates.
         z-index: 9999;
         border: 0px;
         clip: rect(1px, 1px, 1px, 1px);
@@ -192,16 +193,9 @@
     //  * Viewports
     //  ****************************
     // */
-    .ag-header-viewport,
-    .ag-floating-top-viewport,
-    .ag-body-viewport,
-    .ag-center-cols-viewport,
-    .ag-floating-bottom-viewport,
     .ag-body-horizontal-scroll-viewport,
     .ag-body-vertical-scroll-viewport,
-    .ag-virtual-list-viewport,
-    .ag-sticky-top-viewport,
-    .ag-sticky-bottom-viewport {
+    .ag-virtual-list-viewport {
         position: relative;
         height: 100%;
         min-width: 0px;
@@ -209,43 +203,54 @@
         flex: 1 1 auto;
     }
 
-    .ag-body-viewport,
-    .ag-center-cols-viewport,
-    .ag-header-viewport,
-    .ag-floating-top-viewport,
-    .ag-floating-bottom-viewport,
-    .ag-sticky-top-viewport,
-    .ag-sticky-bottom-viewport {
-        overflow-x: auto;
+    .ag-viewport {
+        position: relative;
+    }
+
+    .ag-grid-viewport {
+        position: relative;
+        overflow: auto;
+        min-width: 0;
+        min-height: 0;
+        flex: 1 1 auto;
+        -webkit-overflow-scrolling: touch;
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+
         &::-webkit-scrollbar {
             display: none !important;
         }
-        -ms-overflow-style: none !important;
-        scrollbar-width: none !important;
     }
 
-    .ag-body-viewport {
-        display: flex;
+    // If more pinned columns are retained than the viewport can contain, preserve their widths but clip the
+    // deliberately invalid layout instead of making the whole grid horizontally scrollable.
+    .ag-grid-viewport:where(.ag-pinned-columns-overflow) {
         overflow-x: hidden;
-
-        &.ag-layout-normal {
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
     }
 
-    // the sticky containers need at least one 1px height
-    // so we can set the scrollLeft position when there are
-    // no rows within, otherwise scrollLeft will always be 0
-    // and then making a row sticky causes the grid to scroll.
-    .ag-sticky-top-container,
-    .ag-sticky-bottom-container {
-        min-height: 1px;
+    .ag-grid-scrollable-area {
+        position: relative;
+        min-width: 100%;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
     }
 
-    .ag-center-cols-viewport {
+    .ag-spanning-container {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    .ag-grid-scrolling-container {
+        display: block;
         min-height: 100%;
         width: 100%;
+
+        // contain the row and cell-lane z-indexes below, so scrolling rows can never paint over the
+        // header or the pinned top/bottom bands.
+        isolation: isolate;
     }
 
     .ag-body-horizontal-scroll-viewport {
@@ -254,6 +259,7 @@
 
     .ag-body-vertical-scroll-viewport {
         overflow-y: scroll;
+        pointer-events: all;
     }
 
     .ag-virtual-list-viewport {
@@ -266,39 +272,11 @@
     //  * Containers
     //  ****************************
     // */
-    .ag-header-container,
-    .ag-floating-top-container,
-    .ag-body-container,
-    .ag-pinned-right-cols-container,
-    .ag-center-cols-container,
-    .ag-pinned-left-cols-container,
-    .ag-floating-bottom-container,
+    .ag-grid-scrolling-container,
     .ag-body-horizontal-scroll-container,
     .ag-body-vertical-scroll-container,
-    .ag-full-width-container,
-    .ag-floating-bottom-full-width-container,
-    .ag-virtual-list-container,
-    .ag-sticky-top-container,
-    .ag-sticky-bottom-container {
+    .ag-virtual-list-container {
         position: relative;
-    }
-
-    // for when auto height is used but there is no row data
-    .ag-header-container,
-    .ag-floating-top-container,
-    .ag-floating-bottom-container,
-    .ag-sticky-top-container,
-    .ag-sticky-bottom-container {
-        height: 100%;
-        white-space: nowrap;
-    }
-
-    .ag-center-cols-container {
-        display: block;
-    }
-
-    .ag-pinned-right-cols-container {
-        display: block;
     }
 
     .ag-body-horizontal-scroll-container {
@@ -309,37 +287,11 @@
         width: 100%;
     }
 
-    .ag-full-width-container,
-    .ag-floating-top-full-width-container,
-    .ag-floating-bottom-full-width-container,
-    .ag-sticky-top-full-width-container,
-    .ag-sticky-bottom-full-width-container {
-        position: absolute;
-        top: 0px;
-        @include ag.unthemed-rtl(
-            (
-                left: 0,
-            )
-        );
-        // turn off pointer events, because this container overlays the main row containers.
-        // so when user clicks on space between full width rows, we want the mouse clicks to
-        // pass onto the underlying container where the real rows are. eg if using full width
-        // for row grouping, the groups will be in the full width container, but when user
-        // opens a group the children are shown in the other containers - we want to make sure we
-        // don't block mouse clicks to those other containers with the children.
-        pointer-events: none;
-    }
-
-    .ag-full-width-container {
-        width: 100%;
-    }
-
-    .ag-floating-bottom-full-width-container,
-    .ag-floating-top-full-width-container {
-        display: inline-block;
-        overflow: hidden;
+    .ag-full-width-anchor {
+        position: sticky;
+        left: 0;
+        width: var(--ag-internal-grid-viewport-width, 100%);
         height: 100%;
-        width: 100%;
     }
 
     .ag-virtual-list-container {
@@ -351,7 +303,7 @@
     //  * Scrollers
     //  ****************************
     // */
-    .ag-body {
+    .ag-grid-scrolling-rows {
         position: relative;
         display: flex;
         flex: 1 1 auto;
@@ -364,10 +316,10 @@
         min-height: 0;
         min-width: 0;
         display: flex;
-        position: relative;
         &.ag-scrollbar-invisible {
             position: absolute;
             bottom: 0;
+            z-index: 2;
             &.ag-apple-scrollbar {
                 opacity: 0;
                 transition: opacity 400ms;
@@ -383,36 +335,52 @@
 
     .ag-body-horizontal-scroll {
         width: 100%;
+        flex: none;
         &.ag-scrollbar-invisible {
             left: 0;
             right: 0;
         }
     }
 
-    .ag-body-vertical-scroll {
-        height: 100%;
-        &.ag-scrollbar-invisible {
-            top: 0;
-            z-index: 10;
-            @include ag.unthemed-rtl(
-                (
-                    right: 0,
-                )
-            );
-        }
-    }
-
-    .ag-force-vertical-scroll {
-        overflow-y: scroll !important;
-    }
-
-    .ag-horizontal-left-spacer,
-    .ag-horizontal-right-spacer {
-        height: 100%;
+    .ag-body-horizontal-scroll-end-spacer {
+        flex: 0 0 auto;
         min-width: 0;
-        overflow-x: scroll;
-        &.ag-scroller-corner {
-            overflow-x: hidden;
+        overflow: scroll;
+    }
+
+    .ag-body-vertical-scroll {
+        position: absolute;
+        // keep the fake vertical scrollbar above row content so its thumb remains interactive.
+        z-index: 2;
+        flex-direction: column;
+        top: 0;
+        pointer-events: none;
+
+        @include ag.unthemed-rtl(
+            (
+                right: 0,
+            )
+        );
+    }
+
+    .ag-body-vertical-scroll-start-spacer {
+        border-bottom: var(--ag-header-row-border);
+        opacity: 0;
+        flex: none;
+    }
+
+    .ag-ltr .ag-has-right-pinned-cols,
+    .ag-rtl .ag-has-left-pinned-cols {
+        .ag-body-vertical-scroll-start-spacer {
+            pointer-events: all;
+            opacity: 1;
+            // --ag-header-background-color might be semi-transparent so apply it on top of the known-opaque background color
+            background-color: var(--ag-background-color);
+            background-image: linear-gradient(
+                0deg,
+                var(--ag-header-background-color),
+                var(--ag-header-background-color)
+            );
         }
     }
 
@@ -421,30 +389,9 @@
     //  * Headers
     //  ****************************
     // */
-    .ag-header,
-    .ag-pinned-left-header,
-    .ag-pinned-right-header {
-        display: inline-block;
-        overflow: hidden;
-        position: relative;
-    }
-
-    .ag-header-cell-sortable .ag-header-cell-label {
+    .ag-header-cell-sortable .ag-header-cell-label,
+    .ag-header-group-cell-selectable .ag-header-cell-comp-wrapper {
         cursor: pointer;
-    }
-
-    .ag-header {
-        display: flex;
-        width: 100%;
-        white-space: nowrap;
-    }
-
-    .ag-pinned-left-header {
-        height: 100%;
-    }
-
-    .ag-pinned-right-header {
-        height: 100%;
     }
 
     .ag-header-row {
@@ -453,10 +400,10 @@
 
     .ag-header-row:not(.ag-header-row-column-group) {
         // so when floating filters are height 0px, the contents don't spill out
-        overflow: hidden;
+        overflow: visible;
     }
 
-    .ag-header.ag-header-allow-overflow .ag-header-row {
+    .ag-grid-pinned-top-rows-container.ag-header-allow-overflow .ag-header-row {
         overflow: visible;
     }
 
@@ -539,12 +486,13 @@
 
     .ag-header-cell-resize {
         position: absolute;
+        // keep the resize hit-target above header text/icons in the same cell.
         z-index: 2;
         height: 100%;
         width: 8px;
         top: 0;
 
-        cursor: ew-resize;
+        cursor: col-resize;
 
         // unpinned headers get their rezise handle on the right in normal mode and left in RTL mode
         @include ag.unthemed-rtl(
@@ -554,11 +502,11 @@
         );
     }
 
-    .ag-pinned-left-header .ag-header-cell-resize {
+    .ag-grid-pinned-left-cells .ag-header-cell-resize {
         right: -3px; // pinned left headers always have their resize on the right, even in RTL mode
     }
 
-    .ag-pinned-right-header .ag-header-cell-resize {
+    .ag-grid-pinned-right-cells .ag-header-cell-resize {
         left: -3px; // pinned right headers always have their resize on the left, even in RTL mode
     }
 
@@ -581,17 +529,50 @@
     // */
     .ag-column-moving {
         .ag-cell {
-            transition: left 0.2s;
+            transition:
+                left 0.2s,
+                right 0.2s;
         }
 
         .ag-header-cell {
-            transition: left 0.2s;
+            transition:
+                left 0.2s,
+                right 0.2s;
+        }
+
+        .ag-spanned-cell-wrapper {
+            transition:
+                left 0.2s,
+                right 0.2s;
         }
 
         .ag-header-group-cell {
             transition:
                 left 0.2s,
+                right 0.2s,
                 width 0.2s;
+        }
+    }
+
+    .ag-delay-render {
+        .ag-cell {
+            visibility: hidden;
+        }
+
+        .ag-row {
+            visibility: hidden;
+        }
+
+        .ag-spanned-cell-wrapper {
+            visibility: hidden;
+        }
+
+        .ag-header-cell {
+            visibility: hidden;
+        }
+
+        .ag-header-group-cell {
+            visibility: hidden;
         }
     }
 
@@ -701,7 +682,8 @@
 
     .ag-column-drop.ag-column-drop-horizontal {
         white-space: nowrap;
-        overflow: hidden;
+        overflow: auto hidden;
+        scrollbar-width: thin;
     }
 
     .ag-column-drop-cell-button {
@@ -756,6 +738,11 @@
             opacity 0.2s;
     }
 
+    .ag-row-animation.ag-prevent-animation .ag-row,
+    .ag-row-animation.ag-prevent-animation .ag-row.ag-after-created {
+        transition: none !important;
+    }
+
     .ag-row-no-animation .ag-row {
         transition: none;
     }
@@ -770,6 +757,126 @@
         align-items: center;
     }
 
+    .ag-row:not(.ag-full-width-row),
+    .ag-row.ag-embedded-full-width-row,
+    .ag-header-row,
+    .ag-spanned-row {
+        display: flex;
+        width: 100%;
+    }
+
+    // fill the gap between the last content section and pinned-right without allowing
+    // the row's own background to bleed into the empty viewport area.
+    .ag-row:not(.ag-full-width-row)::after,
+    .ag-header-row::after,
+    .ag-row.ag-embedded-full-width-row::after,
+    .ag-spanned-row::after {
+        content: '';
+        flex: 1 0 0px;
+        align-self: stretch;
+    }
+
+    .ag-row:not(.ag-header-row, .ag-full-width-row)::after,
+    .ag-row.ag-embedded-full-width-row::after {
+        background-color: var(--ag-data-background-color);
+    }
+
+    .ag-header-row::after {
+        background-color: var(--ag-header-background-color);
+    }
+
+    .ag-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        border-bottom: var(--ag-borders-critical) var(--ag-border-color);
+        color: var(--ag-header-foreground-color);
+        // do not allow sticky rows to scroll in front of the header
+        z-index: 1;
+    }
+
+    .ag-grid-pinned-left-cells,
+    .ag-grid-scrolling-cells,
+    .ag-grid-pinned-right-cells {
+        position: relative;
+        height: 100%;
+        white-space: nowrap;
+    }
+
+    .ag-grid-scrolling-cells {
+        flex: 0 0 auto;
+        // create a base stacking context for center cells so pinned lanes can always layer above.
+        z-index: 0;
+    }
+
+    .ag-row.ag-embedded-full-width-row > .ag-grid-scrolling-cells {
+        flex: 1 0 auto;
+
+        margin-right: var(--ag-internal-pinned-right-sticky-offset, 0px);
+    }
+
+    .ag-grid-pinned-left-cells,
+    .ag-grid-pinned-right-cells {
+        position: sticky;
+        // pinned lanes must paint above the scrolling lane across all row types.
+        z-index: 2;
+        overflow: hidden;
+        flex: 0 0 auto;
+    }
+
+    .ag-grid-pinned-left-cells {
+        left: var(--ag-internal-pinned-left-sticky-offset, 0px);
+    }
+
+    .ag-grid-pinned-right-cells {
+        right: var(--ag-internal-pinned-right-sticky-offset, 0px);
+    }
+
+    // place pinned-right after the ::after spacer so the spacer fills the gap between
+    // the scrolling section and pinned-right.
+    .ag-row:not(.ag-full-width-row),
+    .ag-header-row,
+    .ag-row.ag-embedded-full-width-row,
+    .ag-spanned-row {
+        > .ag-grid-pinned-right-cells {
+            order: 1;
+        }
+    }
+
+    // in RTL (row-reverse), the gap is between pinned-left and scrolling-cells.
+    // move scrolling-cells after the spacer so it sits next to pinned-right on the left.
+    .ag-rtl .ag-row:not(.ag-full-width-row),
+    .ag-rtl .ag-header-row,
+    .ag-rtl .ag-row.ag-embedded-full-width-row,
+    .ag-rtl .ag-spanned-row {
+        > .ag-grid-scrolling-cells {
+            order: 1;
+        }
+    }
+
+    .ag-rtl .ag-row .ag-grid-scrolling-cells,
+    .ag-rtl .ag-spanned-row .ag-grid-scrolling-cells {
+        // when scrollable, offset for the vertical scrollbar on the left in rtl.
+        margin-left: var(--ag-internal-pinned-left-sticky-offset, 0px);
+    }
+
+    .ag-spanning-container .ag-grid-scrolling-cells {
+        // centre spanned cells must paint above regular centre cells while remaining below pinned sections.
+        z-index: 1;
+    }
+
+    .ag-spanning-container .ag-grid-pinned-left-cells,
+    .ag-spanning-container .ag-grid-pinned-right-cells {
+        // pinned spanned cells must paint above both centre spans and regular pinned cells.
+        z-index: 3;
+        overflow: visible;
+    }
+
+    .ag-spanning-container .ag-cell {
+        pointer-events: auto;
+    }
+
     .ag-row-position-absolute {
         position: absolute;
     }
@@ -778,18 +885,15 @@
         position: relative;
     }
 
-    .ag-full-width-row {
-        overflow: hidden;
-        // turn events back on, as we removed them in the parent
-        pointer-events: all;
-    }
-
     .ag-row-inline-editing {
+        // inline row editors must float above standard rows.
         z-index: 1;
     }
 
     .ag-row-dragging {
-        z-index: 2;
+        // dragged rows overlap their neighbours mid-animation, so they must sit above every cell lane:
+        // centre 0, centre spans 1, pinned 2, pinned spans 3.
+        z-index: 4;
     }
 
     .ag-stub-cell {
@@ -820,15 +924,10 @@
         flex: 1 1 auto;
     }
 
-    .ag-cell-value,
+    .ag-cell-value:not(.ag-allow-overflow),
     .ag-group-value {
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .ag-cell-wrap-text {
-        white-space: normal;
-        word-break: break-word;
     }
 
     .ag-cell-wrapper {
@@ -843,16 +942,27 @@
         }
     }
 
-    .ag-sparkline-wrapper {
-        position: absolute;
-        height: 100%;
-        width: 100%;
-        left: 0;
-        top: 0;
+    .ag-cell-wrap-text {
+        white-space: normal;
+        word-break: break-word;
     }
 
-    .ag-sparkline-wrapper :where(canvas) {
-        position: absolute;
+    .ag-cell-wrap-text:not(.ag-cell-auto-height) .ag-cell-wrapper {
+        align-items: normal;
+        height: 100%;
+        .ag-cell-value {
+            height: 100%;
+        }
+    }
+
+    .ag-sparkline-wrapper {
+        height: 100%;
+        width: 100%;
+        line-height: initial;
+
+        // Right align so sparklines line up vertically
+        display: flex;
+        justify-content: flex-end;
     }
 
     .ag-full-width-row .ag-cell-wrapper.ag-row-group {
@@ -861,17 +971,24 @@
     }
 
     .ag-cell-inline-editing {
+        // inline cell editors should layer above non-editing cell content.
         z-index: 1;
 
         .ag-cell-wrapper,
         .ag-cell-edit-wrapper,
         .ag-cell-editor,
         .ag-cell-editor .ag-wrapper,
-        .ag-cell-editor input {
+        // Triple class used to increase specificity and override default text input styles.
+        .ag-cell-editor.ag-cell-editor.ag-cell-editor input {
             height: 100%;
+            min-height: 100%;
             width: 100%;
             line-height: normal;
         }
+    }
+
+    .ag-row.ag-row-editing-invalid .ag-cell-inline-editing {
+        opacity: 0.8;
     }
 
     .ag-cell .ag-icon {
@@ -958,6 +1075,10 @@
         flex: none;
     }
 
+    .ag-date-floating-filter-wrapper {
+        display: flex;
+    }
+
     .ag-set-floating-filter-input input[disabled] {
         pointer-events: none;
     }
@@ -987,6 +1108,7 @@
         position: absolute;
         top: 0;
         width: 100%;
+        // overlays must sit above grid rows while still below popup layers.
         z-index: 2;
     }
 
@@ -1006,9 +1128,241 @@
         text-align: center;
     }
 
-    .ag-overlay-loading-wrapper {
+    .ag-overlay-loading-wrapper,
+    .ag-overlay-exporting-wrapper,
+    .ag-overlay-modal-wrapper,
+    .ag-overlay-file-input-wrapper {
         // prevent interaction with grid while it's loading
         pointer-events: all;
+    }
+
+    // Dev-only validation overlay (ValidationModule). Mirrors the Theming API rules in
+    // packages/ag-grid-community/src/validation/errorOverlay/errorOverlay.css, adapted to legacy vars.
+    // Inert unless the dev-only overlay component is rendered.
+    .ag-overlay-error-panel {
+        // the grid font is sans-serif; code terms and snippets use a monospace stack.
+        --ag-internal-overlay-mono: ui-monospace, sfmono-regular, menlo, consolas, 'Liberation Mono', monospace;
+
+        // only the panel captures pointer events; the rest passes through to the grid.
+        pointer-events: all;
+        display: flex;
+        flex-direction: column;
+        text-align: start;
+        // float as a centred card (the wrapper centres it) sized to content within these caps; the
+        // margin keeps a gap on every side so the grid stays visible behind it.
+        max-width: 640px;
+        max-height: calc(100% - var(--ag-grid-size) * 4);
+        margin: calc(var(--ag-grid-size) * 2);
+        overflow: hidden;
+        color: var(--ag-foreground-color);
+        background: var(--ag-background-color);
+        border: solid 2px color-mix(in srgb, var(--ag-invalid-color) 60%, var(--ag-border-color));
+        border-radius: var(--ag-card-radius);
+        box-shadow: var(--ag-card-shadow);
+    }
+
+    .ag-overlay-error-header {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: calc(var(--ag-grid-size) * 0.5);
+        padding: var(--ag-grid-size) calc(var(--ag-grid-size) * 1.5);
+        color: var(--ag-invalid-color);
+        border-bottom: solid 1px var(--ag-border-color);
+    }
+
+    .ag-overlay-error-title {
+        flex: 1;
+        font-weight: 700;
+    }
+
+    .ag-overlay-error-button {
+        cursor: pointer;
+        border: solid 1px var(--ag-border-color);
+        background: var(--ag-background-color);
+        color: var(--ag-foreground-color);
+        border-radius: var(--ag-border-radius);
+        padding: 0 calc(var(--ag-grid-size) * 0.75);
+        font: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: calc(var(--ag-grid-size) * 3.5);
+    }
+
+    .ag-overlay-error-button:hover {
+        background: var(--ag-row-hover-color);
+    }
+
+    .ag-overlay-error-dismiss {
+        border: none;
+        background: transparent;
+        padding: 0;
+        width: calc(var(--ag-grid-size) * 3.5);
+    }
+
+    .ag-overlay-error-body {
+        display: flex;
+        flex-direction: column;
+        gap: calc(var(--ag-grid-size) * 2);
+        padding: calc(var(--ag-grid-size) * 1.5);
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .ag-overlay-error-section {
+        display: flex;
+        flex-direction: column;
+        gap: calc(var(--ag-grid-size) * 2);
+    }
+
+    .ag-overlay-error-section-header {
+        margin: 0;
+        font-weight: 700;
+    }
+
+    .ag-overlay-error-divider {
+        margin: 0;
+        border: none;
+        border-top: solid 1px var(--ag-border-color);
+    }
+
+    .ag-overlay-error-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ag-grid-size);
+        border-inline-start: solid 3px var(--ag-border-color);
+        padding-inline-start: var(--ag-grid-size);
+    }
+
+    .ag-overlay-error-item-error {
+        border-inline-start-color: var(--ag-invalid-color);
+    }
+
+    .ag-overlay-error-item-warning {
+        border-inline-start-color: #d98300;
+    }
+
+    .ag-overlay-error-item-deprecation {
+        border-inline-start-color: var(--ag-subtle-text-color);
+    }
+
+    .ag-overlay-error-message,
+    .ag-overlay-error-code {
+        margin: 0;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        user-select: text;
+    }
+
+    .ag-overlay-error-unattributed {
+        align-self: start;
+        border-radius: 500px;
+        padding: calc(var(--ag-grid-size) * 0.25) var(--ag-grid-size);
+        font-size: 0.85em;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--ag-border-color) 35%, transparent);
+        color: var(--ag-subtle-text-color);
+    }
+
+    .ag-overlay-error-inline-code {
+        font-family: var(--ag-internal-overlay-mono);
+        background: color-mix(in srgb, var(--ag-border-color) 35%, transparent);
+        border-radius: var(--ag-border-radius);
+        padding: 0 0.3em;
+    }
+
+    .ag-overlay-error-code {
+        font-family: var(--ag-internal-overlay-mono);
+        font-size: 0.85em;
+        background: var(--ag-header-background-color);
+        border: solid 1px var(--ag-border-color);
+        border-radius: var(--ag-border-radius);
+        padding: var(--ag-grid-size);
+        max-height: 50vh;
+        overflow: auto;
+    }
+
+    .ag-overlay-error-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: calc(var(--ag-grid-size) * 1.5);
+    }
+
+    .ag-overlay-file-input-center {
+        border: solid 1px var(--ag-border-color);
+        background: var(--ag-background-color);
+        border-radius: var(--ag-card-radius);
+        box-shadow: var(--ag-card-shadow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: calc(var(--ag-grid-size) * 2);
+        max-width: 420px;
+        padding: calc(var(--ag-grid-size) * 2);
+    }
+
+    .ag-file-input-error-banner {
+        background: color-mix(in srgb, var(--ag-invalid-color) 10%, var(--ag-background-color));
+        color: var(--ag-invalid-color);
+        border-radius: var(--ag-border-radius);
+        padding: calc(var(--ag-grid-size) * 0.75) calc(var(--ag-grid-size) * 2);
+        width: 100%;
+        text-align: center;
+        font-size: 0.9em;
+    }
+
+    .ag-file-input-drop-zone {
+        border: dashed 2px var(--ag-border-color);
+        border-radius: var(--ag-border-radius);
+        padding: calc(var(--ag-grid-size) * 4);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--ag-grid-size);
+        width: 100%;
+    }
+
+    .ag-file-input-drop-zone-active {
+        border-color: var(--ag-input-focus-border-color);
+        background: color-mix(in srgb, var(--ag-input-focus-border-color) 10%, var(--ag-background-color));
+    }
+
+    .ag-file-input-processing {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--ag-grid-size) * 0.75);
+        padding: calc(var(--ag-grid-size) * 4);
+
+        .ag-loading-icon {
+            @include ag.unthemed-rtl(
+                (
+                    padding-right: 0,
+                )
+            );
+        }
+    }
+
+    .ag-file-input-text-row {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--ag-grid-size) * 0.75);
+    }
+
+    .ag-file-input-text {
+        font-weight: 600;
+    }
+
+    .ag-file-input-browse {
+        cursor: pointer;
+        border: solid 1px var(--ag-border-color);
+        background: transparent;
+        color: var(--ag-text-color);
+        border-radius: var(--ag-border-radius);
+        padding: calc(var(--ag-grid-size) * 0.5) calc(var(--ag-grid-size) * 2);
+        font: inherit;
     }
 
     // /**
@@ -1018,8 +1372,12 @@
     // */
 
     .ag-popup-child {
+        // grid-managed popups must sit above overlays and row content.
         z-index: 5;
         top: 0;
+        // never let a popup grow wider than the viewport (100% exactly matches viewport for
+        // body popupParent, 100vw-30px leaves room for scrollbars when popupParent is narrower)
+        max-width: min(100%, calc(100vw - 30px));
     }
 
     .ag-popup-editor {
@@ -1041,85 +1399,70 @@
         width: 100%;
     }
 
+    // lets a rendered row report the width its content wants, so the list can grow to it
+    :where(.ag-virtual-list-grow-to-content) .ag-virtual-list-item {
+        min-width: 100%;
+        width: max-content;
+    }
+
     // /**
     //  ****************************
     //  * Floating Top and Bottom
     //  ****************************
     // */
-    .ag-floating-top {
-        overflow: hidden;
+    .ag-grid-pinned-top-rows,
+    .ag-grid-pinned-bottom-rows {
+        width: 100%;
+        position: sticky;
+        // keep pinned top/bottom sections above scrolling rows.
+        z-index: 2;
+        background-color: var(--ag-data-background-color);
+        border-bottom: var(--ag-borders-critical) var(--ag-border-color);
+    }
+
+    .ag-grid-pinned-top-rows {
+        top: 0;
         white-space: nowrap;
-        width: 100%;
-        position: relative;
-        display: flex;
     }
 
-    .ag-pinned-left-floating-top {
-        display: inline-block;
-        overflow: hidden;
-        position: relative;
-        min-width: 0px;
-    }
-
-    .ag-pinned-right-floating-top {
-        display: inline-block;
-        overflow: hidden;
-        position: relative;
-        min-width: 0px;
-    }
-
-    .ag-floating-bottom {
-        overflow: hidden;
+    .ag-grid-pinned-bottom-rows {
+        bottom: 0;
+        border-bottom: none;
         white-space: nowrap;
-        width: 100%;
-        position: relative;
-        display: flex;
-    }
-
-    .ag-pinned-left-floating-bottom {
-        display: inline-block;
-        overflow: hidden;
-        position: relative;
-        min-width: 0px;
-    }
-
-    .ag-pinned-right-floating-bottom {
-        display: inline-block;
-        overflow: hidden;
-        position: relative;
-        min-width: 0px;
-    }
-
-    // /**
-    //  ****************************
-    //  * Sticky Top
-    //  ****************************
-    // */
-    .ag-sticky-top,
-    .ag-sticky-bottom {
-        position: absolute;
-        display: flex;
-        width: 100%;
-        overflow: hidden;
-        height: 0px;
-    }
-
-    .ag-sticky-bottom {
         box-sizing: content-box !important;
+
+        .ag-grid-pinned-left-cells,
+        .ag-grid-scrolling-cells,
+        .ag-grid-pinned-right-cells {
+            // reset box-sizing as some customers override global box-sizing to
+            // "inherit" and we only want .ag-grid-pinned-bottom-rows to be content-box
+            box-sizing: border-box;
+        }
     }
 
-    .ag-pinned-left-sticky-top,
-    .ag-pinned-right-sticky-top {
-        position: relative;
-        height: 100%;
-        overflow: hidden;
-    }
-
-    .ag-sticky-top-full-width-container,
-    .ag-sticky-bottom-full-width-container {
-        overflow: hidden;
+    .ag-grid-pinned-top-rows-container,
+    .ag-grid-pinned-bottom-rows-container,
+    .ag-grid-sticky-top-rows-container,
+    .ag-grid-sticky-bottom-rows-container {
+        background-color: var(--ag-data-background-color);
+        position: absolute;
         width: 100%;
-        height: 100%;
+        white-space: nowrap;
+        overflow: visible;
+    }
+
+    .ag-grid-pinned-top-rows-container {
+        display: flex;
+        z-index: 1;
+    }
+
+    .ag-grid-pinned-bottom-rows-container {
+        display: flex;
+    }
+
+    .ag-extra-rows-container {
+        position: absolute;
+        width: 100%;
     }
 
     // /**
@@ -1168,6 +1511,7 @@
     .ag-resizer {
         position: absolute;
         pointer-events: none;
+        // keep resize handles above popup body content.
         z-index: 1;
         @include ag.selectable(none);
         &.ag-resizer-topLeft {
@@ -1236,11 +1580,15 @@
 
     .ag-tooltip {
         position: absolute;
+        // tooltips must sit above all in-grid layers and popups.
         z-index: 99999;
+        // break long words so the tooltip stays within its constrained width.
+        overflow-wrap: break-word;
     }
 
     .ag-tooltip-custom {
         position: absolute;
+        // custom tooltips share the same top-most layer as built-in tooltips.
         z-index: 99999;
     }
 
@@ -1395,8 +1743,14 @@
 
     .ag-rich-select-list {
         position: relative;
-        .ag-loading-text {
+        .ag-rich-select-loading {
+            display: flex;
             min-height: 2rem;
+
+            .ag-loading-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
         }
     }
 
@@ -1418,6 +1772,47 @@
             text-overflow: ellipsis;
             &::placeholder {
                 opacity: 0.8;
+            }
+        }
+    }
+
+    .ag-rich-select-typing-multi {
+        .ag-picker-field-display {
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .ag-rich-select-pill-display {
+            display: flex;
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: 100%;
+            align-items: center;
+            overflow: hidden;
+
+            .ag-pill-container {
+                flex: 0 1 auto;
+                min-width: 0;
+                max-width: 100%;
+                overflow: hidden;
+            }
+        }
+
+        .ag-rich-select-field-input {
+            flex: 0 0 auto;
+            min-width: 0;
+            max-width: 100%;
+
+            .ag-input-wrapper {
+                flex: 0 0 auto;
+                max-width: 100%;
+            }
+
+            .ag-input-field-input {
+                width: auto;
+                min-width: 1ch;
+                max-width: 100%;
             }
         }
     }
@@ -1468,8 +1863,15 @@
     //  ****************************
     // */
     .ag-paging-panel {
-        align-items: center;
         display: flex;
+        align-items: center;
+    }
+
+    .ag-paging-panel-content {
+        display: flex;
+        flex: 0 0 auto;
+        min-width: 100%;
+        align-items: center;
         justify-content: flex-end;
     }
 
@@ -1492,9 +1894,7 @@
     //  ****************************
     // */
     .ag-tool-panel-wrapper {
-        display: flex;
-        overflow-y: auto;
-        overflow-x: hidden;
+        overflow: hidden;
         cursor: default;
         @include ag.selectable(none);
     }
@@ -1531,6 +1931,7 @@
         position: absolute;
         top: 0;
         width: 5px;
+        // keep sidebar resize affordance above panel content.
         z-index: 1;
     }
 
@@ -1571,6 +1972,7 @@
         align-items: center;
         height: 100%;
         position: absolute;
+        contain: paint;
     }
 
     .ag-header-group-cell-no-group.ag-header-span-height {
@@ -1643,7 +2045,8 @@
         overflow: hidden;
     }
 
-    .ag-status-panel {
+    .ag-status-panel,
+    .ag-status-panel.ag-status-panel-aggregations .ag-status-name-value {
         display: inline-flex;
     }
 
@@ -1663,6 +2066,35 @@
         display: inline-flex;
     }
 
+    // * Row Number Columns
+    // *****************************
+    // */
+    .ag-row-number-cell {
+        width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        user-select: none;
+        @include ag.unthemed-rtl(
+            (
+                text-align: right,
+            )
+        );
+    }
+
+    .ag-row-numbers-resizer {
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        height: 4px;
+        width: 100%;
+        cursor: row-resize;
+    }
+
+    .ag-grid-pinned-bottom-rows .ag-row-numbers-resizer {
+        bottom: unset;
+        top: -2px;
+    }
+
     // /**
     //  ****************************
     //  * Widgets
@@ -1671,7 +2103,7 @@
 
     .ag-icon {
         display: block;
-        speak: none;
+        speak: never;
     }
 
     .ag-group {
@@ -1737,6 +2169,23 @@
         align-items: flex-end;
     }
 
+    .ag-field-set {
+        display: flex;
+        align-items: center;
+    }
+
+    .ag-field-set-wrapper {
+        display: flex;
+    }
+
+    .ag-field-set-wrapper-horizontal {
+        flex-direction: row;
+    }
+
+    .ag-field-set-wrapper-vertical {
+        flex-direction: column;
+    }
+
     .ag-toggle-button-icon {
         transition: right 0.3s;
         position: absolute;
@@ -1754,10 +2203,13 @@
         flex: 1 1 auto;
     }
 
-    .ag-floating-filter-input .ag-input-field-input[type='date'] {
-        // Fix a bug in Blink rendering engine where date input will not shrink from its default size in a
-        // flex container, but it will grow. So we give it a very small width and it will grow to the right size
-        width: 1px;
+    .ag-floating-filter-input {
+        .ag-input-field-input[type='date'],
+        .ag-input-field-input[type='datetime-local'] {
+            // Fix a bug in Blink rendering engine where date input will not shrink from its default size in a
+            // flex container, but it will grow. So we give it a very small width and it will grow to the right size
+            width: 1px;
+        }
     }
 
     .ag-range-field {
@@ -1938,30 +2390,65 @@
         }
     }
 
+    .ag-content-editable-field {
+        display: flex;
+        align-items: center;
+    }
+
+    .ag-content-editable-field-input {
+        cursor: text;
+        display: block;
+        flex: 1 1 auto;
+        outline: none;
+        white-space: nowrap;
+        line-height: normal;
+        overflow: auto;
+        overflow-y: hidden;
+
+        &::-webkit-scrollbar {
+            display: none !important;
+        }
+
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+    }
+
     .ag-ltr {
         direction: ltr;
-        .ag-body,
-        .ag-floating-top,
-        .ag-floating-bottom,
-        .ag-header,
-        .ag-sticky-top,
-        .ag-sticky-bottom,
-        .ag-body-viewport,
-        .ag-body-horizontal-scroll {
+        .ag-grid-scrolling-rows,
+        .ag-grid-pinned-top-rows,
+        .ag-grid-pinned-bottom-rows,
+        .ag-grid-pinned-top-rows-container,
+        .ag-grid-pinned-bottom-rows-container,
+        .ag-grid-sticky-top-rows-container,
+        .ag-grid-sticky-bottom-rows-container {
+            flex-direction: row;
+        }
+
+        .ag-row:where(:not(.ag-full-width-row)),
+        .ag-row:where(.ag-embedded-full-width-row),
+        .ag-header-row,
+        .ag-spanned-row {
             flex-direction: row;
         }
     }
 
     .ag-rtl {
         direction: rtl;
-        .ag-body,
-        .ag-floating-top,
-        .ag-floating-bottom,
-        .ag-header,
-        .ag-sticky-top,
-        .ag-sticky-bottom,
-        .ag-body-viewport,
-        .ag-body-horizontal-scroll {
+        .ag-grid-scrolling-rows,
+        .ag-grid-pinned-top-rows,
+        .ag-grid-pinned-bottom-rows,
+        .ag-grid-pinned-top-rows-container,
+        .ag-grid-pinned-bottom-rows-container,
+        .ag-grid-sticky-top-rows-container,
+        .ag-grid-sticky-bottom-rows-container {
+            flex-direction: row-reverse;
+        }
+
+        .ag-row:not(.ag-full-width-row),
+        .ag-row.ag-embedded-full-width-row,
+        .ag-header-row,
+        .ag-spanned-row {
             flex-direction: row-reverse;
         }
 
@@ -1973,17 +2460,25 @@
         }
     }
 
-    .ag-body .ag-body-viewport {
-        -webkit-overflow-scrolling: touch;
-    }
-
     .ag-measurement-container {
         width: 0;
         overflow: hidden;
         visibility: hidden;
 
+        // shim the Theming API border variables the size-measurement probe reads to
+        // their legacy equivalents
+        --ag-header-row-border: var(--ag-borders-critical) var(--ag-border-color);
+        --ag-pinned-row-border: var(--ag-borders-critical) var(--ag-border-color);
+        --ag-row-border: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
+
         div {
             position: absolute;
         }
+    }
+
+    .ag-measurement-element-border::before {
+        content: '';
+        display: block;
+        border-left: var(--ag-internal-measurement-border);
     }
 }

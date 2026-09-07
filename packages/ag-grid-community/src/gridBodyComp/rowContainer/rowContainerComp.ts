@@ -1,119 +1,182 @@
+import { RefPlaceholder, _ensureDomOrder, _setDisplayed } from 'ag-stack';
+
+import type { BeanCollection } from '../../context/context';
 import { RowComp } from '../../rendering/row/rowComp';
 import type { RowCtrl, RowCtrlInstanceId } from '../../rendering/row/rowCtrl';
-import { _setAriaRole } from '../../utils/aria';
-import { _ensureDomOrder, _insertWithDomOrder } from '../../utils/dom';
+import type { ElementParams } from '../../utils/element';
 import type { ComponentSelector } from '../../widgets/component';
-import { Component, RefPlaceholder } from '../../widgets/component';
+import { Component } from '../../widgets/component';
 import type { IRowContainerComp, RowContainerName, RowContainerOptions } from './rowContainerCtrl';
-import { RowContainerCtrl, _getRowContainerOptions } from './rowContainerCtrl';
+import {
+    RowContainerCtrl,
+    _getRowContainerClass,
+    _getRowContainerOptions,
+    _getRowSpanContainerClass,
+} from './rowContainerCtrl';
 
-function templateFactory(options: RowContainerOptions): string {
-    let res: string;
-    if (options.type === 'center') {
-        res =
-            /* html */
-            `<div class="${options.viewport}" data-ref="eViewport" role="presentation">
-                <div class="${options.container}" data-ref="eContainer"></div>
-            </div>`;
-    } else {
-        res = /* html */ `<div class="${options.container}" data-ref="eContainer"></div>`;
-    }
-
-    return res;
+function getElementParams(name: RowContainerName, options: RowContainerOptions, beans: BeanCollection): ElementParams {
+    const isCellSpanning = !!beans.gos.get('enableCellSpan') && !!options.getSpannedRowCtrls;
+    return {
+        tag: 'div',
+        ref: 'eContainer',
+        cls: _getRowContainerClass(name),
+        role: 'presentation',
+        children: [
+            isCellSpanning
+                ? {
+                      tag: 'div',
+                      ref: 'eSpannedContainer',
+                      cls: `ag-spanning-container ${_getRowSpanContainerClass(name)}`,
+                      role: 'presentation',
+                  }
+                : null,
+        ],
+    };
 }
 
 export class RowContainerComp extends Component {
-    private readonly eViewport: HTMLElement = RefPlaceholder;
     private readonly eContainer: HTMLElement = RefPlaceholder;
+    private readonly eSpannedContainer: HTMLElement = RefPlaceholder;
 
     private readonly name: RowContainerName;
     private readonly options: RowContainerOptions;
 
-    private rowComps: { [id: RowCtrlInstanceId]: RowComp } = {};
+    private rowCompsNoSpan: { [id: RowCtrlInstanceId]: RowComp } = {};
+    private rowCompsWithSpan: { [id: RowCtrlInstanceId]: RowComp } = {};
 
     // we ensure the rows are in the dom in the order in which they appear on screen when the
     // user requests this via gridOptions.ensureDomOrder. this is typically used for screen readers.
     private domOrder: boolean;
     private lastPlacedElement: HTMLElement | null;
+    private initialised = false;
 
     constructor(params?: { name: string }) {
         super();
         this.name = params?.name as RowContainerName;
         this.options = _getRowContainerOptions(this.name);
-        this.setTemplate(templateFactory(this.options));
     }
 
     public postConstruct(): void {
+        this.setTemplate(getElementParams(this.name, this.options, this.beans));
+        this.initialiseComp();
+    }
+
+    private initialiseComp(): void {
+        if (this.initialised || !this.isAlive()) {
+            return;
+        }
+
+        const gridBodyCtrl = this.beans.ctrlsSvc.getGridBodyCtrl();
+        let eGridViewport: HTMLElement | undefined = gridBodyCtrl?.eGridViewport;
+        if (!eGridViewport) {
+            const parentComponent = this.getParentComponent() as { eGridViewport?: HTMLElement };
+            eGridViewport = parentComponent?.eGridViewport;
+        }
+
+        const eContainer = this.eContainer;
+        const eSpannedContainer: HTMLElement | undefined = this.eSpannedContainer;
+        const eViewport = eGridViewport ?? eContainer;
+
         const compProxy: IRowContainerComp = {
-            setHorizontalScroll: (offset: number) => (this.eViewport.scrollLeft = offset),
-            setViewportHeight: (height) => (this.eViewport.style.height = height),
             setRowCtrls: ({ rowCtrls }) => this.setRowCtrls(rowCtrls),
-            setDomOrder: (domOrder) => {
-                this.domOrder = domOrder;
+            setSpannedRowCtrls: (rowCtrls: RowCtrl[]) => this.setRowCtrls(rowCtrls, true),
+            setDomOrder: (domOrder) => (this.domOrder = domOrder),
+            setContainerWidth: (width) => {
+                eContainer.style.width = width;
+                if (eSpannedContainer) {
+                    eSpannedContainer.style.width = width;
+                }
             },
-            setContainerWidth: (width) => (this.eContainer.style.width = width),
-            setOffsetTop: (offset) => (this.eContainer.style.transform = `translateY(${offset})`),
+            setOffsetTop: (offset) => {
+                const top = `translateY(${offset})`;
+                eContainer.style.transform = top;
+                if (eSpannedContainer) {
+                    eSpannedContainer.style.transform = top;
+                }
+            },
+            setHidden: (hidden: boolean) => _setDisplayed(eContainer, !hidden, { skipAriaHidden: true }),
         };
 
         const ctrl = this.createManagedBean(new RowContainerCtrl(this.name));
-        ctrl.setComp(compProxy, this.eContainer, this.eViewport);
+        ctrl.setComp(compProxy, eContainer, eSpannedContainer, eViewport);
+        this.initialised = true;
     }
 
     public override destroy(): void {
         // destroys all row comps
         this.setRowCtrls([]);
+        this.setRowCtrls([], true);
         super.destroy();
+        this.lastPlacedElement = null;
     }
 
-    private setRowCtrls(rowCtrls: RowCtrl[]): void {
-        const oldRows = { ...this.rowComps };
-        this.rowComps = {};
+    private setRowCtrls(rowCtrls: RowCtrl[], spanContainer?: boolean): void {
+        const { beans, options } = this;
+
+        const container = spanContainer ? this.eSpannedContainer : this.eContainer;
+        if (!container) {
+            return;
+        }
+        const oldRows = spanContainer ? { ...this.rowCompsWithSpan } : { ...this.rowCompsNoSpan };
+        const newComps: { [id: RowCtrlInstanceId]: RowComp } = {};
+
+        if (spanContainer) {
+            this.rowCompsWithSpan = newComps;
+        } else {
+            this.rowCompsNoSpan = newComps;
+        }
 
         this.lastPlacedElement = null;
 
-        const processRow = (rowCon: RowCtrl) => {
-            const instanceId = rowCon.instanceId;
+        const orderedRows: [rowComp: RowComp, isNew: boolean][] = [];
+
+        for (const rowCtrl of rowCtrls) {
+            const instanceId = rowCtrl.instanceId;
             const existingRowComp = oldRows[instanceId];
 
+            let rowComp: RowComp;
+
             if (existingRowComp) {
-                this.rowComps[instanceId] = existingRowComp;
+                rowComp = existingRowComp;
                 delete oldRows[instanceId];
-                this.ensureDomOrder(existingRowComp.getGui());
             } else {
-                // don't create new row comps for rows which are not displayed. still want the existing components
-                // as they may be animating out.
-                if (!rowCon.rowNode.displayed) {
-                    return;
+                if (!rowCtrl.rowNode.displayed) {
+                    continue;
                 }
-                const rowComp = new RowComp(rowCon, this.beans, this.options.type);
-                this.rowComps[instanceId] = rowComp;
-                this.appendRow(rowComp.getGui());
+                rowComp = new RowComp(rowCtrl, beans, options.type);
             }
-        };
+            newComps[instanceId] = rowComp;
+            orderedRows.push([rowComp, !existingRowComp]);
+        }
 
-        rowCtrls.forEach(processRow);
-        Object.values(oldRows).forEach((oldRowComp) => {
-            this.eContainer.removeChild(oldRowComp.getGui());
+        this.removeOldRows(Object.values(oldRows));
+        this.addRowNodes(orderedRows, container);
+    }
+
+    private addRowNodes(rows: [rowComp: RowComp, isNew: boolean][], container: HTMLElement): void {
+        const { domOrder } = this;
+        for (const [rowComp, isNew] of rows) {
+            const eGui = rowComp.getGui();
+            if (!domOrder) {
+                if (isNew) {
+                    container.appendChild(eGui);
+                }
+            } else {
+                this.ensureDomOrder(eGui, container);
+            }
+        }
+    }
+
+    private removeOldRows(rowComps: RowComp[]): void {
+        for (const oldRowComp of rowComps) {
+            oldRowComp.getGui().remove();
             oldRowComp.destroy();
-        });
-
-        _setAriaRole(this.eContainer, 'rowgroup');
+        }
     }
 
-    public appendRow(element: HTMLElement) {
-        if (this.domOrder) {
-            _insertWithDomOrder(this.eContainer, element, this.lastPlacedElement);
-        } else {
-            this.eContainer.appendChild(element);
-        }
-        this.lastPlacedElement = element;
-    }
-
-    private ensureDomOrder(eRow: HTMLElement): void {
-        if (this.domOrder) {
-            _ensureDomOrder(this.eContainer, eRow, this.lastPlacedElement);
-            this.lastPlacedElement = eRow;
-        }
+    private ensureDomOrder(eRow: HTMLElement, container: HTMLElement): void {
+        _ensureDomOrder(container, eRow, this.lastPlacedElement);
+        this.lastPlacedElement = eRow;
     }
 }
 

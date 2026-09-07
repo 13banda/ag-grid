@@ -1,10 +1,11 @@
 import type { ApiFunction, ApiFunctionName } from '../api/iApiFunction';
 import type { BeanCollection } from '../context/context';
 import type { RowModelType } from '../interfaces/iRowModel';
-import { _errorOnce, _warnOnce } from '../utils/function';
 
 const clientSide = 'clientSide';
 const serverSide = 'serverSide';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const viewport = 'viewport';
 const infinite = 'infinite';
 
 const functionRowModels: { [name in ApiFunctionName]?: RowModelType[] } = {
@@ -14,7 +15,7 @@ const functionRowModels: { [name in ApiFunctionName]?: RowModelType[] } = {
     forEachLeafNode: [clientSide],
     forEachNodeAfterFilter: [clientSide],
     forEachNodeAfterFilterAndSort: [clientSide],
-    resetRowHeights: [clientSide],
+    resetRowHeights: [clientSide, serverSide],
     applyTransaction: [clientSide],
     applyTransactionAsync: [clientSide],
     flushAsyncTransactions: [clientSide],
@@ -96,8 +97,7 @@ export function validateApiFunction<TFunctionName extends ApiFunctionName>(
         const { version, new: replacement, old, message } = deprecation;
         const apiMethod = old ?? functionName;
         return (...args: any[]) => {
-            const replacementMessage = replacement ? `Please use ${replacement} instead. ` : '';
-            _warnOnce(`Since ${version} api.${apiMethod} is deprecated. ${replacementMessage}${message ?? ''}`);
+            beans.log.deprecated(308, { version, apiMethod, replacement, message });
             return apiFunction.apply(apiFunction, args);
         };
     }
@@ -106,9 +106,7 @@ export function validateApiFunction<TFunctionName extends ApiFunctionName>(
         return (...args: any[]) => {
             const rowModel = beans.rowModel.getType();
             if (!rowModels.includes(rowModel)) {
-                _errorOnce(
-                    `api.${functionName} can only be called when gridOptions.rowModelType is ${rowModels.join(' or ')}`
-                );
+                beans.log.error(311, { functionName, rowModels });
                 return undefined as any;
             }
             return apiFunction.apply(apiFunction, args);

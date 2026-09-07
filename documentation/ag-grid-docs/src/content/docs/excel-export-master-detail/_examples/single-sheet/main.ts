@@ -9,7 +9,7 @@ import type {
     IDetailCellRendererParams,
     ProcessRowGroupForExportParams,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ClipboardModule,
     ColumnMenuModule,
@@ -19,6 +19,11 @@ import {
     MasterDetailModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ClipboardModule,
@@ -27,7 +32,6 @@ ModuleRegistry.registerModules([
     MasterDetailModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const getRows = (params: ProcessRowGroupForExportParams) => {

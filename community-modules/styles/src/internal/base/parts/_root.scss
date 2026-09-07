@@ -1,18 +1,21 @@
 @mixin output {
     .ag-root-wrapper,
-    .ag-sticky-top,
-    .ag-sticky-bottom,
     .ag-dnd-ghost {
-        background-color: var(--ag-background-color);
-    }
-
-    .ag-sticky-bottom {
-        border-top: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
+        background-color: var(--ag-wrapper-background-color);
     }
 
     .ag-root-wrapper,
     .ag-popup {
         --ag-indentation-level: 0;
+    }
+
+    .ag-styled-root {
+        display: contents;
+    }
+
+    // TODO scoped to ag-toolbar for minor release, should make global in v37.0
+    .ag-toolbar .ag-react-container:not(.ag-react-wrapper-block) {
+        display: contents;
     }
 
     [class*='ag-theme-'] {

@@ -1,8 +1,7 @@
 import type { Path, Rect } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { createColumnRects } from '../miniChartHelpers';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
@@ -10,15 +9,13 @@ export interface Coordinate {
     x: number;
     y: number;
 }
-export class MiniAreaColumnCombo extends MiniChartWithAxes {
-    static chartType: ChartType = 'areaColumnCombo';
+export class MiniAreaColumnComboClass extends MiniChartWithAxes {
+    private readonly columns: Rect[];
+    private readonly areas: Path[];
 
-    private columns: Rect[];
-    private areas: Path[];
+    private readonly columnData = [3, 4.5];
 
-    private columnData = [3, 4.5];
-
-    private areaData = [[5, 4, 6, 5, 4]];
+    private readonly areaData = [[5, 4, 6, 5, 4]];
 
     constructor(container: HTMLElement, agChartsExports: AgChartsExports, fills: string[], strokes: string[]) {
         super(container, agChartsExports, 'areaColumnComboTooltip');
@@ -45,7 +42,7 @@ export class MiniAreaColumnCombo extends MiniChartWithAxes {
         });
 
         // scale for area series
-        const xScale = new _Scene.BandScale();
+        const xScale = new _Scene.CategoryScale();
         xScale.range = [padding, size - padding];
         xScale.domain = [0, 1, 2, 3, 4];
         xScale.paddingInner = 1;
@@ -123,3 +120,8 @@ export class MiniAreaColumnCombo extends MiniChartWithAxes {
         });
     }
 }
+
+export const MiniAreaColumnCombo: MiniChartSelector = {
+    chartType: 'areaColumnCombo',
+    miniChart: MiniAreaColumnComboClass,
+};

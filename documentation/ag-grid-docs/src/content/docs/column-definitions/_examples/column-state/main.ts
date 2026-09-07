@@ -4,19 +4,16 @@ import {
     ColumnApiModule,
     ColumnAutoSizeModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { ColumnsToolPanelModule, RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ColumnApiModule,
-    ColumnAutoSizeModule,
-    ClientSideRowModelModule,
-    ColumnsToolPanelModule,
-    RowGroupingModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnApiModule, ColumnAutoSizeModule, ClientSideRowModelModule]);
 
 const columnDefs: ColDef[] = [{ field: 'athlete' }, { field: 'age' }, { field: 'country' }, { field: 'sport' }];
 
@@ -24,7 +21,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: columnDefs,
-    rowData: null,
     autoSizeStrategy: {
         type: 'fitGridWidth',
     },

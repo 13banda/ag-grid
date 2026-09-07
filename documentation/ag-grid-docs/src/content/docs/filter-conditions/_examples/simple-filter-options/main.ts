@@ -12,17 +12,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    NumberFilterModule,
-    DateFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, NumberFilterModule, DateFilterModule]);
 
 const filterParams: IDateFilterParams = {
     maxNumConditions: 1,

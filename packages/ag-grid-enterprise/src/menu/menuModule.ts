@@ -2,6 +2,7 @@ import type { _ColumnChooserGridApi, _ContextMenuGridApi, _ModuleWithApi, _Modul
 import { _ColumnMoveModule, _PopupModule, _SharedDragAndDropModule, _SharedMenuModule } from 'ag-grid-community';
 
 import { EnterpriseCoreModule } from '../agGridEnterpriseModule';
+import { SharedColumnStateUpdateStrategyModule } from '../columnToolPanel/updates/columnStateUpdateStrategyModule';
 import { VERSION } from '../version';
 import { MenuItemModule } from '../widgets/menuItemModule';
 import { ChartMenuItemMapper } from './chartMenuItemMapper';
@@ -12,14 +13,15 @@ import { EnterpriseMenuFactory } from './enterpriseMenu';
 import { hideColumnChooser, showColumnChooser, showContextMenu } from './menuApi';
 import { MenuItemMapper } from './menuItemMapper';
 import { MenuUtils } from './menuUtils';
+import { ToolbarMenuBuilder } from './toolbarMenuBuilder';
 
 /**
  * @internal
  */
-export const MenuCoreModule: _ModuleWithoutApi = {
+const MenuCoreModule: _ModuleWithoutApi = {
     moduleName: 'MenuCore',
     version: VERSION,
-    beans: [MenuItemMapper, ChartMenuItemMapper, MenuUtils],
+    beans: [MenuItemMapper, ChartMenuItemMapper, MenuUtils, ToolbarMenuBuilder],
     icons: {
         // context menu chart item
         chart: 'chart',
@@ -47,10 +49,16 @@ export const MenuCoreModule: _ModuleWithoutApi = {
         csvExport: 'csv',
         // excel export,
         excelExport: 'excel',
+        // pdf export
+        pdfExport: 'pdf',
         // show on column header when column is sorted ascending
         sortAscending: 'asc',
         // show on column header when column is sorted descending
         sortDescending: 'desc',
+        // show on column header when column is sorted absolute ascending
+        sortAbsoluteAscending: 'aasc',
+        // show on column header when column is sorted absolute descending
+        sortAbsoluteDescending: 'adesc',
         // show on column header when column has no sort, only when enabled with colDef.unSortIcon=true
         sortUnSort: 'none',
     },
@@ -65,6 +73,7 @@ export const ColumnMenuModule: _ModuleWithApi<_ColumnChooserGridApi> = {
     version: VERSION,
     beans: [EnterpriseMenuFactory, ColumnMenuFactory, ColumnChooserFactory],
     icons: {
+        ensureColumnVisible: 'column-arrow',
         // menu tab icon in legacy tabbed enterprise column menu
         legacyMenu: 'menu',
         // filter tab icon in legacy tabbed enterprise column menu
@@ -81,7 +90,7 @@ export const ColumnMenuModule: _ModuleWithApi<_ColumnChooserGridApi> = {
         showColumnChooser,
         hideColumnChooser,
     },
-    dependsOn: [MenuCoreModule, _SharedDragAndDropModule, _ColumnMoveModule],
+    dependsOn: [MenuCoreModule, SharedColumnStateUpdateStrategyModule, _SharedDragAndDropModule, _ColumnMoveModule],
 };
 
 /**

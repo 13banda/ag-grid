@@ -1,14 +1,9 @@
-import type { AgColumn, HeaderPosition, NamedBean, PopupEventParams } from 'ag-grid-community';
-import {
-    BeanStub,
-    _findTabbableParent,
-    _getActiveDomElement,
-    _isNothingFocused,
-    _isVisible,
-    _last,
-} from 'ag-grid-community';
+import { _findTabbableParent, _getActiveDomElement, _isNothingFocused, _isVisible, _last } from 'ag-stack';
 
-import type { CloseMenuEvent } from '../widgets/agMenuItemComponent';
+import type { AgColumn, HeaderPosition, NamedBean, PopupEventParams } from 'ag-grid-community';
+import { BeanStub } from 'ag-grid-community';
+
+import type { AgCloseMenuEvent } from '../agStack/agMenuItemComponent';
 
 export interface MenuRestoreFocusParams {
     column: AgColumn | undefined;
@@ -42,17 +37,17 @@ export class MenuUtils extends BeanStub implements NamedBean {
             // don't return focus to the header
             return;
         }
-        this.focusHeaderCell(restoreFocusParams);
+        this.focusEventSourceOrHeaderCell(restoreFocusParams);
     }
 
     public closePopupAndRestoreFocusOnSelect(
         hidePopupFunc: (popupParams?: PopupEventParams) => void,
         restoreFocusParams: MenuRestoreFocusParams,
-        event?: CloseMenuEvent
+        event?: AgCloseMenuEvent
     ): void {
         let keyboardEvent: KeyboardEvent | undefined;
 
-        if (event && event.keyboardEvent) {
+        if (event?.keyboardEvent) {
             keyboardEvent = event.keyboardEvent;
         }
 
@@ -75,16 +70,18 @@ export class MenuUtils extends BeanStub implements NamedBean {
                     preventScrollOnBrowserFocus: true,
                 });
             } else {
-                this.focusHeaderCell(restoreFocusParams);
+                this.focusEventSourceOrHeaderCell(restoreFocusParams);
             }
         }
     }
 
-    public onContextMenu(
-        mouseEvent: MouseEvent | null | undefined,
-        touchEvent: TouchEvent | null | undefined,
-        showMenuCallback: (eventOrTouch: MouseEvent | Touch) => boolean
-    ): void {
+    public onContextMenu(params: {
+        mouseEvent: MouseEvent | null | undefined;
+        touchEvent: TouchEvent | null | undefined;
+        showMenuCallback: (eventOrTouch: MouseEvent | Touch) => boolean;
+        source: 'api' | 'ui';
+    }): void {
+        const { mouseEvent, touchEvent, showMenuCallback, source } = params;
         // to allow us to debug in chrome, we ignore the event if ctrl is pressed.
         // not everyone wants this, so first 'if' below allows to turn this hack off.
         if (!this.gos.get('allowContextMenuWithControlKey')) {
@@ -100,7 +97,7 @@ export class MenuUtils extends BeanStub implements NamedBean {
             this.blockMiddleClickScrollsIfNeeded(mouseEvent);
         }
 
-        if (this.gos.get('suppressContextMenu')) {
+        if (source === 'ui' && this.gos.get('suppressContextMenu')) {
             return;
         }
 
@@ -108,14 +105,14 @@ export class MenuUtils extends BeanStub implements NamedBean {
         if (showMenuCallback(eventOrTouch)) {
             const event = mouseEvent ?? touchEvent;
 
-            if (event && event.cancelable) {
+            if (event?.cancelable) {
                 event.preventDefault();
             }
         }
     }
 
     // make this async for react
-    private async focusHeaderCell(restoreFocusParams: MenuRestoreFocusParams): Promise<void> {
+    private async focusEventSourceOrHeaderCell(restoreFocusParams: MenuRestoreFocusParams): Promise<void> {
         const { column, columnIndex, headerPosition, eventSource } = restoreFocusParams;
         const { visibleCols, headerNavigation, focusSvc } = this.beans;
 
@@ -123,17 +120,18 @@ export class MenuUtils extends BeanStub implements NamedBean {
         // even though `getAllCols` is a synchronous method, we use `await` to make it async
         const isColumnStillVisible = await visibleCols.allCols.some((col) => col === column);
 
-        if (column && !column.isAlive()) {
+        if (!this.isAlive()) {
             return;
         }
 
-        if (isColumnStillVisible && eventSource && _isVisible(eventSource)) {
+        if (eventSource && _isVisible(eventSource)) {
             const focusableEl = _findTabbableParent(eventSource);
             if (focusableEl) {
-                if (column) {
+                if (column?.isAlive() && isColumnStillVisible) {
                     headerNavigation?.scrollToColumn(column);
                 }
                 focusableEl.focus();
+                return;
             }
         }
         // if the focusEl is no longer in the DOM, we try to focus

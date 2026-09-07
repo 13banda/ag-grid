@@ -5,25 +5,24 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    NumberFilterModule,
-    ClientSideRowModelModule,
-    ColumnApiModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, NumberFilterModule, ClientSideRowModelModule, ColumnApiModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete' },
     { field: 'age', width: 90 },
     { field: 'country' },
+    { field: 'sport' },
     { field: 'year', width: 90 },
     { field: 'date' },
-    { field: 'sport' },
     { field: 'gold' },
     { field: 'silver' },
     { field: 'bronze' },

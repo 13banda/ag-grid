@@ -1,54 +1,36 @@
-import { KeyCode } from '../constants/keyCode';
-import type { BeanCollection } from '../context/context';
-import type { PaginationNumberFormatterParams } from '../interfaces/iCallbackParams';
-import type { WithoutGridCommon } from '../interfaces/iCommon';
+import { RefPlaceholder, _removeFromParent, _scrollHorizontallyToShow } from 'ag-stack';
+
+import type { PaginationPanel } from '../entities/gridOptions';
 import type { FocusableContainer } from '../interfaces/iFocusableContainer';
-import type { IRowModel } from '../interfaces/iRowModel';
-import type { AriaAnnouncementService } from '../rendering/ariaAnnouncementService';
-import { _setAriaDisabled } from '../utils/aria';
-import { _addFocusableContainerListener, _focusGridInnerElement } from '../utils/focus';
-import { _createIconNoSpan } from '../utils/icon';
-import { _formatNumberCommas } from '../utils/number';
-import type { ComponentSelector } from '../widgets/component';
-import { RefPlaceholder } from '../widgets/component';
+import { _addFocusableContainerListener, _focusGridInnerElement } from '../utils/gridFocus';
+import type { Component, ComponentSelector } from '../widgets/component';
 import { TabGuardComp } from '../widgets/tabGuardComp';
-import type { PageSizeSelectorComp } from './pageSizeSelector/pageSizeSelectorComp';
-import { PageSizeSelectorSelector } from './pageSizeSelector/pageSizeSelectorComp';
-import { paginationCompCSS } from './paginationComp.css-GENERATED';
-import type { PaginationService } from './paginationService';
+import type { PageNumbersComp } from './pageNumbersComp';
+import { PageSizeSelectorComp } from './pageSizeSelectorComp';
+import { PageSummaryComp } from './pageSummaryComp';
+import paginationCompCSS from './paginationComp.css';
+import { RowSummaryComp } from './rowSummaryComp';
 
-export class PaginationComp extends TabGuardComp implements FocusableContainer {
-    private rowModel: IRowModel;
-    private pagination: PaginationService;
-    private ariaAnnounce?: AriaAnnouncementService;
+const DEFAULT_PANELS: readonly PaginationPanel[] = ['pageSize', 'rowSummary', 'pageSummary'];
 
-    public wireBeans(beans: BeanCollection): void {
-        this.rowModel = beans.rowModel;
-        this.pagination = beans.pagination!;
-        this.ariaAnnounce = beans.ariaAnnounce;
-    }
+type AriaAnnounceKey = 'paginationRow' | 'paginationPage' | 'paginationPageNumbers';
 
-    private readonly btFirst: HTMLElement = RefPlaceholder;
-    private readonly btPrevious: HTMLElement = RefPlaceholder;
-    private readonly btNext: HTMLElement = RefPlaceholder;
-    private readonly btLast: HTMLElement = RefPlaceholder;
+class PaginationComp extends TabGuardComp implements FocusableContainer {
+    private readonly eContent: HTMLElement = RefPlaceholder;
 
-    private readonly lbRecordCount: any = RefPlaceholder;
-    private readonly lbFirstRowOnPage: any = RefPlaceholder;
-    private readonly lbLastRowOnPage: any = RefPlaceholder;
-    private readonly lbCurrent: any = RefPlaceholder;
-    private readonly lbTotal: any = RefPlaceholder;
+    private pageSizeComp: PageSizeSelectorComp | undefined;
+    private rowSummaryComp: RowSummaryComp | undefined;
+    private pageSummaryComp: PageSummaryComp | undefined;
+    private pageNumbersComp: PageNumbersComp | undefined;
+    private hasVisiblePanel = false;
 
-    private readonly pageSizeComp: PageSizeSelectorComp = RefPlaceholder;
-
-    private previousAndFirstButtonsDisabled = false;
-    private nextButtonDisabled = false;
-    private lastButtonDisabled = false;
-    private areListenersSetup = false;
     private allowFocusInnerElement = false;
 
-    private ariaRowStatus: string;
-    private ariaPageStatus: string;
+    private readonly lastAriaAnnounced: Record<AriaAnnounceKey, string> = {
+        paginationRow: '',
+        paginationPage: '',
+        paginationPageNumbers: '',
+    };
 
     constructor() {
         super();
@@ -56,302 +38,156 @@ export class PaginationComp extends TabGuardComp implements FocusableContainer {
     }
 
     public postConstruct(): void {
-        const isRtl = this.gos.get('enableRtl');
-        this.setTemplate(this.getTemplate(), [PageSizeSelectorSelector]);
+        const idPrefix = `ag-${this.getCompId()}`;
 
-        const { btFirst, btPrevious, btNext, btLast } = this;
-        this.activateTabIndex([btFirst, btPrevious, btNext, btLast]);
-
-        btFirst.insertAdjacentElement('afterbegin', _createIconNoSpan(isRtl ? 'last' : 'first', this.beans)!);
-        btPrevious.insertAdjacentElement('afterbegin', _createIconNoSpan(isRtl ? 'next' : 'previous', this.beans)!);
-        btNext.insertAdjacentElement('afterbegin', _createIconNoSpan(isRtl ? 'previous' : 'next', this.beans)!);
-        btLast.insertAdjacentElement('afterbegin', _createIconNoSpan(isRtl ? 'first' : 'last', this.beans)!);
-
-        this.addManagedPropertyListener('pagination', this.onPaginationChanged.bind(this));
-        this.addManagedPropertyListener('suppressPaginationPanel', this.onPaginationChanged.bind(this));
-        this.addManagedPropertyListeners(
-            ['paginationPageSizeSelector', 'paginationAutoPageSize', 'suppressPaginationPanel'],
-            () => this.onPageSizeRelatedOptionsChange()
-        );
-
-        this.pageSizeComp.toggleSelectDisplay(this.pageSizeComp.shouldShowPageSizeSelector());
+        this.setTemplate({
+            tag: 'div',
+            cls: 'ag-paging-panel ag-unselectable',
+            attrs: { id: idPrefix },
+            children: [{ tag: 'div', cls: 'ag-paging-panel-content', ref: 'eContent' }],
+        });
 
         this.initialiseTabGuard({
-            // prevent tab guard default logic
             onTabKeyDown: () => {},
             focusInnerElement: (fromBottom) => {
                 if (this.allowFocusInnerElement) {
-                    this.tabGuardFeature.getTabGuardCtrl().focusInnerElement(fromBottom);
+                    return this.tabGuardFeature.getTabGuardCtrl().focusInnerElement(fromBottom);
                 } else {
-                    _focusGridInnerElement(this.beans, fromBottom);
+                    return _focusGridInnerElement(this.beans, fromBottom);
                 }
             },
             forceFocusOutWhenTabGuardsAreEmpty: true,
         });
 
+        this.buildComponents(idPrefix);
+
+        this.addManagedPropertyListeners(['pagination', 'suppressPaginationPanel'], () => this.onPaginationChanged());
+        this.addManagedPropertyListeners(
+            ['paginationPageSizeSelector', 'paginationAutoPageSize', 'suppressPaginationPanel'],
+            () => this.onPageSizeRelatedOptionsChange()
+        );
+        this.addManagedPropertyListener('paginationPanels', () => this.rebuildComponents(idPrefix));
+        this.addManagedEventListeners({ paginationChanged: () => this.onPaginationEvent() });
+
+        _addFocusableContainerListener(this.beans, this, this.getGui());
+
+        this.addManagedElementListeners(this.getGui(), {
+            focusin: (e: FocusEvent) => {
+                const target = e.target as HTMLElement | null;
+                if (target) {
+                    _scrollHorizontallyToShow(target);
+                }
+            },
+        });
+
         this.onPaginationChanged();
+        this.announceAriaStatus();
     }
 
     public setAllowFocus(allowFocus: boolean): void {
         this.allowFocusInnerElement = allowFocus;
     }
 
-    private onPaginationChanged(): void {
-        const isPaging = this.gos.get('pagination');
-        const paginationPanelEnabled = isPaging && !this.gos.get('suppressPaginationPanel');
+    public getFocusableContainerName(): 'pagination' {
+        return 'pagination';
+    }
 
-        this.setDisplayed(paginationPanelEnabled);
-        if (!paginationPanelEnabled) {
-            return;
+    private buildComponents(idPrefix: string): void {
+        const panels = this.gos.get('paginationPanels') ?? DEFAULT_PANELS;
+        const seen = new Set<string>();
+        for (const panel of panels) {
+            const panelName = typeof panel === 'string' ? panel : panel.type;
+            if (seen.has(panelName)) {
+                continue;
+            }
+            seen.add(panelName);
+            if (panelName === 'pageSize') {
+                const panelParams = typeof panel === 'object' && panel.type === 'pageSize' ? panel : undefined;
+                this.pageSizeComp = this.createManagedBean(new PageSizeSelectorComp(panelParams));
+                this.pageSizeComp.updateVisibility();
+                this.eContent.appendChild(this.pageSizeComp.getGui());
+            } else if (panelName === 'rowSummary') {
+                this.rowSummaryComp = this.createManagedBean(new RowSummaryComp(idPrefix));
+                this.eContent.appendChild(this.rowSummaryComp.getGui());
+            } else if (panelName === 'pageSummary') {
+                const suppressPageInput =
+                    typeof panel === 'object' && panel.type === 'pageSummary' ? panel.suppressPageInput : undefined;
+                this.pageSummaryComp = this.createManagedBean(new PageSummaryComp(idPrefix, suppressPageInput));
+                this.eContent.appendChild(this.pageSummaryComp.getGui());
+            } else if (panelName === 'pageNumbers') {
+                const comp = this.beans.registry.createDynamicBean<PageNumbersComp>('pageNumbers', true, idPrefix);
+                if (comp) {
+                    this.pageNumbersComp = this.createManagedBean(comp);
+                    this.eContent.appendChild(this.pageNumbersComp.getGui());
+                }
+            }
         }
+        this.updateHasVisiblePanel();
+    }
 
-        this.setupListeners();
+    private updateHasVisiblePanel(): void {
+        this.hasVisiblePanel =
+            this.rowSummaryComp != null ||
+            this.pageSummaryComp != null ||
+            this.pageNumbersComp != null ||
+            this.pageSizeComp?.shouldShowPageSizeSelector() === true;
+    }
 
-        this.enableOrDisableButtons();
-        this.updateLabels();
-        this.onPageSizeRelatedOptionsChange();
+    private rebuildComponents(idPrefix: string): void {
+        for (const comp of [this.pageSizeComp, this.rowSummaryComp, this.pageSummaryComp, this.pageNumbersComp]) {
+            if (comp) {
+                _removeFromParent(comp.getGui());
+            }
+        }
+        this.pageSizeComp = this.destroyBean(this.pageSizeComp);
+        this.rowSummaryComp = this.destroyBean(this.rowSummaryComp);
+        this.pageSummaryComp = this.destroyBean(this.pageSummaryComp);
+        this.pageNumbersComp = this.destroyBean(this.pageNumbersComp);
+        this.buildComponents(idPrefix);
+        this.onPaginationChanged();
+        this.announceAriaStatus();
+    }
+
+    private onPaginationChanged(): void {
+        const visible = this.hasVisiblePanel && this.gos.get('pagination') && !this.gos.get('suppressPaginationPanel');
+        this.setDisplayed(visible);
     }
 
     private onPageSizeRelatedOptionsChange(): void {
-        this.pageSizeComp.toggleSelectDisplay(this.pageSizeComp.shouldShowPageSizeSelector());
+        this.pageSizeComp?.updateVisibility();
+        this.updateHasVisiblePanel();
+        this.onPaginationChanged();
     }
 
-    private setupListeners() {
-        if (!this.areListenersSetup) {
-            this.addManagedEventListeners({ paginationChanged: this.onPaginationChanged.bind(this) });
+    private onPaginationEvent(): void {
+        this.rowSummaryComp?.refresh();
+        this.pageSummaryComp?.refresh();
+        this.pageNumbersComp?.refresh();
+        this.announceAriaStatus();
+    }
 
-            [
-                { el: this.btFirst, fn: this.onBtFirst.bind(this) },
-                { el: this.btPrevious, fn: this.onBtPrevious.bind(this) },
-                { el: this.btNext, fn: this.onBtNext.bind(this) },
-                { el: this.btLast, fn: this.onBtLast.bind(this) },
-            ].forEach((item) => {
-                const { el, fn } = item;
-                this.addManagedListeners(el, {
-                    click: fn,
-                    keydown: (e: KeyboardEvent) => {
-                        if (e.key === KeyCode.ENTER || e.key === KeyCode.SPACE) {
-                            e.preventDefault();
-                            fn();
-                        }
-                    },
-                });
-            });
-
-            _addFocusableContainerListener(this.beans, this, this.getGui());
-
-            this.areListenersSetup = true;
+    private announceAriaStatus(): void {
+        if (!this.gos.get('pagination') || this.gos.get('suppressPaginationPanel')) {
+            return;
         }
+        this.announceIfChanged(this.rowSummaryComp, 'paginationRow');
+        this.announceIfChanged(this.pageSummaryComp, 'paginationPage');
+        this.announceIfChanged(this.pageNumbersComp, 'paginationPageNumbers');
     }
 
-    private onBtFirst() {
-        if (!this.previousAndFirstButtonsDisabled) {
-            this.pagination.goToFirstPage();
+    private announceIfChanged(comp: { readonly ariaStatus: string } | undefined, key: AriaAnnounceKey): void {
+        if (!comp) {
+            return;
         }
-    }
-
-    private formatNumber(value: number): string {
-        const userFunc = this.gos.getCallback('paginationNumberFormatter');
-
-        if (userFunc) {
-            const params: WithoutGridCommon<PaginationNumberFormatterParams> = { value: value };
-            return userFunc(params);
+        const status = comp.ariaStatus;
+        if (status !== this.lastAriaAnnounced[key]) {
+            this.lastAriaAnnounced[key] = status;
+            this.beans.ariaAnnounce?.announceValue(status, key);
         }
-
-        return _formatNumberCommas(value, this.getLocaleTextFunc.bind(this));
-    }
-
-    private getTemplate(): string {
-        const localeTextFunc = this.getLocaleTextFunc();
-
-        const strPage = localeTextFunc('page', 'Page');
-        const strTo = localeTextFunc('to', 'to');
-        const strOf = localeTextFunc('of', 'of');
-        const strFirst = localeTextFunc('firstPage', 'First Page');
-        const strPrevious = localeTextFunc('previousPage', 'Previous Page');
-        const strNext = localeTextFunc('nextPage', 'Next Page');
-        const strLast = localeTextFunc('lastPage', 'Last Page');
-        const compId = this.getCompId();
-
-        return /* html */ `<div class="ag-paging-panel ag-unselectable" id="ag-${compId}">
-                <ag-page-size-selector data-ref="pageSizeComp"></ag-page-size-selector>
-                <span class="ag-paging-row-summary-panel">
-                    <span id="ag-${compId}-first-row" data-ref="lbFirstRowOnPage" class="ag-paging-row-summary-panel-number"></span>
-                    <span id="ag-${compId}-to">${strTo}</span>
-                    <span id="ag-${compId}-last-row" data-ref="lbLastRowOnPage" class="ag-paging-row-summary-panel-number"></span>
-                    <span id="ag-${compId}-of">${strOf}</span>
-                    <span id="ag-${compId}-row-count" data-ref="lbRecordCount" class="ag-paging-row-summary-panel-number"></span>
-                </span>
-                <span class="ag-paging-page-summary-panel" role="presentation">
-                    <div data-ref="btFirst" class="ag-button ag-paging-button" role="button" aria-label="${strFirst}"></div>
-                    <div data-ref="btPrevious" class="ag-button ag-paging-button" role="button" aria-label="${strPrevious}"></div>
-                    <span class="ag-paging-description">
-                        <span id="ag-${compId}-start-page">${strPage}</span>
-                        <span id="ag-${compId}-start-page-number" data-ref="lbCurrent" class="ag-paging-number"></span>
-                        <span id="ag-${compId}-of-page">${strOf}</span>
-                        <span id="ag-${compId}-of-page-number" data-ref="lbTotal" class="ag-paging-number"></span>
-                    </span>
-                    <div data-ref="btNext" class="ag-button ag-paging-button" role="button" aria-label="${strNext}"></div>
-                    <div data-ref="btLast" class="ag-button ag-paging-button" role="button" aria-label="${strLast}"></div>
-                </span>
-            </div>`;
-    }
-
-    private onBtNext() {
-        if (!this.nextButtonDisabled) {
-            this.pagination.goToNextPage();
-        }
-    }
-
-    private onBtPrevious() {
-        if (!this.previousAndFirstButtonsDisabled) {
-            this.pagination.goToPreviousPage();
-        }
-    }
-
-    private onBtLast() {
-        if (!this.lastButtonDisabled) {
-            this.pagination.goToLastPage();
-        }
-    }
-
-    private enableOrDisableButtons() {
-        const currentPage = this.pagination.getCurrentPage();
-        const maxRowFound = this.rowModel.isLastRowIndexKnown();
-        const totalPages = this.pagination.getTotalPages();
-
-        this.previousAndFirstButtonsDisabled = currentPage === 0;
-        this.toggleButtonDisabled(this.btFirst, this.previousAndFirstButtonsDisabled);
-        this.toggleButtonDisabled(this.btPrevious, this.previousAndFirstButtonsDisabled);
-
-        const zeroPagesToDisplay = this.isZeroPagesToDisplay();
-        const onLastPage = currentPage === totalPages - 1;
-
-        this.nextButtonDisabled = onLastPage || zeroPagesToDisplay;
-        this.lastButtonDisabled = !maxRowFound || zeroPagesToDisplay || currentPage === totalPages - 1;
-
-        this.toggleButtonDisabled(this.btNext, this.nextButtonDisabled);
-        this.toggleButtonDisabled(this.btLast, this.lastButtonDisabled);
-    }
-
-    private toggleButtonDisabled(button: HTMLElement, disabled: boolean) {
-        _setAriaDisabled(button, disabled);
-        button.classList.toggle('ag-disabled', disabled);
-    }
-
-    private isZeroPagesToDisplay() {
-        const maxRowFound = this.rowModel.isLastRowIndexKnown();
-        const totalPages = this.pagination.getTotalPages();
-        return maxRowFound && totalPages === 0;
-    }
-
-    private updateLabels(): void {
-        const lastPageFound = this.rowModel.isLastRowIndexKnown();
-        const totalPages = this.pagination.getTotalPages();
-        const masterRowCount = this.pagination.getMasterRowCount();
-        const rowCount = lastPageFound ? masterRowCount : null;
-
-        // When `pivotMode=true` and no grouping or value columns exist, a single 'hidden' group row (root node) is in
-        // the grid and the pagination totals will correctly display total = 1. However this is confusing to users as
-        // they can't see it. To address this UX issue we simply set the totals to zero in the pagination panel.
-        if (rowCount === 1) {
-            const firstRow = this.rowModel.getRow(0);
-
-            // a group node with no group or agg data will not be visible to users
-            const hiddenGroupRow = firstRow && firstRow.group && !(firstRow.groupData || firstRow.aggData);
-            if (hiddenGroupRow) {
-                this.setTotalLabelsToZero();
-                return;
-            }
-        }
-
-        const currentPage = this.pagination.getCurrentPage();
-        const pageSize = this.pagination.getPageSize();
-
-        let startRow: any;
-        let endRow: any;
-
-        if (this.isZeroPagesToDisplay()) {
-            startRow = endRow = 0;
-        } else {
-            startRow = pageSize * currentPage + 1;
-            endRow = startRow + pageSize - 1;
-            if (lastPageFound && endRow > rowCount!) {
-                endRow = rowCount;
-            }
-        }
-
-        const theoreticalEndRow = startRow + pageSize - 1;
-        const isLoadingPageSize = !lastPageFound && masterRowCount < theoreticalEndRow;
-        const lbFirstRowOnPage = this.formatNumber(startRow);
-        this.lbFirstRowOnPage.textContent = lbFirstRowOnPage;
-        let lbLastRowOnPage: string;
-        const localeTextFunc = this.getLocaleTextFunc();
-        if (isLoadingPageSize) {
-            lbLastRowOnPage = localeTextFunc('pageLastRowUnknown', '?');
-        } else {
-            lbLastRowOnPage = this.formatNumber(endRow);
-        }
-        this.lbLastRowOnPage.textContent = lbLastRowOnPage;
-
-        const pagesExist = totalPages > 0;
-        const toDisplay = pagesExist ? currentPage + 1 : 0;
-
-        const lbCurrent = this.formatNumber(toDisplay);
-        this.lbCurrent.textContent = lbCurrent;
-
-        let lbTotal: string;
-        let lbRecordCount: string;
-        if (lastPageFound) {
-            lbTotal = this.formatNumber(totalPages);
-            lbRecordCount = this.formatNumber(rowCount!);
-        } else {
-            const moreText = localeTextFunc('more', 'more');
-            lbTotal = moreText;
-            lbRecordCount = moreText;
-        }
-        this.lbTotal.textContent = lbTotal;
-        this.lbRecordCount.textContent = lbRecordCount;
-
-        this.announceAriaStatus(lbFirstRowOnPage, lbLastRowOnPage, lbRecordCount, lbCurrent, lbTotal);
-    }
-
-    private announceAriaStatus(
-        lbFirstRowOnPage: string,
-        lbLastRowOnPage: string,
-        lbRecordCount: string,
-        lbCurrent: string,
-        lbTotal: string
-    ): void {
-        const localeTextFunc = this.getLocaleTextFunc();
-        const strPage = localeTextFunc('page', 'Page');
-        const strTo = localeTextFunc('to', 'to');
-        const strOf = localeTextFunc('of', 'of');
-        const ariaRowStatus = `${lbFirstRowOnPage} ${strTo} ${lbLastRowOnPage} ${strOf} ${lbRecordCount}`;
-        const ariaPageStatus = `${strPage} ${lbCurrent} ${strOf} ${lbTotal}`;
-
-        if (ariaRowStatus !== this.ariaRowStatus) {
-            this.ariaRowStatus = ariaRowStatus;
-            this.ariaAnnounce?.announceValue(ariaRowStatus, 'paginationRow');
-        }
-        if (ariaPageStatus !== this.ariaPageStatus) {
-            this.ariaPageStatus = ariaPageStatus;
-            this.ariaAnnounce?.announceValue(ariaPageStatus, 'paginationPage');
-        }
-    }
-
-    private setTotalLabelsToZero() {
-        const strZero = this.formatNumber(0);
-        this.lbFirstRowOnPage.textContent = strZero;
-        this.lbCurrent.textContent = strZero;
-        this.lbLastRowOnPage.textContent = strZero;
-        this.lbTotal.textContent = strZero;
-        this.lbRecordCount.textContent = strZero;
-        this.announceAriaStatus(strZero, strZero, strZero, strZero, strZero);
     }
 }
 
-export const PaginationSelector: ComponentSelector = {
+export const PaginationSelector: ComponentSelector<Component> = {
     selector: 'AG-PAGINATION',
     component: PaginationComp,
 };

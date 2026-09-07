@@ -21,8 +21,10 @@ interface GridCompProps {
     context: Context;
 }
 
+type FocusableContainerComp = Component & FocusableContainer;
+type HeaderDropZonesComp = Component & { getFocusableContainers?: () => FocusableContainerComp[] };
+
 const GridComp = ({ context }: GridCompProps) => {
-    const [rtlClass, setRtlClass] = useState<string>('');
     const [layoutClass, setLayoutClass] = useState<string>('');
     const [cursor, setCursor] = useState<string | null>(null);
     const [userSelect, setUserSelect] = useState<string | null>(null);
@@ -31,22 +33,16 @@ const GridComp = ({ context }: GridCompProps) => {
 
     const gridCtrlRef = useRef<GridCtrl>();
     const eRootWrapperRef = useRef<HTMLDivElement | null>(null);
+    const ariaDescriptionRef = useRef<HTMLDivElement | null>(null);
     const tabGuardRef = useRef<TabGuardCompCallback>();
     // eGridBodyParent is state as we use it in render
     const [eGridBodyParent, setGridBodyParent] = useState<HTMLDivElement | null>(null);
 
     const focusInnerElementRef = useRef<(fromBottom?: boolean) => void>(() => undefined);
     const paginationCompRef = useRef<JsTabGuardComp | undefined>();
-    const focusableContainersRef = useRef<Component[]>([]);
+    const focusableContainersRef = useRef<FocusableContainerComp[]>([]);
 
     const onTabKeyDown = useCallback(() => undefined, []);
-
-    const beans = useMemo(() => {
-        if (context.isDestroyed()) {
-            return null;
-        }
-        return context.getBeans();
-    }, [context]);
 
     useReactCommentEffect(' AG Grid ', eRootWrapperRef);
 
@@ -64,7 +60,6 @@ const GridComp = ({ context }: GridCompProps) => {
 
         const compProxy: IGridComp = {
             destroyGridUi: () => {}, // do nothing, as framework users destroy grid by removing the comp
-            setRtlClass,
             forceFocusOutOfContainer: (up?: boolean) => {
                 if (!up && paginationCompRef.current?.isDisplayed()) {
                     paginationCompRef.current.forceFocusOutOfContainer(up);
@@ -72,25 +67,49 @@ const GridComp = ({ context }: GridCompProps) => {
                 }
                 tabGuardRef.current?.forceFocusOutOfContainer(up);
             },
+            focusNextElementOutsideContainer: (up: boolean, eExcludeContainers: HTMLElement[]) => {
+                const eRootWrapper = eRootWrapperRef.current;
+                return eRootWrapper
+                    ? (tabGuardRef.current?.focusNextElementOutsideContainer(up, [
+                          eRootWrapper,
+                          ...eExcludeContainers,
+                      ]) ?? false)
+                    : false;
+            },
             updateLayoutClasses: setLayoutClass,
             getFocusableContainers: () => {
-                const comps: FocusableContainer[] = [];
+                const beforeGridBody: FocusableContainer[] = [];
+                const afterGridBody: FocusableContainer[] = [];
                 const gridBodyCompEl = eRootWrapperRef.current?.querySelector('.ag-root');
-                if (gridBodyCompEl) {
-                    comps.push({ getGui: () => gridBodyCompEl as HTMLElement });
-                }
-                focusableContainersRef.current.forEach((comp) => {
-                    if (comp.isDisplayed()) {
-                        comps.push(comp);
+                for (const comp of focusableContainersRef.current) {
+                    if (!comp.isDisplayed()) {
+                        continue;
                     }
-                });
+
+                    const name = comp.getFocusableContainerName();
+                    if (name === 'toolbar' || name === 'rowGroupToolbar' || name === 'pivotToolbar') {
+                        beforeGridBody.push(comp);
+                        continue;
+                    }
+
+                    afterGridBody.push(comp);
+                }
+
+                const comps: FocusableContainer[] = [...beforeGridBody];
+                if (gridBodyCompEl) {
+                    comps.push({
+                        getGui: () => gridBodyCompEl as HTMLElement,
+                        getFocusableContainerName: () => 'gridBody',
+                    });
+                }
+                comps.push(...afterGridBody);
                 return comps;
             },
             setCursor,
             setUserSelect,
         };
 
-        gridCtrl.setComp(compProxy, eRef, eRef);
+        gridCtrl.setComp(compProxy, eRef, ariaDescriptionRef.current!);
 
         setInitialised(true);
     }, []);
@@ -99,11 +118,13 @@ const GridComp = ({ context }: GridCompProps) => {
     useEffect(() => {
         const gridCtrl = gridCtrlRef.current;
         const eRootWrapper = eRootWrapperRef.current;
-        if (!tabGuardReady || !beans || !gridCtrl || !eGridBodyParent || !eRootWrapper) {
+        if (!tabGuardReady || !gridCtrl || !eGridBodyParent || !eRootWrapper || context.isDestroyed()) {
             return;
         }
 
         const beansToDestroy: any[] = [];
+        focusableContainersRef.current = [];
+        paginationCompRef.current = undefined;
 
         // these components are optional, so we check if they are registered before creating them
         const {
@@ -111,16 +132,43 @@ const GridComp = ({ context }: GridCompProps) => {
             paginationSelector,
             sideBarSelector,
             statusBarSelector,
+            toolbarSelector,
             gridHeaderDropZonesSelector,
         } = gridCtrl.getOptionalSelectors();
         const additionalEls: HTMLElement[] = [];
 
+        const addComponentToDom = <T extends Component>(
+            component: ComponentSelector<T>['component'],
+            position: 'beforebegin' | 'afterbegin' | 'beforeend' | 'afterend' = 'beforeend'
+        ): T => {
+            const comp = context.createBean(new component()) as T;
+            const eGui = comp.getGui();
+            eRootWrapper.insertAdjacentElement(position, eGui);
+            additionalEls.push(eGui);
+            beansToDestroy.push(comp);
+            return comp;
+        };
+
+        if (toolbarSelector) {
+            const toolbarComp = addComponentToDom(toolbarSelector.component, 'afterbegin');
+            focusableContainersRef.current.push(toolbarComp);
+        }
+
         if (gridHeaderDropZonesSelector) {
-            const headerDropZonesComp = context.createBean(new gridHeaderDropZonesSelector.component());
+            const headerDropZonesComp = context.createBean(
+                new gridHeaderDropZonesSelector.component()
+            ) as HeaderDropZonesComp;
             const eGui = headerDropZonesComp.getGui();
-            eRootWrapper.insertAdjacentElement('afterbegin', eGui);
+            // Insert after toolbar (if present) or at the start
+            const toolbar = eRootWrapper.querySelector('.ag-toolbar');
+            if (toolbar) {
+                toolbar.after(eGui);
+            } else {
+                eRootWrapper.prepend(eGui);
+            }
             additionalEls.push(eGui);
             beansToDestroy.push(headerDropZonesComp);
+            focusableContainersRef.current.push(...(headerDropZonesComp.getFocusableContainers?.() ?? []));
         }
 
         if (sideBarSelector) {
@@ -133,26 +181,18 @@ const GridComp = ({ context }: GridCompProps) => {
             }
 
             beansToDestroy.push(sideBarComp);
-            focusableContainersRef.current.push(sideBarComp);
+            focusableContainersRef.current.push(sideBarComp as FocusableContainerComp);
         }
 
-        const addComponentToDom = (component: ComponentSelector['component']) => {
-            const comp = context.createBean(new component());
-            const eGui = comp.getGui();
-            eRootWrapper.insertAdjacentElement('beforeend', eGui);
-            additionalEls.push(eGui);
-            beansToDestroy.push(comp);
-            return comp;
-        };
-
         if (statusBarSelector) {
-            addComponentToDom(statusBarSelector.component);
+            const statusBarComp = addComponentToDom(statusBarSelector.component);
+            focusableContainersRef.current.push(statusBarComp as FocusableContainerComp);
         }
 
         if (paginationSelector) {
             const paginationComp = addComponentToDom(paginationSelector.component);
             paginationCompRef.current = paginationComp as JsTabGuardComp;
-            focusableContainersRef.current.push(paginationComp);
+            focusableContainersRef.current.push(paginationComp as FocusableContainerComp);
         }
 
         if (watermarkSelector) {
@@ -161,16 +201,15 @@ const GridComp = ({ context }: GridCompProps) => {
 
         return () => {
             context.destroyBeans(beansToDestroy);
-            additionalEls.forEach((el) => {
-                el.parentElement?.removeChild(el);
-            });
+            focusableContainersRef.current = [];
+            paginationCompRef.current = undefined;
+            for (const el of additionalEls) {
+                el.remove();
+            }
         };
-    }, [tabGuardReady, eGridBodyParent, beans]);
+    }, [tabGuardReady, eGridBodyParent, context]);
 
-    const rootWrapperClasses = useMemo(
-        () => classesList('ag-root-wrapper', rtlClass, layoutClass),
-        [rtlClass, layoutClass]
-    );
+    const rootWrapperClasses = useMemo(() => classesList('ag-root-wrapper', layoutClass), [layoutClass]);
     const rootWrapperBodyClasses = useMemo(
         () => classesList('ag-root-wrapper-body', 'ag-focus-managed', layoutClass),
         [layoutClass]
@@ -190,17 +229,21 @@ const GridComp = ({ context }: GridCompProps) => {
         setTabGuardReady(ref !== null);
     }, []);
 
+    const isFocusable = useCallback(() => !gridCtrlRef.current?.isFocusable(), []);
+
     return (
         <div ref={setRef} className={rootWrapperClasses} style={topStyle} role="presentation">
+            <div className="ag-aria-description-container" ref={ariaDescriptionRef} />
             <div className={rootWrapperBodyClasses} ref={setGridBodyParent} role="presentation">
-                {initialised && eGridBodyParent && beans && (
-                    <BeansContext.Provider value={beans}>
+                {initialised && eGridBodyParent && !context.isDestroyed() && (
+                    <BeansContext.Provider value={context.getBeans()}>
                         <TabGuardComp
                             ref={setTabGuardCompRef}
                             eFocusableElement={eGridBodyParent}
                             onTabKeyDown={onTabKeyDown}
                             gridCtrl={gridCtrlRef.current!}
                             forceFocusOutWhenTabGuardsAreEmpty={true}
+                            isEmpty={isFocusable}
                         >
                             {
                                 // we wait for initialised before rending the children, so GridComp has created and registered with it's

@@ -8,6 +8,7 @@
     .ag-filter-toolpanel-search,
     .ag-status-bar,
     .ag-header-row,
+    .ag-row-number-cell,
     .ag-panel-title-bar-title,
     .ag-multi-filter-group-title-bar {
         font-size: calc(var(--ag-font-size) - 1px);
@@ -23,6 +24,22 @@
     .ag-tabs-header,
     .ag-column-drop-horizontal {
         background-color: var(--ag-subheader-background-color);
+    }
+
+    .ag-toolbar-item:where(:not(.ag-toolbar-panel)) {
+        font-weight: 600;
+    }
+
+    .ag-toolbar-item {
+        font-size: calc(var(--ag-font-size) - 1px);
+    }
+
+    .ag-toolbar .ag-column-drop-horizontal {
+        background-color: transparent;
+    }
+
+    .ag-toolbar .ag-toolbar-panel {
+        padding-inline-start: var(--ag-grid-size);
     }
 
     .ag-tabs-body {
@@ -156,6 +173,61 @@
         }
     }
 
+    // `ag.text-input` above raises Material's input text off the baseline with a `padding-bottom`
+    // and a 2px bottom border, but the search glyph is absolutely positioned and so centres on the
+    // input's full height — leaving it ~4px below the text. Pin it to the band the text occupies.
+    .ag-input-field-search-icon {
+        top: 1px; // the input's own padding-top
+        bottom: calc(var(--ag-grid-size) + 2px); // its padding-bottom plus the 2px bottom border
+    }
+
+    // Toolbar: button hover animation matching header cells
+    .ag-toolbar-button-wrapper {
+        transition: background-color 0.5s;
+    }
+
+    // Toolbar: underlined inputs matching Material text-input style
+    .ag-toolbar-find,
+    .ag-toolbar-input {
+        border-left: none;
+        border-right: none;
+        border-top: none;
+        box-shadow: none;
+    }
+
+    .ag-toolbar-find {
+        height: calc(var(--ag-grid-size) * 5);
+        border-bottom: 2px solid var(--ag-border-color);
+    }
+
+    .ag-toolbar-find:focus-within {
+        border-top: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: none;
+        border-bottom: 2px solid var(--ag-material-primary-color);
+    }
+
+    .ag-toolbar-input-field:focus {
+        border-top: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: none;
+    }
+
+    // Remove text-input mixin's padding-bottom so toolbar input text aligns with the icon
+    .ag-toolbar {
+        @include ag.text-input {
+            padding-bottom: 0;
+        }
+    }
+
+    // Reduce text-input mixin's padding-bottom so the page-number text stays centred.
+    // Input text was vertically off by 1px all this time in the legacy theme; corrected here.
+    .ag-paging-number .ag-input-field-input.ag-number-field-input {
+        padding-bottom: 1px;
+    }
+
     .ag-standard-button {
         appearance: none;
         background-color: transparent;
@@ -174,7 +246,7 @@
         }
     }
 
-    &.ag-dnd-ghost {
+    .ag-dnd-ghost {
         font-size: calc(var(--ag-font-size) - 1px);
         font-weight: 600;
     }
@@ -187,6 +259,23 @@
         height: calc(var(--ag-grid-size) * 7);
     }
 
+    .ag-filter-card-title {
+        font-size: calc(var(--ag-font-size) - 1px);
+        font-weight: 600;
+    }
+
+    .ag-filter-panel .ag-standard-button {
+        padding: var(--ag-grid-size);
+    }
+
+    .ag-filter-add-button {
+        border-bottom: 2px solid var(--ag-material-primary-color);
+    }
+
+    .ag-filter-add-button .ag-icon {
+        color: var(--ag-material-active-color);
+    }
+
     .ag-filter-apply-panel-button,
     .ag-advanced-filter-apply-button,
     .ag-advanced-filter-builder-button {
@@ -195,14 +284,6 @@
                 margin-left: var(--ag-grid-size),
             )
         );
-    }
-
-    .ag-layout-auto-height,
-    .ag-layout-print {
-        .ag-center-cols-viewport,
-        .ag-center-cols-container {
-            min-height: 150px;
-        }
     }
 
     .ag-picker-field-wrapper:focus-within {
@@ -235,5 +316,14 @@
     .ag-header-highlight-before::after,
     .ag-header-highlight-after::after {
         background-color: var(--ag-material-primary-color);
+    }
+
+    .ag-advanced-filter-builder-item-button-disabled,
+    .ag-disabled,
+    .ag-column-select-column-group-readonly,
+    [disabled] {
+        .ag-icon {
+            color: var(--ag-disabled-foreground-color);
+        }
     }
 }

@@ -1,5 +1,7 @@
+import { RefPlaceholder, _clearElement } from 'ag-stack';
+
 import type { BeanCollection, ChartToolbarMenuItemOptions, IconName } from 'ag-grid-community';
-import { Component, RefPlaceholder, _clearElement, _createIconNoSpan, _getDocument } from 'ag-grid-community';
+import { Component, _createElement, _createIconNoSpan } from 'ag-grid-community';
 
 import type { ChartTranslationKey, ChartTranslationService } from '../services/chartTranslationService';
 
@@ -30,13 +32,15 @@ export class ChartToolbar extends Component {
     }
 
     private createButtons(buttons: ChartToolbarButton[]): void {
-        this.buttonListenersDestroyFuncs.forEach((func) => func?.());
+        for (const func of this.buttonListenersDestroyFuncs) {
+            func?.();
+        }
         this.buttonListenersDestroyFuncs = [];
 
         const menuEl = this.eMenu;
         _clearElement(menuEl);
 
-        buttons.forEach((buttonConfig) => {
+        for (const buttonConfig of buttons) {
             const { buttonName, iconName, callback } = buttonConfig;
             const buttonEl = this.createButton(iconName);
 
@@ -54,16 +58,19 @@ export class ChartToolbar extends Component {
             );
 
             menuEl.appendChild(buttonEl);
-        });
+        }
     }
 
     private createButton(iconName: IconName): Element {
         const buttonEl = _createIconNoSpan(iconName, this.beans)!;
         buttonEl.classList.add('ag-chart-menu-icon');
 
-        const wrapperEl = _getDocument(this.beans).createElement('button');
+        const wrapperEl = _createElement({
+            tag: 'button',
+            attrs: { type: 'button' },
+            cls: 'ag-chart-menu-toolbar-button',
+        });
         wrapperEl.appendChild(buttonEl);
-        wrapperEl.classList.add('ag-chart-menu-toolbar-button');
         return wrapperEl;
     }
 

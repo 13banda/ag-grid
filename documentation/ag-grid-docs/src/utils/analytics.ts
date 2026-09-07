@@ -9,6 +9,7 @@ const EVENT_NAME = {
     infoEmail: 'Info Email',
     buyButton: 'Buy Button',
     downloadDS: 'Download Figma Design System',
+    markdownActions: 'Markdown Actions',
     page404: '404',
     // React Landing Page Goals
     reactLandingPageGetStarted: 'React Landing Page - Get Started',
@@ -24,6 +25,10 @@ const EVENT_NAME = {
     reactLandingPageCustomStylesTemplate: 'React Landing Page - Custom Styles Template',
     reactLandingPageIntegratedChartsTemplate: 'React Landing Page - Integrated Charts Template',
     reactLandingPageFaqExpand: 'React Landing Page - FAQ Expand',
+    trialLicenseFormSuccess: 'Trial License Form - Success',
+    trialLicenseFormError: 'Trial License Form - Error',
+    // RTS Campaign Landing Page Conversion Events
+    returnToServiceMailToButton: 'Return To Service - Clicked Mailto',
 };
 
 const trackPlausible = ({ eventName, props }: { eventName: string; props?: object }) => {
@@ -137,3 +142,48 @@ const trackDownloadDS = (props: object) => {
 };
 
 export const trackOnceDownloadDS = createTrackPlausibleOnce(EVENT_NAME.downloadDS, trackDownloadDS);
+
+export const trackMarkdownActions = (props: object) => {
+    trackPlausible({
+        eventName: EVENT_NAME.markdownActions,
+        props,
+    });
+};
+
+export const trackTrialLicenseFormSuccess = (props: object) => {
+    trackPlausible({
+        eventName: EVENT_NAME.trialLicenseFormSuccess,
+        props,
+    });
+};
+
+export const trackOnceTrialLicenseFormSuccess = createTrackPlausibleOnce(
+    EVENT_NAME.trialLicenseFormSuccess,
+    trackTrialLicenseFormSuccess
+);
+
+export const trackTrialLicenseFormError = (props: object) => {
+    trackPlausible({
+        eventName: EVENT_NAME.trialLicenseFormError,
+        props,
+    });
+};
+
+export const trackOnceTrialLicenseFormError = createTrackPlausibleOnce(
+    EVENT_NAME.trialLicenseFormError,
+    trackTrialLicenseFormError
+);
+
+/* Return To Service Landing Page Events */
+
+export const trackClickRenewMailto = (props: object) => {
+    trackPlausible({
+        eventName: EVENT_NAME.trialLicenseFormSuccess,
+        props,
+    });
+};
+
+export const trackOnceClickRenewMailto = createTrackPlausibleOnce(
+    EVENT_NAME.returnToServiceMailToButton,
+    trackClickRenewMailto
+);

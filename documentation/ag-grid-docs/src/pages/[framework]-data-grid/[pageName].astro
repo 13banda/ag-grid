@@ -1,18 +1,21 @@
 ---
-import { getCollection, getEntry } from 'astro:content';
+import { getCollection, getEntry, render, type CollectionEntry } from 'astro:content';
 import Layout from '@layouts/Layout.astro';
 import { Header } from '@components/docs/components/Header';
 import { getFrameworkDisplayText } from '@utils/framework';
 import type { Framework } from '@ag-grid-types';
 import { getDocsPages } from '@components/docs/utils/pageData';
 import { SideNavigation } from '@components/pages-navigation/components/SideNavigation';
-import { getFirstParagraphText } from '@utils/markdoc/getFirstParagraphText';
-import { DOCS_TAB_ITEM_ID_PREFIX } from '@ag-website-shared/constants';
+import { getPageDescription } from '@ag-website-shared/utils/getPageDescription';
+import { DOCS_TAB_ITEM_ID_PREFIX, MIGRATION_DOCUMENTATION_NAV_DATA } from '@ag-website-shared/constants';
 import { getHeadings } from '@utils/markdoc/getHeadings';
 import { isApiMenuPath } from '@utils/apiMenuPath';
 import { DocsNav } from '@ag-website-shared/components/docs-navigation/DocsNav';
 
 import styles from '@ag-website-shared/components/page-styles/docs.module.scss';
+import { parseVersion } from '@ag-website-shared/utils/parseVersion';
+import { agLibraryVersion, DISABLE_MARKDOWN_DOCS } from '@constants';
+import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 
 export async function getStaticPaths() {
     const pages = await getCollection('docs');
@@ -21,46 +24,67 @@ export async function getStaticPaths() {
 
 const { page } = Astro.props;
 const currentFramework = Astro.params.framework as Framework;
-const pageName = Astro.params.pageName as Framework;
+const pageName = Astro.params.pageName;
 const path = Astro.url.pathname;
-const { title, enterprise, hideSideMenu, hidePageMenu, headings: pageHeadings } = page.data;
+const { title, enterprise, hideSideMenu, hidePageMenu, headings: pageHeadings, migrationVersion } = page.data;
 
-const { data: versionsData } = await getEntry('versions', 'ag-grid-versions');
+const { data: versionsData } = (await getEntry('versions', 'ag-grid-versions')) as CollectionEntry<'versions'>;
 const version = versionsData[0]?.version;
 const frameworkDisplayText = getFrameworkDisplayText(currentFramework);
 const seoTagline = `Download AG Grid v${version} today: The best ${frameworkDisplayText} Table & ${frameworkDisplayText} Data Grid in the world.`;
-const description = page.data.description
-    ? page.data.description.replaceAll('$framework', frameworkDisplayText) // Use front-matter description
-    : getFirstParagraphText(page.body, currentFramework); // Default to 1st paragraph text
+
+const migrationVersionEntry = migrationVersion
+    ? versionsData.find((v: { version: string; landingPageHighlight?: string }) => v.version === migrationVersion)
+    : null;
+const upgradePageDescription = migrationVersionEntry?.landingPageHighlight
+    ? `Upgrade your $framework Data Grid to AG Grid v${migrationVersion}: ${migrationVersionEntry.landingPageHighlight}.`
+    : null;
+
+const description = getPageDescription({
+    framework: currentFramework,
+    pageDescription: upgradePageDescription ?? page.data.description,
+    body: page.body,
+});
 const descriptionWithSeoTagline = `${description ? `${description} ` : ''}${seoTagline}`;
 
-const { data: docsNavData } = await getEntry('docs-nav', 'docsNav');
-const { data: apiNavData } = await getEntry('api-nav', 'apiNav');
+const { data: docsNavData } = (await getEntry('docsNav', 'nav')) as CollectionEntry<'docsNav'>;
+const { data: apiNavData } = (await getEntry('apiNav', 'nav')) as CollectionEntry<'apiNav'>;
 
 const isApiPage = isApiMenuPath({ pageName, menuData: apiNavData });
 const menuData = isApiPage ? apiNavData : docsNavData;
 
-const { Content } = await page.render();
-const headings =
-    pageHeadings ||
-    (await getHeadings({
-        title,
-        pageName,
-        markdocContent: page.body,
-        framework: currentFramework,
-        getTabItemSlug: (id) => `${DOCS_TAB_ITEM_ID_PREFIX}${id}`,
-    }));
----
+const markdownUrl = DISABLE_MARKDOWN_DOCS ? undefined : urlWithBaseUrl(`/${currentFramework}-data-grid/${pageName}.md`);
 
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+const { Content } = await render(page);
+
+const headings = await getHeadings({
+    pageHeadings,
+    title,
+    pageName,
+    markdocContent: page.body,
+    framework: currentFramework,
+    getTabItemSlug: (id) => `${DOCS_TAB_ITEM_ID_PREFIX}${id}`,
+    /**
+     * Skip the headings for migration doc nav items if the major/minor is the same as the current library version.
+     *
+     * NOTE: The migration version comes from the frontmatter on the page. There is also a version attribute on the documentation archive section tag, but if the value comes from a variable, it doesn't get parsed during build time, and hence doesn't come through to this function. Using the frontmatter value is the best way to get the migration version here.
+     */
+    skipHeading: (heading) => {
+        const libraryVersion = parseVersion(agLibraryVersion);
+        const { major, minor } = parseVersion(migrationVersion);
+        // Don't show documentation nav if the current library major/minor version is the same as the migration version
+        const checkHeading = major === libraryVersion.major && minor === libraryVersion.minor;
+        return checkHeading ? heading.id === MIGRATION_DOCUMENTATION_NAV_DATA.id : false;
+    },
+});
+---
 
 <Layout
     title={`${getFrameworkDisplayText(currentFramework)} Grid: ${title} | AG Grid`}
     description={descriptionWithSeoTagline}
     showSearchBar={true}
     showDocsNav={true}
+    markdownUrl={markdownUrl}
 >
     <div class:list={[hidePageMenu && styles.noLeftMenu, styles.contentViewport, 'layout-grid']}>
         {
@@ -91,11 +115,13 @@ const headings =
                 isEnterprise={enterprise}
                 path={path}
                 menuItems={menuData.sections}
+                version={version}
+                markdownHref={markdownUrl}
             />
 
             {/* Wrapping div is a hack to target "intro" section of docs page */}
             <div class={styles.pageSections}>
-                <Content framework={currentFramework} page={page} />
+                <Content framework={currentFramework} page={page} migrationVersion={migrationVersion} />
             </div>
         </div>
 

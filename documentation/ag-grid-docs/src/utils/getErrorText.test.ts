@@ -1,0 +1,139 @@
+import { BASE_URL } from '../../../../packages/ag-grid-community/src/baseUrl';
+import { getErrorText } from './getErrorText';
+
+// `BASE_URL` is rewritten at release time — localhost while developing, the archive URL on a
+// `b<major>.<minor>.<patch>` branch — so normalise it out before snapshotting. The docs path is
+// what an error message has to get right; the origin it is served from is not this test's business.
+function withStableBaseUrl(text: string): string {
+    return text.replaceAll(BASE_URL, '<base-url>');
+}
+
+// Params reach the error page as strings from the URL; arrays/objects are JSON-encoded by
+// `stringifyValue` in the grid's logging util. These assert the full reconstructed message so a
+// regression in either the JSON round-trip or the error text itself is caught.
+describe('getErrorText param reconstruction', () => {
+    it('reconstructs an array param and renders the full #109 message', () => {
+        const text = getErrorText({
+            errorCode: 109,
+            params: { inputValue: 'sm', allSuggestions: JSON.stringify(['sum', 'avg', 'min']) },
+        });
+
+        expect(text).toMatchInlineSnapshot(`
+          "Could not find \`sm\` aggregate function. It was configured as "aggFunc: \`sm\`" but it wasn't found in the list of registered aggregations.
+
+                   Did you mean: \`[sum,min]\`?
+
+          If using a custom aggregation function check it has been registered correctly."
+        `);
+    });
+
+    it('reconstructs an array param and renders the full #307 message', () => {
+        const text = getErrorText({
+            errorCode: 307,
+            params: {
+                objectName: 'gridOptions',
+                name: 'notAnOption',
+                suggestions: JSON.stringify(['tooltipInteraction', 'dataTypeDefinitions']),
+            },
+        });
+
+        expect(text).toMatchInlineSnapshot(
+            `"Invalid \`gridOptions\` property \`notAnOption\` did you mean any of these: \`tooltipInteraction\`, \`dataTypeDefinitions\`."`
+        );
+    });
+
+    it('reconstructs an array param and renders the full #101 message', () => {
+        const text = getErrorText({
+            errorCode: 101,
+            params: {
+                propertyName: 'cellRenderer',
+                componentName: 'notARealCellRenderer',
+                suggestions: JSON.stringify(['agGroupCellRenderer', 'agCheckboxCellRenderer']),
+            },
+        });
+
+        expect(text).toMatchInlineSnapshot(`
+          "Could not find \`notARealCellRenderer\` component. It was configured as "cellRenderer: \`notARealCellRenderer\`" but it wasn't found in the list of registered components.
+
+                   Did you mean: \`[agGroupCellRenderer,agCheckboxCellRenderer]\`?
+
+          If using a custom component check it has been registered correctly."
+        `);
+    });
+
+    it('reconstructs an array param and renders the full #215 message', () => {
+        const text = getErrorText({
+            errorCode: 215,
+            params: { key: 'notAPanel', validKeys: JSON.stringify(['columns', 'filters']) },
+        });
+
+        expect(text).toMatchInlineSnapshot(
+            `"the key notAPanel is not a valid key for specifying a tool panel, valid keys are: columns,filters"`
+        );
+    });
+
+    it('leaves plain string params untouched', () => {
+        const text = getErrorText({ errorCode: 200, params: { moduleName: 'SideBar', reasonOrId: 'sideBar' } });
+
+        expect(text).toContain('SideBar');
+    });
+
+    it('reconstructs a batched #200 message from JSON-encoded reports (the URL form)', () => {
+        // The grid encodes each missing-module report to a JSON string and the array to a JSON param, so a
+        // batched error survives the URL. The page must rebuild the per-report message, not a single line.
+        const reports = [
+            JSON.stringify({ reasonOrId: '`rowSelection`', moduleName: 'RowSelection' }),
+            JSON.stringify({ reasonOrId: '`enableValue`', moduleName: 'RowGrouping' }),
+        ];
+        const text = getErrorText({
+            errorCode: 200,
+            params: {
+                reports: JSON.stringify(reports),
+                reasonOrId: '`rowSelection`',
+                moduleName: 'RowSelection',
+                gridScoped: 'false',
+                gridId: '1',
+                rowModelType: 'clientSide',
+            },
+        });
+
+        expect(withStableBaseUrl(text)).toMatchInlineSnapshot(`
+          "Unable to use \`rowSelection\` as \`RowSelectionModule\` is not registered.
+          Unable to use \`enableValue\` as \`RowGroupingModule\` is not registered.
+          Check if you have registered the modules:
+
+          import { ModuleRegistry, RowSelectionModule } from 'ag-grid-community'; 
+          import { RowGroupingModule } from 'ag-grid-enterprise';
+
+          ModuleRegistry.registerModules([ RowSelectionModule, RowGroupingModule ]);
+
+          For more info see: <base-url>/javascript-data-grid/modules/"
+        `);
+    });
+
+    it('falls back to the raw string when a bracketed value is not valid JSON', () => {
+        expect(() =>
+            getErrorText({ errorCode: 307, params: { objectName: 'x', name: 'y', suggestions: '[not json' } })
+        ).not.toThrow();
+    });
+
+    it('renders the single-report fallback when a batched #200 reports param is truncated to a corrupt string', () => {
+        // A large batch can push the URL past MAX_URL_LENGTH; truncation corrupts the JSON reports array,
+        // so `cleanParams` hands back a raw string. The message must not throw and should use the top-level
+        // reason/module that also survive the URL.
+        let text = '';
+        expect(() => {
+            text = getErrorText({
+                errorCode: 200,
+                params: {
+                    reports: '["{\\"reasonOrId\\":\\"`rowSelection`\\",\\"modu',
+                    reasonOrId: '`rowSelection`',
+                    moduleName: 'RowSelection',
+                    rowModelType: 'clientSide',
+                },
+            });
+        }).not.toThrow();
+
+        expect(text).toContain('Unable to use `rowSelection` as `RowSelectionModule` is not registered.');
+    });
+});

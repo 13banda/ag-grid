@@ -1,0 +1,877 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'latest'
+      - 'b[0-9][0-9]?.[0-9][0-9]?.[0-9][0-9]?'
+  pull_request:
+    branches:
+      - 'latest'
+      - 'next'
+      - 'b[0-9][0-9]?.[0-9][0-9]?.[0-9][0-9]?'
+    types: [ opened, synchronize, reopened, ready_for_review ]
+  workflow_dispatch:
+    inputs:
+      skip_docs:
+        description: 'Skip docs build & link checker'
+        type: boolean
+        default: false
+        required: true
+      run_package_tests:
+        description: 'Run package tests'
+        type: boolean
+        default: false
+        required: true
+      nx_command:
+        type: 'choice'
+        required: true
+        default: 'affected'
+        options:
+          - 'affected'
+          - 'run-many'
+env:
+  # Disable git's post-fetch background gc/maintenance for every git invocation in this
+  # workflow (via git's GIT_CONFIG_* protocol); otherwise it rewrites .git/shallow
+  # concurrently with the next chained `git fetch --depth 1`, intermittently failing job
+  # setup with "fatal: shallow file has changed since we read it". Fixed in git >= 2.55.
+  GIT_CONFIG_COUNT: 2
+  GIT_CONFIG_KEY_0: gc.auto
+  GIT_CONFIG_VALUE_0: '0'
+  GIT_CONFIG_KEY_1: maintenance.auto
+  GIT_CONFIG_VALUE_1: 'false'
+  NX_NO_CLOUD: true
+  IBM_TELEMETRY_DISABLED: true
+  NX_BRANCH: ${{ github.ref }}
+  NX_COMMAND_TYPE: ${{ github.event.inputs.nx_command }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  SLACK_CHANNEL: '#ci-grid-gate'
+  LIBRARY_WEBSITE_STATUS_CHANNEL: '#grid-website-status'
+  AG_LIBRARY: grid
+  SHARP_IGNORE_GLOBAL_LIBVIPS: true
+  YARN_REGISTRY: "https://registry.ag-grid.com"
+  CI: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/latest' }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    name: Detect Changes
+    outputs:
+      run_code_ci: ${{ steps.decide.outputs.run_code_ci }}
+      run_docs_ci: ${{ steps.decide.outputs.run_docs_ci }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Detect file changes (PR only)
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            code:
+              - 'packages/**'
+              - 'plugins/**'
+              - 'community-modules/**'
+              - 'testing/**'
+              - 'external/ag-website-shared/**'
+              - 'external/ag-shared/scripts/**'
+              - 'external/ag-shared/github/**'
+              - 'external/ag-shared/src/**'
+              - 'external/ag-shared/tools/**'
+              - 'external/ag-shared/*.json'
+              - '*.json'
+              - '*.ts'
+              - '*.js'
+              - '*.cjs'
+              - '*.mjs'
+              - 'yarn.lock'
+              - 'nx.json'
+              - 'tsconfig.*.json'
+              - 'jest.preset.js'
+              # The .htaccess / CSP generation lives under documentation/ but is exercised
+              # by code-CI jobs — the e2e htaccess harness (test:htaccess) and its own unit
+              # tests (cspRules/htaccessRules .test.ts) — so route changes here through full
+              # code CI rather than the docs-only path, where both would be skipped.
+              - 'documentation/ag-grid-docs/src/utils/htaccess/**'
+              - 'documentation/ag-grid-docs/src/utils/csp/**'
+            ci:
+              - '.github/**'
+            docs:
+              - 'documentation/ag-grid-docs/src/**'
+              - 'external/ag-website-shared/**'
+
+      - name: Decide what to run
+        id: decide
+        run: |
+          # Always run full CI for push events and manual triggers
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "run_code_ci=true" >> $GITHUB_OUTPUT
+            echo "run_docs_ci=true" >> $GITHUB_OUTPUT
+            echo "Non-PR event (${{ github.event_name }}), running full CI"
+            exit 0
+          fi
+
+          # For PRs, check if code or CI files changed
+          if [[ "${{ steps.filter.outputs.code }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.ci }}" == "true" ]]; then
+            echo "run_code_ci=true" >> $GITHUB_OUTPUT
+            echo "run_docs_ci=false" >> $GITHUB_OUTPUT
+            echo "Code or CI changes detected (code=${{ steps.filter.outputs.code }}, ci=${{ steps.filter.outputs.ci }}), running full CI"
+          elif [[ "${{ steps.filter.outputs.docs }}" == "true" ]]; then
+            echo "run_code_ci=false" >> $GITHUB_OUTPUT
+            echo "run_docs_ci=true" >> $GITHUB_OUTPUT
+            echo "Docs content changes detected, running docs build and link checker"
+          else
+            echo "run_code_ci=false" >> $GITHUB_OUTPUT
+            echo "run_docs_ci=false" >> $GITHUB_OUTPUT
+            echo "Only non-code changes detected, running lint only"
+          fi
+
+  init:
+    name: Initialise Workflow
+    needs: detect-changes
+    if: (github.event.pull_request.draft == false || startsWith(github.head_ref, 'ghabot-ag-')) &&
+      (needs.detect-changes.outputs.run_code_ci == 'true' ||
+      needs.detect-changes.outputs.run_docs_ci == 'true')
+    permissions:
+      contents: write
+    outputs:
+      nx_base: ${{ steps.setup.outputs.base }}
+      build_type: ${{ steps.setup.outputs.type }}
+      snapshot_branch: ${{ steps.snapshot-prepare.outputs.branch }}
+      test_count: ${{ steps.matrix.outputs.test_count }}
+      unit_projects: ${{ steps.matrix.outputs.unit_projects }}
+      test_pkg_matrix: ${{ steps.matrix.outputs.pkg_matrix }}
+      e2e_test_count: ${{ steps.matrix.outputs.e2e_test_count }}
+      e2e_test_matrix: ${{ steps.matrix.outputs.e2e_test_matrix }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Fetch Refs
+        run: |
+          git fetch origin --depth 1 latest
+          git fetch origin --depth 1 tag latest-success
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          cache_mode: 'rw'
+
+      - name: Prepare Snapshot Branch
+        uses: ./.github/actions/snapshot-prepare
+        id: snapshot-prepare
+
+      - name: Calculate Matrix
+        id: matrix
+        run: |
+          # The `test` job splits work into two disjoint halves so nothing runs twice:
+          #   - shard 0: everything that can't be file-sharded — type-check (build:test), the node-env
+          #     tooling `test` projects, pack:verify, assertNoDebugger.
+          #   - shards 1..3: the Vitest workspace unit projects (ag-stack, ag-grid-community,
+          #     ag-grid-enterprise, locale, behavioural), split by file via `vitest --shard`.
+          # Emit test_count so the job can skip when nothing is affected, and unit_projects (the
+          # --project flags for the affected unit projects) for the sharded run.
+          if [[ "${{ github.event.inputs.nx_command || 'affected' }}" == "run-many" ]] ; then
+            count=10
+            affected="ag-grid-community ag-grid-enterprise ag-stack @ag-grid-community/locale ag-behavioural-testing"
+          else
+            affected="$(yarn -s nx show projects --affected --base ${{ steps.setup.outputs.base }} -t test | tr '\n' ' ')"
+            count=$(echo $affected | wc -w)
+          fi
+          echo "test_count=${count}" >> $GITHUB_OUTPUT
+          echo "Affected test project count: ${count}"
+
+          # Map affected nx projects → Vitest --project flags (the workspace unit projects only).
+          unit_projects=""
+          case " $affected " in *" ag-stack "*) unit_projects="$unit_projects --project=ag-stack";; esac
+          case " $affected " in *" ag-grid-community "*) unit_projects="$unit_projects --project=ag-grid-community";; esac
+          case " $affected " in *" ag-grid-enterprise "*) unit_projects="$unit_projects --project=ag-grid-enterprise";; esac
+          case " $affected " in *" @ag-grid-community/locale "*) unit_projects="$unit_projects --project=locale";; esac
+          case " $affected " in *" ag-behavioural-testing "*) unit_projects="$unit_projects --project=behavioural";; esac
+          echo "unit_projects=${unit_projects# }" >> $GITHUB_OUTPUT
+          echo "Affected unit vitest projects: ${unit_projects:-<none>}"
+
+          if [[ "${{ github.event.inputs.nx_command || 'affected' }}" == "run-many" ]] ; then
+            e2e_count=10
+          else
+            e2e_count=$(yarn -s nx show projects --affected --base ${{ steps.setup.outputs.base }} -t test:e2e --exclude 'tag:module-size' --exclude all | wc -l)
+          fi
+
+          # not enough non-bundle size e2e tests to shard atm
+          e2e_matrix={"shard":[0]}
+          echo "e2e_test_matrix=${e2e_matrix}" >> $GITHUB_OUTPUT
+          echo "e2e_test_count=${e2e_count}" >> $GITHUB_OUTPUT
+          echo "e2e Test matrix determined to be: ${e2e_matrix} (e2e_test_count=${e2e_count})"
+
+          pkg_matrix=$(node ./external/ag-shared/scripts/shard/calculate-pkg-shards.js)
+          echo "pkg_matrix=${pkg_matrix}" >> $GITHUB_OUTPUT
+          echo "Package test matrix determined to be: ${pkg_matrix}"
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    name: Unit Tests (${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: [ detect-changes, init ]
+    if: needs.detect-changes.outputs.run_code_ci == 'true' &&
+      needs.init.outputs.test_count > 0
+    strategy:
+      # Static matrix, two disjoint halves so no test runs twice: shards 1-3 run the Vitest workspace unit
+      # projects (ag-stack, ag-grid-community, ag-grid-enterprise, locale, behavioural) split by file via
+      # `vitest --shard`; shard 0 does everything that can't be file-sharded — type-check (build:test), the
+      # node-env tooling `test` projects via Nx, pack:verify, assertNoDebugger.
+      matrix:
+        shard: [0, 1, 2, 3]
+      fail-fast: false
+    env:
+      NX_PARALLEL: 1
+      # Vite 8 warns once per config that these are not loadable by its future `configLoader: 'native'`.
+      VITE_CONFIG_NATIVE_IGNORE_WARNING: true
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Fetch Refs
+        run: |
+          git fetch origin --depth 1 latest
+          git fetch origin --depth 1 tag latest-success
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          # ro consumers restore the node_modules cache warmed by `init` (which already ran
+          # postinstall before saving), so no yarn execution is needed. no-install skips it,
+          # removing the per-consumer registry install on a cache miss — the fan-out that
+          # amplified transient registry errors into an install storm. Applied to every ro
+          # consumer job below.
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: Unit tests (Vitest workspace, sharded)
+        # Runs the affected Vitest workspace unit projects (ag-stack/community/enterprise/locale/behavioural)
+        # directly via Vitest --shard — the only place these run. CI=true (set by Actions) makes the root
+        # config emit reports/workspace.xml for this shard.
+        if: matrix.shard != 0 && needs.init.outputs.unit_projects != ''
+        id: test
+        run: node_modules/.bin/vitest run ${{ needs.init.outputs.unit_projects }}
+          --shard=${{ matrix.shard }}/$((${{ strategy.job-total }} - 1))
+      - name: Type-check test files
+        # `build:test` (tsc --noEmit on tsconfig.spec) was previously pulled in as the nx `test` target's
+        # dependency; run it explicitly now that the shards above run Vitest directly instead of via Nx.
+        if: matrix.shard == 0
+        id: build-test
+        run: yarn nx ${{ github.event.inputs.nx_command || 'affected' }} -t build:test -c staging --exclude all
+      - name: nx test (node-env tooling projects)
+        # The affected `test` targets that are NOT Vitest workspace unit projects — docs, ag-website-shared,
+        # typedoc-links, generate-example-files, etc. The five unit projects already run (sharded) on shards
+        # 1-3, so they are excluded here to avoid running them twice: behavioural via its `sharding` tag, the
+        # other four by name. Keep this exclude list in sync with the `unit_projects` mapping in `init`.
+        if: matrix.shard == 0
+        id: test-tooling
+        run: yarn nx ${{ github.event.inputs.nx_command || 'affected' }} -t test -c staging
+          --exclude 'tag:sharding,ag-stack,ag-grid-community,ag-grid-enterprise,@ag-grid-community/locale,all'
+      - name: nx pack:verify
+        if: matrix.shard == 0
+        id: pack-verify
+        run: |
+          yarn nx ${{ github.event.inputs.nx_command || 'affected' }} -t pack:verify --prod
+      - name: Assert No Debugger
+        if: matrix.shard == 0
+        id: assertNoDebugger
+        run: |
+          ./scripts/assertNoDebugger.sh
+      - name: Persist test results
+        # Shards 1-3 emit reports/workspace.xml (a subset each); shard 0 emits the tooling projects' JUnit
+        # XMLs. Artifact names are keyed by shard; the report job merges by basename across shard artifacts.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-${{matrix.shard}}
+          path: |
+            reports/
+            packages/**/__diff_output__/*
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    name: e2e Tests
+    needs: [ detect-changes, init ]
+    if: needs.detect-changes.outputs.run_code_ci == 'true' &&
+      needs.init.outputs.e2e_test_count > 0
+    strategy:
+      matrix: ${{ fromJson(needs.init.outputs.e2e_test_matrix )}}
+      fail-fast: false
+    env:
+      NX_PARALLEL: 1
+      # Turn the htaccess redirect harness (test:htaccess, a dependsOn of test:e2e) into a hard
+      # gate in CI: ubuntu-latest ships apache2, so a skip here means Apache went missing rather
+      # than a legitimately-unavailable environment. Local runs without Apache still skip.
+      HTTPD_REQUIRED: 1
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: nx test:e2e
+        id: tests
+        run: yarn nx ${{ github.event.inputs.nx_command || 'affected' }} -t test:e2e -c
+          staging --exclude 'tag:module-size' --exclude all
+
+      - name: Persist test results
+        if: always() && matrix.shard != 0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-e2e-shard-${{matrix.shard}}
+          path: |
+            reports/
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: Lint & Format Check
+    needs: [ detect-changes, init ]
+    if: ${{ always() && needs.detect-changes.result == 'success' }}
+    outputs:
+      format: ${{ steps.format.outcome || '' }}
+      lint: ${{ steps.lint.outcome || '' }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: nx format:check
+        id: format
+        if: steps.setup.outcome == 'success' || steps.setup.outcome == 'skipped'
+        run: |
+          if [[ "${{ github.event.inputs.nx_command || 'affected' }}" == "run-many" ]] ; then
+            yarn nx format:check --all
+          else
+            yarn nx format:check --base ${{ steps.setup.outputs.base }}
+          fi
+
+      - name: nx lint
+        id: lint
+        run: |
+          yarn nx lint
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: Build
+    needs: [ detect-changes, init ]
+    if: needs.detect-changes.outputs.run_code_ci == 'true' &&
+      (github.event.pull_request.draft == false || startsWith(github.head_ref, 'ghabot-ag-'))
+    outputs:
+      build: ${{ steps.build.outcome || '' }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: nx build
+        id: build
+        run: |
+          yarn nx run-many --t build -c staging --exclude ag-grid-docs --exclude all
+
+      # The enterprise UMD loads ag-grid-community at runtime, so publish both even when nx rebuilt only one.
+      - name: Build UMD bundles for PR preview
+        id: build_umd
+        if: github.event_name == 'pull_request' && steps.build.outcome == 'success'
+        run: |
+          yarn nx run-many -t build:umd -p ag-grid-community ag-grid-enterprise
+
+      - name: Upload UMD bundles for PR preview
+        if: github.event_name == 'pull_request' && steps.build_umd.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-preview-umd
+          if-no-files-found: ignore
+          retention-days: 14
+          # ag-grid UMD builds with sourcemap:false, so there are no .map files.
+          path: |
+            packages/ag-grid-community/dist/ag-grid-community.min.js
+            packages/ag-grid-enterprise/dist/ag-grid-enterprise.min.js
+
+  pr_preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: PR Preview (UMD)
+    needs: [ build ]
+    # Same-repo PRs only (fork PRs can't hold the write token) — see pr-review.yml.
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.build.outputs.build == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+    # Per-PR lock, not a global one: every writer only ever touches files under its own
+    # pr-<N>/ prefix, and diverged refs between concurrent writers are resolved by the
+    # push-retry loop in gh-pages-commit.sh, so different PRs no longer contend. The
+    # per-PR lock still matters — it stops this job overlapping its own close-time
+    # cleanup. Keep this group string byte-identical to the one in `gh_pages_cleanup`
+    # (pr-cleanup.yml).
+    concurrency:
+      group: pr-preview-gh-pages-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      # Needed for the local shared action below; same-repo gate (job if) is the guard.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Download UMD artifact
+        id: download
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: pr-preview-umd
+          path: _umd
+
+      - name: Resolve UMD bundle paths
+        id: stage
+        if: steps.download.outcome == 'success'
+        run: |
+          set -euo pipefail
+          # upload-artifact@v4 strips the common path prefix, so find by filename.
+          COMMUNITY=$(find _umd -type f -name 'ag-grid-community.min.js' -print -quit)
+          ENTERPRISE=$(find _umd -type f -name 'ag-grid-enterprise.min.js' -print -quit)
+          if [ -z "$COMMUNITY" ] && [ -z "$ENTERPRISE" ]; then
+            echo "::warning No UMD bundles in artifact — likely tooling-only PR; skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$COMMUNITY" ] || [ -z "$ENTERPRISE" ]; then
+            echo "::error exactly one UMD bundle present; expected both or neither." >&2
+            ls -laR _umd || true
+            exit 1
+          fi
+          {
+            echo "files<<__FILES_EOF__"
+            echo "$COMMUNITY"
+            echo "$ENTERPRISE"
+            echo "__FILES_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish PR preview to gh-pages
+        if: steps.stage.outputs.publish == 'true'
+        uses: ./external/ag-shared/github/actions/pr-preview-publish
+        with:
+          pr_number: ${{ env.PR_NUMBER }}
+          files: ${{ steps.stage.outputs.files }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post sticky PR comment
+        if: steps.stage.outputs.publish == 'true'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: pr-preview-umd
+          message: |
+            ### Live-test this PR in Plunker
+
+            Paste these two `<script>` tags into a Plunker (or any vanilla-JS host) to load the UMD bundles built from this PR:
+
+            ```html
+            <script src="https://ag-grid.github.io/ag-grid/pr-${{ env.PR_NUMBER }}/ag-grid-community.min.js"></script>
+            <script src="https://ag-grid.github.io/ag-grid/pr-${{ env.PR_NUMBER }}/ag-grid-enterprise.min.js"></script>
+            ```
+
+            Bundles are removed automatically when the PR is closed. Updated on every push.
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: Docs Build & Link Checker
+    needs: [ detect-changes, init ]
+    if: ${{ (needs.detect-changes.outputs.run_code_ci == 'true' ||
+      needs.detect-changes.outputs.run_docs_ci == 'true') &&
+      (github.event.pull_request.draft == false || startsWith(github.head_ref, 'ghabot-ag-')) && !inputs.skip_docs }}
+    strategy:
+      fail-fast: false
+    outputs:
+      docs_deployed: ${{ steps.deploy_to_staging.outcome }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1 # shallow copy
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: update base url
+        run: node scripts/deployments/prep_and_archive/updateBaseUrl.js staging
+
+      - name: validate grid modules
+        run: node scripts/deployments/validateGridModulesList.js
+
+      - name: docs build and link checker
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]] || [[ "${{ needs.detect-changes.outputs.run_docs_ci }}" == "true" ]]; then
+            export CHECK_LINKS=true CHECK_REDIRECTS=true
+          fi
+          yarn nx run ag-grid-docs:build -c staging
+
+      - name: validate base url
+        run: node scripts/deployments/sanityCheckBaseUrl.js staging
+
+      - name: Deploy to Staging
+        id: deploy_to_staging
+        if: ${{ github.ref == 'refs/heads/latest' }}
+        env:
+          SSH_PRIVATE_KEY: |
+            ${{ secrets.STAGING_SSH_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_HOST }}
+          SSH_USER: ubuntu
+          SSH_KEY_LOCATION: ${{ github.workspace }}/staging.pem
+          WWW_ROOT_DIR: ${{ vars.WWW_ROOT_DIR }}
+        run: |
+          echo "$SSH_PRIVATE_KEY" > $SSH_KEY_LOCATION
+          chmod 400 $SSH_KEY_LOCATION
+          ./scripts/deployments/createAndDeployDocsToTCGH.sh
+
+      - name: Persist test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-docs
+          path: |
+            reports/
+
+  fw_pkg_test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    name: Framework Package Tests (${{ matrix.framework }})
+    permissions:
+      contents: write
+    needs: [ init ]
+    if: (needs.init.outputs.build_type == 'latest' || needs.init.outputs.build_type
+      == 'release') || inputs.run_package_tests
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.init.outputs.test_pkg_matrix )}}
+    env:
+      NX_BASE: ${{ needs.init.outputs.nx_base }}
+    steps:
+      - name: Checkout
+        id: checkout
+        if: matrix.framework != 'none'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup
+        id: setup
+        if: matrix.framework != 'none'
+        uses: ./.github/actions/setup-nx
+        with:
+          yarn_postinstall: no-install
+          cache_mode: ro
+
+      - name: nx package:test
+        id: package-test
+        if: matrix.framework != 'none'
+        run: yarn nx run-many -t test:package -p ${{ matrix.framework }}-package-tests
+          --configuration=update
+
+      - name: Snapshot Branch
+        if: matrix.framework != 'none'
+        uses: ./.github/actions/snapshot-branch
+        with:
+          path: testing/*-package-tests/e2e/*-snapshots/
+          source_branch: ${{ github.head_ref || 'latest' }}
+          branch: ${{ needs.init.outputs.snapshot_branch }}
+          type: ${{ matrix.framework }}-package-tests:test:package
+
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs:
+      [
+        detect-changes,
+        init,
+        test,
+        e2e,
+        lint,
+        build,
+        docs,
+        fw_pkg_test,
+        sonar_community,
+        sonar_enterprise
+      ]
+    if: always() && !cancelled() && (github.event.pull_request.draft == false || startsWith(github.head_ref, 'ghabot-ag-'))
+    permissions:
+      contents: write
+      actions: read
+      checks: write
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      # The report job runs no nx command and needs no workspace dependencies:
+      # JUnit merging uses a globally-installed jrm, the Slack scripts import only
+      # node builtins, and everything else is git/gh or self-contained actions. So
+      # skip the full setup-nx (node_modules restore + yarn install) and just provide
+      # a node runtime — this is the main time sink for what is otherwise a fast job.
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+
+      - name: Fetch Refs
+        run: |
+          git fetch origin --depth 1 latest
+          git fetch origin --depth 1 tag latest-success
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.test.result == 'success' || needs.test.result == 'failure' ||
+          needs.e2e.result == 'success' || needs.e2e.result == 'failure'
+        with:
+          path: test-results/
+
+      - name: Merge JUnit Report XMLs
+        if: needs.test.result == 'success' || needs.test.result == 'failure' ||
+          needs.e2e.result == 'success' || needs.e2e.result == 'failure'
+        run: |
+          mkdir -p reports/
+          if [ ! -d test-results/ ]; then
+            echo "No test-results/ directory; nothing to merge."
+            exit 0
+          fi
+          reports=$(find test-results/ -name \*.xml -type f -exec basename \{\} \; | sort | uniq)
+          if [ -z "$reports" ]; then
+            echo "No JUnit XML files found under test-results/; nothing to merge."
+            exit 0
+          fi
+          YARN_REGISTRY=
+          yarn global add junit-report-merger
+          echo "$reports" | (while read name ; do
+            yarn exec -s jrm reports/${name} "test-results/**/${name}"
+          done)
+
+      - name: Test Report
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        if: needs.test.result == 'success' || needs.test.result == 'failure' ||
+          needs.e2e.result == 'success' || needs.e2e.result == 'failure'
+        id: testReport
+        continue-on-error: true
+        with:
+          name: 'Tests Results'
+          path: reports/*.xml
+          reporter: jest-junit
+
+      - name: Check last job status
+        id: lastJobStatus
+        if: always()
+        run: |
+          WORKFLOW_STATUS="success"
+          if [[ "${{ needs.init.result }}" == "failure" ]] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.test.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.e2e.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.lint.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.build.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.docs.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.fw_pkg_test.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.sonar_community.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          elif [ "${{ needs.sonar_enterprise.result }}" == "failure" ] ; then
+            WORKFLOW_STATUS="failure"
+          fi
+          echo "workflowStatus=${WORKFLOW_STATUS}" >> $GITHUB_OUTPUT
+
+          LAST_WORKFLOW_STATUS=$(gh run list --workflow .github/workflows/ci.yml -b latest | grep -oh "completed.*" | grep -v "cancelled" | head -1 | awk '{print $2}')
+          if [ "$GITHUB_RUN_ATTEMPT" -ge 2 ]; then
+            # Handle re-run cases - there is no way to query the previous run status, so we assume the most
+            # common scenario will be re-run after failure.
+            LAST_WORKFLOW_STATUS="failure"
+          fi
+          if [ "$LAST_WORKFLOW_STATUS" != "$WORKFLOW_STATUS" ]; then
+            echo "status changed from $LAST_WORKFLOW_STATUS to $WORKFLOW_STATUS"
+            echo "changedState=true" >> $GITHUB_OUTPUT
+          else
+            echo "status is still $WORKFLOW_STATUS"
+            echo "changedState=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit History
+        id: commits
+        if: always() && job.status != 'cancelled' && github.ref == 'refs/heads/latest'
+          && steps.lastJobStatus.outputs.changedState == 'true'
+        run: |
+          GIT_LOG=$(git log HEAD ^${{ needs.init.outputs.nx_base }} --format="%an (%h) %s")
+          echo "GIT_LOG<<EOF" >> $GITHUB_ENV
+          echo "$GIT_LOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Tag Latest Successful Commit
+        if: success() && github.ref == 'refs/heads/latest' &&
+          steps.lastJobStatus.outputs.workflowStatus != 'failure'
+        uses: EndBug/latest-tag@8fcae8848c1e23fd8212258f69a9619bc62cad67 # v1.6.3
+        with:
+          ref: latest-success
+          description: Latest commit to pass GitHub Actions workflow on latest branch.
+
+      - name: Find matching workflow
+        if: always() && job.status != 'cancelled' && github.ref == 'refs/heads/latest'
+        id: find_latest_sha
+        uses: SamhammerAG/last-successful-build-action@1c368a27a90596574a71ac0ede422a897d0e8e84 # v4
+        with:
+          branch: "latest"
+          workflow: "ci"
+          verify: false
+
+      - name: SlackBot
+        if: always() && job.status != 'cancelled' && github.ref == 'refs/heads/latest'
+        uses: ./external/ag-shared/github/actions/slack-ci-notification
+        with:
+          SLACK_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_OAUTH_TOKEN }}
+          NOTION_API_TOKEN: ${{ secrets.SLACK_USER_CONFIG_NOTION_API_TOKEN }}
+          NOTION_DATA_SOURCE_ID: ${{ secrets.SLACK_USER_CONFIG_NOTION_DATA_SOURCE_ID }}
+          AG_PROJECT: AgGrid
+          LAST_SUCCESSFUL_SHA: ${{ steps.find_latest_sha.outputs.sha }}
+          TEAM_CHANNEL: ${{ env.SLACK_CHANNEL }}
+          DEBUG_CHANNEL: ${{ secrets.SLACK_DEBUG_CHANNEL }}
+          WEBSITE_STATUS_CHANNEL: ${{ secrets.WEBSITE_STATUS_CHANNEL }}
+          LIBRARY_WEBSITE_STATUS_CHANNEL: ${{ env.LIBRARY_WEBSITE_STATUS_CHANNEL }}
+          REPORT_URL: ${{ steps.testReport.outputs.url_html }}
+          CHANGED_STATE: ${{ steps.lastJobStatus.outputs.changedState }}
+          DEPLOY_TO_STAGING: ${{ needs.docs.outputs.docs_deployed == 'success' }}
+          JOB_STATUSES: >
+            {
+              "Format": "${{ needs.lint.outputs.format }}",
+              "Lint": "${{ needs.lint.outputs.lint }}",
+              "Build": "${{ needs.build.outputs.build }}",
+              "Test": "${{ needs.test.result }}",
+              "e2e": "${{ needs.e2e.result }}",
+              "FW_Pkg": "${{ needs.fw_pkg_test.result }}",
+              "Docs": "${{ needs.docs.result }}",
+              "SonarCommunity": "${{ needs.sonar_community.result }}",
+              "SonarEnterprise": "${{ needs.sonar_enterprise.result }}"
+            }
+
+      - name: Fail job if workflow failed
+        if: success() && steps.lastJobStatus.outputs.workflowStatus == 'failure'
+        run: |
+          echo "Workflow failed, failing the build."
+          exit 1
+
+  sonar_community:
+    name: SonarQube Community
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: SonarQube Analysis Community
+        uses: SonarSource/sonarqube-scan-action@2500896589ef8f7247069a56136f8dc177c27ccf # v5.2.0
+        env:
+          SONAR_HOST_URL: https://sonarcloud.io
+          SONAR_TOKEN: ${{ secrets.SONAR_COMMUNITY_LOGIN }}
+        with:
+          projectBaseDir: ./packages/
+          args: >
+            -Dsonar.javascript.node.maxspace=8192 -Dsonar.organization=ag-grid
+            -Dsonar.sources=./ag-grid-community,./ag-grid-angular/projects/ag-grid-angular,./ag-grid-react,./ag-grid-vue3
+            -Dsonar.typescript.tsconfigPaths=./ag-grid-community/tsconfig.lib.json,./ag-grid-angular/projects/ag-grid-angular/tsconfig.lib.prod.json,./ag-grid-react/tsconfig.json,./ag-grid-vue3/tsconfig.json
+            -Dsonar.projectKey=ag-grid_community_latest
+            -Dsonar.exclusions=**/__tests__/*,**/test.ts,**/tsconfig.typings.json,**/LICENSE.html,**/*.md,**/dist,**/node_modules,**/typings,**/lib,**/*spec.js,**/e2e
+            -Dsonar.coverage.exclusions=**/*
+
+  sonar_enterprise:
+    name: SonarQube Enterprise
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: SonarQube Analysis Enterprise
+        uses: SonarSource/sonarqube-scan-action@2500896589ef8f7247069a56136f8dc177c27ccf # v5.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_ENTERPRISE_LOGIN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          projectBaseDir: ./packages/
+          args: >
+            -Dsonar.javascript.node.maxspace=8192 -Dsonar.organization=ag-grid
+            -Dsonar.sources=./ag-grid-enterprise
+            -Dsonar.typescript.tsconfigPaths=./ag-grid-enterprise/tsconfig.lib.json
+            -Dsonar.branch.name=master
+            -Dsonar.projectKey=ag-grid-enterprise-latest
+            -Dsonar.exclusions=**/tsconfig.typings.json,**/LICENSE.html,**/*.md,**/dist,**/node_modules,**/typings,**/lib,**/*spec.js,**/e2e
+            -Dsonar.coverage.exclusions=**/*

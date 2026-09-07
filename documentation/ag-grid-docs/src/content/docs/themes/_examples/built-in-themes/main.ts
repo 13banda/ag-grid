@@ -1,18 +1,25 @@
 import type { ColDef, GridOptions, Theme } from 'ag-grid-community';
 import {
-    AllCommunityModule,
     ModuleRegistry,
     createGrid,
+    enableDevValidations,
     themeAlpine,
     themeBalham,
+    themeMaterial,
     themeQuartz,
 } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const themes: Record<string, Theme> = {
     quartz: themeQuartz,
+    material: themeMaterial,
     balham: themeBalham,
     alpine: themeAlpine,
 };

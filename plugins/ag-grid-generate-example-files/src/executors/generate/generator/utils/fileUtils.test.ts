@@ -38,11 +38,11 @@ describe('getBoilerPlateName', () => {
         ${undefined}           | ${undefined}
         ${'other'}             | ${undefined}
         ${'vanilla'}           | ${undefined}
-        ${'typescript'}        | ${'grid-typescript-boilerplate'}
-        ${'reactFunctional'}   | ${'grid-react-boilerplate'}
-        ${'reactFunctionalTs'} | ${'grid-react-ts-boilerplate'}
+        ${'typescript'}        | ${undefined}
+        ${'reactFunctional'}   | ${undefined}
+        ${'reactFunctionalTs'} | ${undefined}
         ${'angular'}           | ${'grid-angular-boilerplate'}
-        ${'vue3'}              | ${'grid-vue3-boilerplate'}
+        ${'vue3'}              | ${undefined}
     `('$internalFramework is $expected', ({ internalFramework, expected }) => {
         expect(getBoilerPlateName(internalFramework)).toEqual(expected);
     });
@@ -55,10 +55,10 @@ describe('getTransformTsFileExt', () => {
         ${'other'}             | ${'.js'}
         ${'vanilla'}           | ${'.js'}
         ${'typescript'}        | ${undefined}
-        ${'reactFunctional'}   | ${'.js'}
+        ${'reactFunctional'}   | ${'.jsx'}
         ${'reactFunctionalTs'} | ${'.tsx'}
         ${'angular'}           | ${undefined}
-        ${'vue3'}              | ${'.js'}
+        ${'vue3'}              | ${undefined}
     `('$internalFramework is $expected', ({ internalFramework, expected }) => {
         expect(getTransformTsFileExt(internalFramework)).toEqual(expected);
     });

@@ -13,8 +13,8 @@ import {
     RowSelectionModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     CellSelectionModule,
@@ -32,6 +32,11 @@ import {
     SideBarModule,
     StatusBarModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberEditorModule,
@@ -57,7 +62,6 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     NumberFilterModule,
     IntegratedChartsModule.with(AgChartsEnterpriseModule),
-    ValidationModule /* Development Only */,
 ]);
 
 class NodeIdRenderer implements ICellRendererComp {

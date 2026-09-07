@@ -3,15 +3,16 @@ import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { AgColumnGroup } from '../entities/agColumnGroup';
 import type { RowContainerCtrl } from '../gridBodyComp/rowContainer/rowContainerCtrl';
+import { _createElement } from '../utils/element';
 
 export class AutoWidthCalculator extends BeanStub implements NamedBean {
     beanName = 'autoWidthCalc' as const;
 
-    private centerRowContainerCtrl: RowContainerCtrl;
+    private scrollingRowContainerCtrl: RowContainerCtrl;
 
     public postConstruct(): void {
         this.beans.ctrlsSvc.whenReady(this, (p) => {
-            this.centerRowContainerCtrl = p.center;
+            this.scrollingRowContainerCtrl = p.scrolling;
         });
     }
 
@@ -35,7 +36,7 @@ export class AutoWidthCalculator extends BeanStub implements NamedBean {
             elements.push(eHeaderCell);
         }
 
-        return this.addElementsToContainerAndGetWidth(elements);
+        return this.getPreferredWidthForElements(elements);
     }
 
     public getPreferredWidthForColumnGroup(columnGroup: AgColumnGroup): number {
@@ -45,51 +46,45 @@ export class AutoWidthCalculator extends BeanStub implements NamedBean {
             return -1;
         }
 
-        return this.addElementsToContainerAndGetWidth([eHeaderCell]);
+        return this.getPreferredWidthForElements([eHeaderCell]);
     }
 
-    private addElementsToContainerAndGetWidth(elements: HTMLElement[]): number {
+    public getPreferredWidthForElements(elements: HTMLElement[], extraPadding?: number): number {
         // this element has to be a form, otherwise form elements within a cell
         // will be validated while being cloned. This can cause issues such as
         // radio buttons being reset and losing their values.
-        const eDummyContainer = document.createElement('form');
+        const eDummyContainer = _createElement<HTMLFormElement>({ tag: 'form' });
         // position fixed, so it isn't restricted to the boundaries of the parent
         eDummyContainer.style.position = 'fixed';
 
-        // we put the dummy into the body container, so it will inherit all the
-        // css styles that the real cells are inheriting
-        const eBodyContainer = this.centerRowContainerCtrl.eContainer;
+        // we put the dummy into the body viewport, so it inherits all the css styles the real
+        // cells inherit. we use the viewport rather than the row container because the container
+        // is set to display:none while the grid has no rows, which would measure every clone at 0.
+        const eBodyViewport = this.scrollingRowContainerCtrl.eViewport;
 
-        elements.forEach((el) => this.cloneItemIntoDummy(el, eDummyContainer));
+        for (const el of elements) {
+            this.cloneItemIntoDummy(el, eDummyContainer);
+        }
 
         // only append the dummyContainer to the DOM after it contains all the necessary items
-        eBodyContainer.appendChild(eDummyContainer);
+        eBodyViewport.appendChild(eDummyContainer);
 
         // at this point, all the clones are lined up vertically with natural widths. the dummy
         // container will have a width wide enough just to fit the largest.
         const dummyContainerWidth = eDummyContainer.offsetWidth;
 
         // we are finished with the dummy container, so get rid of it
-        eBodyContainer.removeChild(eDummyContainer);
+        eDummyContainer.remove();
 
         // we add padding as I found sometimes the gui still put '...' after some of the texts. so the
         // user can configure the grid to add a few more pixels after the calculated width
-        const autoSizePadding = this.gos.get('autoSizePadding');
+        extraPadding = extraPadding ?? this.gos.get('autoSizePadding');
 
-        return dummyContainerWidth + autoSizePadding;
+        return dummyContainerWidth + extraPadding;
     }
 
     private getHeaderCellForColumn(column: AgColumnGroup | AgColumn): HTMLElement | null {
-        let element: HTMLElement | null = null;
-
-        this.beans.ctrlsSvc.getHeaderRowContainerCtrls().forEach((container) => {
-            const res = container.getHtmlElementForColumnHeader(column);
-            if (res != null) {
-                element = res;
-            }
-        });
-
-        return element;
+        return this.beans.ctrlsSvc.getHeaderRowContainerCtrl()?.getHtmlElementForColumnHeader(column) ?? null;
     }
 
     private cloneItemIntoDummy(eCell: HTMLElement, eDummyContainer: HTMLElement): void {
@@ -100,10 +95,11 @@ export class AutoWidthCalculator extends BeanStub implements NamedBean {
         // the original has position = absolute, we need to remove this so it's positioned normally
         eCellClone.style.position = 'static';
         eCellClone.style.left = '';
+        eCellClone.style.right = '';
         // we put the cell into a containing div, as otherwise the cells would just line up
         // on the same line, standard flow layout, by putting them into divs, they are laid
         // out one per line
-        const eCloneParent = document.createElement('div');
+        const eCloneParent = _createElement({ tag: 'div' });
         const eCloneParentClassList = eCloneParent.classList;
         const isHeader = ['ag-header-cell', 'ag-header-group-cell'].some((cls) => eCellClone.classList.contains(cls));
 

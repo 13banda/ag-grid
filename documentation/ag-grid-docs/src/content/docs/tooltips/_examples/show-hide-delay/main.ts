@@ -1,35 +1,40 @@
-import type { ColDef, GridApi, GridOptions, ITooltipParams } from 'ag-grid-community';
+import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TooltipModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([TooltipModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TooltipModule, ClientSideRowModelModule]);
 
 const columnDefs: ColDef[] = [
     {
         headerName: 'Athlete',
         field: 'athlete',
         tooltipComponentParams: { color: '#55AA77' },
-        tooltipField: 'country',
+        tooltip: ({ data }) => data?.country,
         headerTooltip: 'Tooltip for Athlete Column Header',
     },
     {
         field: 'age',
-        tooltipValueGetter: (p: ITooltipParams) => 'Create any fixed message, e.g. This is the Athlete’s Age ',
+        tooltip: 'Create any fixed message, e.g. This is the Athlete’s Age ',
         headerTooltip: 'Tooltip for Age Column Header',
     },
     {
         field: 'year',
-        tooltipValueGetter: (p: ITooltipParams) => 'This is a dynamic tooltip using the value of ' + p.value,
+        tooltip: (p) => 'This is a dynamic tooltip using the value of ' + p.value,
         headerTooltip: 'Tooltip for Year Column Header',
     },
     {
         field: 'sport',
-        tooltipValueGetter: () => 'Tooltip text about Sport should go here',
+        tooltip: 'Tooltip text about Sport should go here',
         headerTooltip: 'Tooltip for Sport Column Header',
     },
 ];
@@ -42,8 +47,8 @@ const gridOptions: GridOptions<IOlympicData> = {
         minWidth: 100,
     },
     tooltipShowDelay: 0,
+    tooltipSwitchShowDelay: 1000,
     tooltipHideDelay: 2000,
-    rowData: null,
     columnDefs: columnDefs,
 };
 

@@ -1,4 +1,8 @@
 import type {
+    BatchEditingStartedEvent,
+    BatchEditingStoppedEvent,
+    BulkEditingStartedEvent,
+    BulkEditingStoppedEvent,
     CellValueChangedEvent,
     GridApi,
     GridOptions,
@@ -13,10 +17,15 @@ import {
     ModuleRegistry,
     TextEditorModule,
     UndoRedoEditModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { CellSelectionModule, ClipboardModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     UndoRedoEditModule,
@@ -25,7 +34,6 @@ ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ClipboardModule,
     CellSelectionModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -60,6 +68,10 @@ const gridOptions: GridOptions = {
     onUndoEnded: onUndoEnded,
     onRedoStarted: onRedoStarted,
     onRedoEnded: onRedoEnded,
+    onBulkEditingStarted: onBulkEditingStarted,
+    onBulkEditingStopped: onBulkEditingStopped,
+    onBatchEditingStarted: onBatchEditingStarted,
+    onBatchEditingStopped: onBatchEditingStopped,
 };
 
 function undo() {
@@ -80,16 +92,39 @@ function onFirstDataRendered() {
     disable('#redoBtn', true);
 }
 
-function onCellValueChanged(params: CellValueChangedEvent) {
-    console.log('cellValueChanged', params);
-
-    const undoSize = params.api.getCurrentUndoSize();
+function updateCounters(api: GridApi) {
+    const undoSize = api.getCurrentUndoSize();
     setValue('#undoInput', undoSize);
     disable('#undoBtn', undoSize < 1);
 
-    const redoSize = params.api.getCurrentRedoSize();
+    const redoSize = api.getCurrentRedoSize();
     setValue('#redoInput', redoSize);
     disable('#redoBtn', redoSize < 1);
+}
+
+function onBulkEditingStarted(event: BulkEditingStartedEvent) {
+    console.log('bulkEditingStarted', event);
+    updateCounters(event.api);
+}
+
+function onBulkEditingStopped(event: BulkEditingStoppedEvent) {
+    console.log('bulkEditingStopped', event);
+    updateCounters(event.api);
+}
+
+function onBatchEditingStarted(event: BatchEditingStartedEvent) {
+    console.log('batchEditingStarted', event);
+    updateCounters(event.api);
+}
+
+function onBatchEditingStopped(event: BatchEditingStoppedEvent) {
+    console.log('batchEditingStopped', event);
+    updateCounters(event.api);
+}
+
+function onCellValueChanged(params: CellValueChangedEvent) {
+    console.log('cellValueChanged', params);
+    updateCounters(params.api);
 }
 
 function onUndoStarted(event: UndoStartedEvent) {

@@ -1,8 +1,9 @@
 import type { Column } from '../interfaces/iColumn';
-import type { ExportFileNameGetter, ExportParams } from './exportParams';
+import type { ExportFileNameGetter, ExportParams, ProcessCellForExportParams } from './exportParams';
 import type { AgGridCommon } from './iCommon';
 import type { IRowNode } from './iRowNode';
 import type { XmlElement } from './iXmlFactory';
+import type { Note } from './notes';
 
 // Excel Styles
 export interface ExcelStyle {
@@ -20,7 +21,10 @@ export interface ExcelStyle {
     interior?: ExcelInterior;
     /** Use this property to customise the cell value as a formatted number. */
     numberFormat?: ExcelNumberFormat;
-    /** Use this property to setup cell protection. */
+    /**
+     * Use this property to configure cell locking and formula visibility for the exported worksheet.
+     * This must be used together with `ExcelExportParams.protectSheet`.
+     */
     protection?: ExcelProtection;
 }
 
@@ -200,6 +204,73 @@ export interface ExcelProtection {
     hideFormula: boolean;
 }
 
+export interface ExcelSheetProtection {
+    /**
+     * Allow using AutoFilter when worksheet protection is enabled.
+     * @default false
+     */
+    autoFilter?: boolean;
+    /**
+     * Allow deleting columns when worksheet protection is enabled.
+     * @default false
+     */
+    deleteColumns?: boolean;
+    /**
+     * Allow deleting rows when worksheet protection is enabled.
+     * @default false
+     */
+    deleteRows?: boolean;
+    /**
+     * Allow formatting cells when worksheet protection is enabled.
+     * @default false
+     */
+    formatCells?: boolean;
+    /**
+     * Allow formatting columns when worksheet protection is enabled.
+     * @default false
+     */
+    formatColumns?: boolean;
+    /**
+     * Allow formatting rows when worksheet protection is enabled.
+     * @default false
+     */
+    formatRows?: boolean;
+    /**
+     * Allow inserting columns when worksheet protection is enabled.
+     * @default false
+     */
+    insertColumns?: boolean;
+    /**
+     * Allow inserting hyperlinks when worksheet protection is enabled.
+     * @default false
+     */
+    insertHyperlinks?: boolean;
+    /**
+     * Allow inserting rows when worksheet protection is enabled.
+     * @default false
+     */
+    insertRows?: boolean;
+    /**
+     * Allow using PivotTables when worksheet protection is enabled.
+     * @default false
+     */
+    pivotTables?: boolean;
+    /**
+     * Allow selecting locked cells when worksheet protection is enabled.
+     * @default true
+     */
+    selectLockedCells?: boolean;
+    /**
+     * Allow selecting unlocked cells when worksheet protection is enabled.
+     * @default true
+     */
+    selectUnlockedCells?: boolean;
+    /**
+     * Optional password required to unprotect the worksheet.
+     */
+    password?: string;
+}
+
 // Excel Structure
 export interface ExcelWorksheet {
     name: string;
@@ -236,6 +307,13 @@ export interface ExcelRow {
     cells: ExcelCell[];
 }
 
+export interface ExcelNote {
+    /** The body text to export in the Excel note/comment. */
+    text: string;
+    /** Optional author name shown in Excel. */
+    author?: string;
+}
+
 export interface ExcelCell {
     /** The data that will be added to the cell. */
     data?: ExcelData;
@@ -254,6 +332,9 @@ export interface ExcelCell {
      * @default 0
      */
     mergeAcross?: number;
+
+    /** Optional note/comment to export for this cell. */
+    note?: ExcelNote;
 }
 
 export interface ExcelImagePosition {
@@ -432,6 +513,12 @@ export interface ExcelWorksheetConfigParams {
      */
     sheetName?: string | ExcelSheetNameGetter;
     /**
+     * If `true`, protects the worksheet to enforce `ExcelStyle.protection` settings.
+     * Provide an `ExcelSheetProtection` config object to allow specific actions on the protected sheet.
+     * @default false
+     */
+    protectSheet?: boolean | ExcelSheetProtection;
+    /**
      * The configuration for header and footers.
      */
     headerFooterConfig?: ExcelHeaderFooterConfig;
@@ -497,7 +584,37 @@ export interface ExcelWorksheetConfigParams {
         column: Column,
         value: string
     ) => { image: ExcelImage; value?: string } | undefined;
+    /**
+     * Set to `true` to suppress exporting cell notes from the grid `notesDataSource`.
+     * Callback-based note injection via `processNoteCallback` still works when this is set.
+     * @default false
+     */
+    suppressGridNotesExport?: boolean;
+    /**
+     * Allows customising, suppressing, or injecting Excel notes/comments for exported cells.
+     *
+     * Return `undefined` to keep the default behaviour, `null` to suppress the note for the current cell,
+     * or an `ExcelNote` to export a custom note.
+     */
+    processNoteCallback?: (params: ProcessNoteForExportParams) => ExcelNote | null | undefined;
 }
+
+export interface ProcessNoteForExportParams<TData = any, TContext = any> extends ProcessCellForExportParams<
+    TData,
+    TContext
+> {
+    /**
+     * The grid note resolved for the current cell, when the Notes feature is available.
+     */
+    gridNote?: Note;
+    /**
+     * The Excel note/comment value derived from `gridNote` when automatic note export is enabled.
+     */
+    excelNote?: ExcelNote;
+}
+
+export type ExcelCustomMetadataValue = string | number | boolean;
+export type ExcelCustomMetadata = Record<string, ExcelCustomMetadataValue>;
 
 interface ExcelFileParams {
     /**
@@ -511,6 +628,13 @@ interface ExcelFileParams {
      * */
     author?: string;
     /**
+     * Set to `true` to suppress prepending the author name as bold text in the
+     * exported Excel note body. The note author is still stored in the
+     * exported Excel note metadata regardless of this setting.
+     * @default false
+     */
+    suppressPrependAuthorToNotes?: boolean;
+    /**
      * The default value for the font size of the Excel document.
      * @default 11
      */
@@ -520,6 +644,12 @@ interface ExcelFileParams {
      * @default 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
      */
     mimeType?: string;
+
+    /**
+     * Custom metadata to write to `docProps/custom.xml` in the exported file.
+     * Values are serialised as strings.
+     */
+    customMetadata?: ExcelCustomMetadata;
 }
 
 export interface ExcelExportParams extends ExcelFileParams, ExcelWorksheetConfigParams, ExportParams<ExcelRow[]> {}

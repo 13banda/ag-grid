@@ -1,13 +1,12 @@
 import type {
     ColDef,
+    FilterWrapperParams,
     GridApi,
     GridOptions,
-    IDateFilterParams,
     IMultiFilterParams,
-    IProvidedFilterParams,
-    ISetFilter,
     ISetFilterParams,
     ITextFilterParams,
+    SetFilterHandler,
 } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
@@ -15,8 +14,8 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -25,6 +24,11 @@ import {
     MultiFilterModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -36,41 +40,28 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     NumberFilterModule,
     DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
-const defaultFilterParams: IProvidedFilterParams = { readOnly: true };
+const defaultFilterParams: FilterWrapperParams = { readOnly: true };
 
 const columnDefs: ColDef[] = [
     {
         field: 'athlete',
-        filter: 'agTextColumnFilter',
-        filterParams: defaultFilterParams,
     },
     {
         field: 'age',
-        filter: 'agNumberColumnFilter',
-        filterParams: defaultFilterParams,
     },
     {
         field: 'country',
         filter: 'agSetColumnFilter',
-        filterParams: defaultFilterParams,
     },
     {
         field: 'year',
         maxWidth: 120,
-        filter: 'agNumberColumnFilter',
-        filterParams: defaultFilterParams,
     },
     {
         field: 'date',
         minWidth: 215,
-        filter: 'agDateColumnFilter',
-        filterParams: {
-            readOnly: true,
-            comparator: dateComparator,
-        } as IDateFilterParams,
         suppressHeaderMenuButton: true,
     },
     {
@@ -85,9 +76,18 @@ const columnDefs: ColDef[] = [
             readOnly: true,
         } as IMultiFilterParams,
     },
-    { field: 'gold', filterParams: defaultFilterParams },
-    { field: 'silver', filterParams: defaultFilterParams },
-    { field: 'bronze', filterParams: defaultFilterParams },
+    {
+        field: 'gold',
+        filter: 'agSetColumnFilter',
+    },
+    {
+        field: 'silver',
+        filter: 'agSetColumnFilter',
+    },
+    {
+        field: 'bronze',
+        filter: 'agSetColumnFilter',
+    },
     { field: 'total', filter: false },
 ];
 
@@ -100,7 +100,9 @@ const gridOptions: GridOptions<IOlympicData> = {
         minWidth: 150,
         filter: true,
         floatingFilter: true,
+        filterParams: defaultFilterParams,
     },
+    suppressSetFilterByDefault: true,
 };
 
 function irelandAndUk() {
@@ -120,14 +122,15 @@ function destroyCountryFilter() {
 }
 
 function endingStan() {
-    gridApi!.getColumnFilterInstance<ISetFilter>('country').then((countryFilterComponent) => {
-        const countriesEndingWithStan = countryFilterComponent!.getFilterKeys().filter(function (value: any) {
+    const countriesEndingWithStan = gridApi!
+        .getColumnFilterHandler<SetFilterHandler>('country')!
+        .getFilterKeys()
+        .filter(function (value: any) {
             return value.indexOf('stan') === value.length - 4;
         });
 
-        gridApi!.setColumnFilterModel('country', { values: countriesEndingWithStan }).then(() => {
-            gridApi!.onFilterChanged();
-        });
+    gridApi!.setColumnFilterModel('country', { values: countriesEndingWithStan }).then(() => {
+        gridApi!.onFilterChanged();
     });
 }
 
@@ -317,25 +320,6 @@ function clearSportFilter() {
     });
 }
 
-function dateComparator(filterLocalDateAtMidnight: Date, cellValue: Date) {
-    const dateAsString = cellValue;
-    if (dateAsString == null) return -1;
-    const dateParts = dateAsString.split('/');
-    const cellDate = new Date(Number(dateParts[2]), Number(dateParts[1]) - 1, Number(dateParts[0]));
-
-    if (filterLocalDateAtMidnight.getTime() === cellDate.getTime()) {
-        return 0;
-    }
-
-    if (cellDate < filterLocalDateAtMidnight) {
-        return -1;
-    }
-
-    if (cellDate > filterLocalDateAtMidnight) {
-        return 1;
-    }
-}
-
 // setup the grid after the page has finished loading
 document.addEventListener('DOMContentLoaded', function () {
     const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
@@ -343,5 +327,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetch('https://www.ag-grid.com/example-assets/olympic-winners.json')
         .then((response) => response.json())
-        .then((data: IOlympicData[]) => gridApi!.setGridOption('rowData', data));
+        .then((data: IOlympicData[]) =>
+            gridApi!.setGridOption(
+                'rowData',
+                data.map((rowData) => {
+                    const dateParts = rowData.date.split('/');
+                    return {
+                        ...rowData,
+                        date: `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`,
+                    };
+                })
+            )
+        );
 });

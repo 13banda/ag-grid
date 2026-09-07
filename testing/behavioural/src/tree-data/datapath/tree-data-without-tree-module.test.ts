@@ -1,9 +1,8 @@
+import { GridRows, TestGridsManager, waitForMissingModuleReports } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
-import { ClientSideRowModelModule } from 'ag-grid-community';
+import { ClientSideRowModelModule, enableDevValidations } from 'ag-grid-community';
 import type { GridOptions } from 'ag-grid-community';
-
-import { GridRows, TestGridsManager } from '../../test-utils';
 
 const getDataPath = (data: any) => data.orgHierarchy;
 
@@ -12,10 +11,12 @@ describe('ag-grid tree data without tree module', () => {
         modules: [ClientSideRowModelModule],
     });
 
-    let consoleWarnSpy: MockInstance;
+    let consoleWarnSpy: MockInstance | undefined;
     let consoleErrorSpy: MockInstance;
 
     beforeEach(() => {
+        // This file deliberately triggers validation/missing-module diagnostics; the global throw-on-validation must be off here.
+        enableDevValidations({ throwOn: [] });
         gridsManager.reset();
     });
 
@@ -56,17 +57,12 @@ describe('ag-grid tree data without tree module', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
+        await waitForMissingModuleReports();
         expect(consoleErrorSpy).toHaveBeenCalled();
 
         consoleErrorSpy.mockRestore();
 
-        const gridRowsOptions = {
-            checkDom: true,
-            columns: true,
-            treeData: false,
-        };
-
-        const gridRows = new GridRows(api, 'data', gridRowsOptions);
+        const gridRows = new GridRows(api, 'data', { forcedTreeData: false });
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID groupType:"Filler"
             ├── LEAF id:0 groupType:"Provided" x:1

@@ -6,11 +6,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { ControlsCellRenderer } from './controlsCellRenderer_typescript';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnApiModule,
@@ -18,17 +23,9 @@ ModuleRegistry.registerModules([
     NumberFilterModule,
     CellStyleModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
-    {
-        lockPosition: 'left',
-        valueGetter: 'node.rowIndex',
-        cellClass: 'locked-col',
-        width: 60,
-        suppressNavigable: true,
-    },
     {
         lockPosition: 'left',
         cellRenderer: ControlsCellRenderer,

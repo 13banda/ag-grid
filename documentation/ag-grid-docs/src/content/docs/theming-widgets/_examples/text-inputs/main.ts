@@ -1,19 +1,29 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, themeQuartz } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations, themeQuartz } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const myTheme = themeQuartz.withParams({
     inputBorder: { color: 'orange', style: 'dotted', width: 3 },
-    inputBackgroundColor: 'rgb(255, 209, 123)', // light orange
-    inputPlaceholderTextColor: 'rgb(155, 101, 1)', // darker orange
-    inputIconColor: 'purple', // light orange
+    inputBackgroundColor: 'rgb(255, 209, 123)',
+    inputPlaceholderTextColor: 'rgb(155, 101, 1)',
+    inputIconColor: 'purple',
+    inputTextColor: 'black',
+    // Cell Editors
+    inputInvalidBackgroundColor: 'purple',
+    inputInvalidBorder: 'darkred',
+    inputInvalidTextColor: 'white',
 });
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', minWidth: 170 },
-    { field: 'age' },
+    { field: 'age', headerName: 'Age (< 20)', cellEditorParams: { max: 20 } },
     { field: 'country' },
     { field: 'year' },
     { field: 'date' },
@@ -28,7 +38,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     theme: myTheme,
-    rowData: null,
     columnDefs: columnDefs,
     defaultColDef: {
         editable: true,

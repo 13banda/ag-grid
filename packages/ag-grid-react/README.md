@@ -1,11 +1,13 @@
 # React Data Grid | React Table
 
 <div align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Dark-Theme.svg?raw=true"/>
-      <source media="(prefers-color-scheme: light)" srcset="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Light-Theme.svg?raw=true"/>
-      <img width="100%" alt="AG Grid Logo" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Light-Theme.svg?raw=true"/>
-    </picture>
+    <a href="https://www.ag-grid.com?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
+        <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Dark-Theme.svg?raw=true"/>
+        <source media="(prefers-color-scheme: light)" srcset="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Light-Theme.svg?raw=true"/>
+        <img width="100%" alt="AG Grid Logo" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-Grid-Logo_Light-Theme.svg?raw=true"/>
+        </picture>
+    </a>
     <div align="center">
         <h4><a href="https://www.ag-grid.com?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">🌐 Website</a> • <a href="https://www.ag-grid.com/react-data-grid/getting-started/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">📖 Documentation</a> • <a href="https://www.ag-grid.com/community?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">🏘️ Community</a></h4>
     </div>
@@ -48,7 +50,7 @@
     <img src="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/kitchen-sink-demo-light.gif?raw=true" alt="High Performance Demo">
 </picture>
 <div align="right">
-    <a href="https://ag-grid.com/example/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github"><br><img alt="Static Badge" src="https://img.shields.io/badge/ag%E2%80%93grid.com-Live%20Demo-blue?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KDTwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KDTxnIGlkPSJTVkdSZXBvX2JnQ2FycmllciIgc3Ryb2tlLXdpZHRoPSIwIi8%2BCg08ZyBpZD0iU1ZHUmVwb190cmFjZXJDYXJyaWVyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KDTxnIGlkPSJTVkdSZXBvX2ljb25DYXJyaWVyIj4gPHBhdGggZD0iTTE4IDIwLjc1SDZDNS4yNzA2NSAyMC43NSA0LjU3MTE4IDIwLjQ2MDMgNC4wNTU0NiAxOS45NDQ1QzMuNTM5NzMgMTkuNDI4OCAzLjI1IDE4LjcyOTMgMy4yNSAxOFY2QzMuMjUgNS4yNzA2NSAzLjUzOTczIDQuNTcxMTggNC4wNTU0NiA0LjA1NTQ2QzQuNTcxMTggMy41Mzk3MyA1LjI3MDY1IDMuMjUgNiAzLjI1SDEyQzEyLjE5ODkgMy4yNSAxMi4zODk3IDMuMzI5MDIgMTIuNTMwMyAzLjQ2OTY3QzEyLjY3MSAzLjYxMDMyIDEyLjc1IDMuODAxMDkgMTIuNzUgNEMxMi43NSA0LjE5ODkxIDEyLjY3MSA0LjM4OTY4IDEyLjUzMDMgNC41MzAzM0MxMi4zODk3IDQuNjcwOTggMTIuMTk4OSA0Ljc1IDEyIDQuNzVINkM1LjY2ODQ4IDQuNzUgNS4zNTA1NCA0Ljg4MTcgNS4xMTYxMiA1LjExNjEyQzQuODgxNyA1LjM1MDU0IDQuNzUgNS42Njg0OCA0Ljc1IDZWMThDNC43NSAxOC4zMzE1IDQuODgxNyAxOC42NDk1IDUuMTE2MTIgMTguODgzOUM1LjM1MDU0IDE5LjExODMgNS42Njg0OCAxOS4yNSA2IDE5LjI1SDE4QzE4LjMzMTUgMTkuMjUgMTguNjQ5NSAxOS4xMTgzIDE4Ljg4MzkgMTguODgzOUMxOS4xMTgzIDE4LjY0OTUgMTkuMjUgMTguMzMxNSAxOS4yNSAxOFYxMkMxOS4yNSAxMS44MDExIDE5LjMyOSAxMS42MTAzIDE5LjQ2OTcgMTEuNDY5N0MxOS42MTAzIDExLjMyOSAxOS44MDExIDExLjI1IDIwIDExLjI1QzIwLjE5ODkgMTEuMjUgMjAuMzg5NyAxMS4zMjkgMjAuNTMwMyAxMS40Njk3QzIwLjY3MSAxMS42MTAzIDIwLjc1IDExLjgwMTEgMjAuNzUgMTJWMThDMjAuNzUgMTguNzI5MyAyMC40NjAzIDE5LjQyODggMTkuOTQ0NSAxOS45NDQ1QzE5LjQyODggMjAuNDYwMyAxOC43MjkzIDIwLjc1IDE4IDIwLjc1WiIgZmlsbD0iI2ZmZmZmZiIvPiA8cGF0aCBkPSJNMjAgOC43NUMxOS44MDE5IDguNzQ3NDEgMTkuNjEyNiA4LjY2NzU2IDE5LjQ3MjUgOC41Mjc0N0MxOS4zMzI0IDguMzg3MzcgMTkuMjUyNiA4LjE5ODExIDE5LjI1IDhWNC43NUgxNkMxNS44MDExIDQuNzUgMTUuNjEwMyA0LjY3MDk4IDE1LjQ2OTcgNC41MzAzM0MxNS4zMjkgNC4zODk2OCAxNS4yNSA0LjE5ODkxIDE1LjI1IDRDMTUuMjUgMy44MDEwOSAxNS4zMjkgMy42MTAzMiAxNS40Njk3IDMuNDY5NjdDMTUuNjEwMyAzLjMyOTAyIDE1LjgwMTEgMy4yNSAxNiAzLjI1SDIwQzIwLjE5ODEgMy4yNTI1OSAyMC4zODc0IDMuMzMyNDQgMjAuNTI3NSAzLjQ3MjUzQzIwLjY2NzYgMy42MTI2MyAyMC43NDc0IDMuODAxODkgMjAuNzUgNFY4QzIwLjc0NzQgOC4xOTgxMSAyMC42Njc2IDguMzg3MzcgMjAuNTI3NSA4LjUyNzQ3QzIwLjM4NzQgOC42Njc1NiAyMC4xOTgxIDguNzQ3NDEgMjAgOC43NVoiIGZpbGw9IiNmZmZmZmYiLz4gPHBhdGggZD0iTTEzLjUgMTEuMjVDMTMuMzA3MSAxMS4yMzUyIDEzLjEyNzYgMTEuMTQ1NSAxMyAxMUMxMi44NzcgMTAuODYyNSAxMi44MDkgMTAuNjg0NSAxMi44MDkgMTAuNUMxMi44MDkgMTAuMzE1NSAxMi44NzcgMTAuMTM3NSAxMyAxMEwxOS41IDMuNUMxOS41Njg3IDMuNDI2MzEgMTkuNjUxNSAzLjM2NzIxIDE5Ljc0MzUgMy4zMjYyMkMxOS44MzU1IDMuMjg1MjMgMTkuOTM0OCAzLjI2MzE5IDIwLjAzNTUgMy4yNjE0MUMyMC4xMzYyIDMuMjU5NjMgMjAuMjM2MiAzLjI3ODE2IDIwLjMyOTYgMy4zMTU4OEMyMC40MjMgMy4zNTM2IDIwLjUwNzggMy40MDk3NCAyMC41NzkgMy40ODA5NkMyMC42NTAzIDMuNTUyMTggMjAuNzA2NCAzLjYzNzAxIDIwLjc0NDEgMy43MzA0QzIwLjc4MTggMy44MjM3OSAyMC44MDA0IDMuOTIzODIgMjAuNzk4NiA0LjAyNDUyQzIwLjc5NjggNC4xMjUyMyAyMC43NzQ4IDQuMjI0NTQgMjAuNzMzOCA0LjMxNjU0QzIwLjY5MjggNC40MDg1NCAyMC42MzM3IDQuNDkxMzQgMjAuNTYgNC41NkwxNCAxMUMxMy44NzI0IDExLjE0NTUgMTMuNjkyOSAxMS4yMzUyIDEzLjUgMTEuMjVaIiBmaWxsPSIjZmZmZmZmIi8%2BIDwvZz4KDTwvc3ZnPg%3D%3D">
+    <a href="https://www.ag-grid.com/example/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github"><br><img alt="Static Badge" src="https://img.shields.io/badge/ag%E2%80%93grid.com-Live%20Demo-blue?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KDTwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KDTxnIGlkPSJTVkdSZXBvX2JnQ2FycmllciIgc3Ryb2tlLXdpZHRoPSIwIi8%2BCg08ZyBpZD0iU1ZHUmVwb190cmFjZXJDYXJyaWVyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KDTxnIGlkPSJTVkdSZXBvX2ljb25DYXJyaWVyIj4gPHBhdGggZD0iTTE4IDIwLjc1SDZDNS4yNzA2NSAyMC43NSA0LjU3MTE4IDIwLjQ2MDMgNC4wNTU0NiAxOS45NDQ1QzMuNTM5NzMgMTkuNDI4OCAzLjI1IDE4LjcyOTMgMy4yNSAxOFY2QzMuMjUgNS4yNzA2NSAzLjUzOTczIDQuNTcxMTggNC4wNTU0NiA0LjA1NTQ2QzQuNTcxMTggMy41Mzk3MyA1LjI3MDY1IDMuMjUgNiAzLjI1SDEyQzEyLjE5ODkgMy4yNSAxMi4zODk3IDMuMzI5MDIgMTIuNTMwMyAzLjQ2OTY3QzEyLjY3MSAzLjYxMDMyIDEyLjc1IDMuODAxMDkgMTIuNzUgNEMxMi43NSA0LjE5ODkxIDEyLjY3MSA0LjM4OTY4IDEyLjUzMDMgNC41MzAzM0MxMi4zODk3IDQuNjcwOTggMTIuMTk4OSA0Ljc1IDEyIDQuNzVINkM1LjY2ODQ4IDQuNzUgNS4zNTA1NCA0Ljg4MTcgNS4xMTYxMiA1LjExNjEyQzQuODgxNyA1LjM1MDU0IDQuNzUgNS42Njg0OCA0Ljc1IDZWMThDNC43NSAxOC4zMzE1IDQuODgxNyAxOC42NDk1IDUuMTE2MTIgMTguODgzOUM1LjM1MDU0IDE5LjExODMgNS42Njg0OCAxOS4yNSA2IDE5LjI1SDE4QzE4LjMzMTUgMTkuMjUgMTguNjQ5NSAxOS4xMTgzIDE4Ljg4MzkgMTguODgzOUMxOS4xMTgzIDE4LjY0OTUgMTkuMjUgMTguMzMxNSAxOS4yNSAxOFYxMkMxOS4yNSAxMS44MDExIDE5LjMyOSAxMS42MTAzIDE5LjQ2OTcgMTEuNDY5N0MxOS42MTAzIDExLjMyOSAxOS44MDExIDExLjI1IDIwIDExLjI1QzIwLjE5ODkgMTEuMjUgMjAuMzg5NyAxMS4zMjkgMjAuNTMwMyAxMS40Njk3QzIwLjY3MSAxMS42MTAzIDIwLjc1IDExLjgwMTEgMjAuNzUgMTJWMThDMjAuNzUgMTguNzI5MyAyMC40NjAzIDE5LjQyODggMTkuOTQ0NSAxOS45NDQ1QzE5LjQyODggMjAuNDYwMyAxOC43MjkzIDIwLjc1IDE4IDIwLjc1WiIgZmlsbD0iI2ZmZmZmZiIvPiA8cGF0aCBkPSJNMjAgOC43NUMxOS44MDE5IDguNzQ3NDEgMTkuNjEyNiA4LjY2NzU2IDE5LjQ3MjUgOC41Mjc0N0MxOS4zMzI0IDguMzg3MzcgMTkuMjUyNiA4LjE5ODExIDE5LjI1IDhWNC43NUgxNkMxNS44MDExIDQuNzUgMTUuNjEwMyA0LjY3MDk4IDE1LjQ2OTcgNC41MzAzM0MxNS4zMjkgNC4zODk2OCAxNS4yNSA0LjE5ODkxIDE1LjI1IDRDMTUuMjUgMy44MDEwOSAxNS4zMjkgMy42MTAzMiAxNS40Njk3IDMuNDY5NjdDMTUuNjEwMyAzLjMyOTAyIDE1LjgwMTEgMy4yNSAxNiAzLjI1SDIwQzIwLjE5ODEgMy4yNTI1OSAyMC4zODc0IDMuMzMyNDQgMjAuNTI3NSAzLjQ3MjUzQzIwLjY2NzYgMy42MTI2MyAyMC43NDc0IDMuODAxODkgMjAuNzUgNFY4QzIwLjc0NzQgOC4xOTgxMSAyMC42Njc2IDguMzg3MzcgMjAuNTI3NSA4LjUyNzQ3QzIwLjM4NzQgOC42Njc1NiAyMC4xOTgxIDguNzQ3NDEgMjAgOC43NVoiIGZpbGw9IiNmZmZmZmYiLz4gPHBhdGggZD0iTTEzLjUgMTEuMjVDMTMuMzA3MSAxMS4yMzUyIDEzLjEyNzYgMTEuMTQ1NSAxMyAxMUMxMi44NzcgMTAuODYyNSAxMi44MDkgMTAuNjg0NSAxMi44MDkgMTAuNUMxMi44MDkgMTAuMzE1NSAxMi44NzcgMTAuMTM3NSAxMyAxMEwxOS41IDMuNUMxOS41Njg3IDMuNDI2MzEgMTkuNjUxNSAzLjM2NzIxIDE5Ljc0MzUgMy4zMjYyMkMxOS44MzU1IDMuMjg1MjMgMTkuOTM0OCAzLjI2MzE5IDIwLjAzNTUgMy4yNjE0MUMyMC4xMzYyIDMuMjU5NjMgMjAuMjM2MiAzLjI3ODE2IDIwLjMyOTYgMy4zMTU4OEMyMC40MjMgMy4zNTM2IDIwLjUwNzggMy40MDk3NCAyMC41NzkgMy40ODA5NkMyMC42NTAzIDMuNTUyMTggMjAuNzA2NCAzLjYzNzAxIDIwLjc0NDEgMy43MzA0QzIwLjc4MTggMy44MjM3OSAyMC44MDA0IDMuOTIzODIgMjAuNzk4NiA0LjAyNDUyQzIwLjc5NjggNC4xMjUyMyAyMC43NzQ4IDQuMjI0NTQgMjAuNzMzOCA0LjMxNjU0QzIwLjY5MjggNC40MDg1NCAyMC42MzM3IDQuNDkxMzQgMjAuNTYgNC41NkwxNCAxMUMxMy44NzI0IDExLjE0NTUgMTMuNjkyOSAxMS4yMzUyIDEzLjUgMTEuMjVaIiBmaWxsPSIjZmZmZmZmIi8%2BIDwvZz4KDTwvc3ZnPg%3D%3D">
 </a>
 </div>
 
@@ -57,40 +59,41 @@
 <details>
   <summary><strong>Table of Contents</strong></summary>
 
--   [React Data Grid | React Table]
-    -   [📖 Overview](#overview)
-        -   [Features](#features)
-        -   [Examples](#examples)
-    -   [⚡️ Quick Start](#️quick-start)
-        -   [Installation](#installation)
-        -   [Setup](#setup)
-        -   [Seed Projects](#seed-projects)
-    -   [🛠️ Customisations](#️customisations)
-        -   [Custom Components](#custom-components)
-        -   [Themes](#themes)
-        -   [Custom Themes](#custom-themes)
-    -   [🌍 Community](#community)
-        -   [Tools \& Extensions](#tools--extensions)
-        -   [Showcase](#showcase)
-        -   [Stargazers](#stargazers)
-    -   [🤝 Support](#support)
-        -   [Enterprise Support](#enterprise-support)
-        -   [Bug Reports](#bug-reports)
-        -   [Questions](#questions)
-        -   [Contributing](#contributing)
-    -   [⚠️ License](#️license)
+- [React Data Grid | React Table]
+    - [📖 Overview](#overview)
+        - [Features](#features)
+        - [Examples](#examples)
+    - [⚡️ Quick Start](#️quick-start)
+        - [Installation](#installation)
+        - [Setup](#setup)
+        - [Seed Projects](#seed-projects)
+    - [🛠️ Customisations](#️customisations)
+        - [Custom Components](#custom-components)
+        - [Themes](#themes)
+        - [Custom Themes](#custom-themes)
+    - [🌍 Community](#community)
+        - [Tools \& Extensions](#tools--extensions)
+        - [Showcase](#showcase)
+        - [Stargazers](#stargazers)
+    - [🤝 Support](#support)
+        - [Enterprise Support](#enterprise-support)
+        - [Bug Reports](#bug-reports)
+        - [Questions](#questions)
+        - [Contributing](#contributing)
+    - [⚠️ License](#️license)
 
 </details>
 
 AG Grid is available in two versions: Community & Enterprise.
 
--   `ag-grid-community` is free, available under the MIT license, and comes with all of the core features expected from a React Data Grid, including [Sorting](https://www.ag-grid.com/react-data-grid/row-sorting/#sorting?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Filtering](https://www.ag-grid.com/react-data-grid/filtering/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Pagination](https://www.ag-grid.com/react-data-grid/row-pagination/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Editing](https://www.ag-grid.com/react-data-grid/cell-editing/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Custom Components](https://www.ag-grid.com/react-data-grid/component-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Theming](https://www.ag-grid.com/react-data-grid/themes/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) and more.
--   `ag-grid-enterprise` is available under a commercial license and comes with advanced features, like [Integrated Charting](https://www.ag-grid.com/react-data-grid/integrated-charts/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Row Grouping](https://www.ag-grid.com/react-data-grid/grouping/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Aggregation](https://www.ag-grid.com/react-data-grid/grouping/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Pivoting](https://www.ag-grid.com/react-data-grid/pivoting/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Master/Detail](https://www.ag-grid.com/react-data-grid/master-detail/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Server-side Row Model](https://www.ag-grid.com/react-data-grid/server-side-model/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), and [Exporting](https://www.ag-grid.com/react-data-grid/excel-export/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) in addition to dedicated support from our Engineering team.
+- `ag-grid-community` is free, available under the MIT license, and comes with all of the core features expected from a React Data Grid, including [Sorting](https://www.ag-grid.com/react-data-grid/row-sorting/#sorting?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Filtering](https://www.ag-grid.com/react-data-grid/filtering/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Pagination](https://www.ag-grid.com/react-data-grid/row-pagination/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Editing](https://www.ag-grid.com/react-data-grid/cell-editing/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Custom Components](https://www.ag-grid.com/react-data-grid/component-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Theming](https://www.ag-grid.com/react-data-grid/themes/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) and more.
+- `ag-grid-enterprise` is available under a commercial license and comes with advanced features, like [AI Toolkit](https://www.ag-grid.com/react-data-grid/ai-toolkit/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Integrated Charting](https://www.ag-grid.com/react-data-grid/integrated-charts/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Formulas](https://www.ag-grid.com/react-data-grid/formulas/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Row Grouping](https://www.ag-grid.com/react-data-grid/grouping/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Aggregation](https://www.ag-grid.com/react-data-grid/grouping/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Pivoting](https://www.ag-grid.com/react-data-grid/pivoting/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Master/Detail](https://www.ag-grid.com/react-data-grid/master-detail/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Server-side Row Model](https://www.ag-grid.com/react-data-grid/server-side-model/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), [Find](https://www.ag-grid.com/react-data-grid/find/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) and [Exporting](https://www.ag-grid.com/react-data-grid/excel-export/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) in addition to dedicated support from our Engineering team.
 
 ### Features
 
 | Feature                                                                                                                                                         | AG Grid Community | AG Grid Enterprise |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------ |
+| [MCP Server](https://www.ag-grid.com/react-data-grid/mcp-server/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                     | ✅                | ✅ (Advanced)      |
 | [Filtering](https://www.ag-grid.com/react-data-grid/filtering/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                       | ✅                | ✅ (Advanced)      |
 | [Sorting](https://www.ag-grid.com/react-data-grid/row-sorting/#sorting?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)               | ✅                | ✅                 |
 | [Cell Editing](https://www.ag-grid.com/react-data-grid/cell-editing/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                 | ✅                | ✅                 |
@@ -103,7 +106,10 @@ AG Grid is available in two versions: Community & Enterprise.
 | [Pagination](https://www.ag-grid.com/react-data-grid/row-pagination/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                 | ✅                | ✅                 |
 | [Server-Side Data](https://www.ag-grid.com/react-data-grid/server-side-model/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)        | ✅                | ✅ (Advanced)      |
 | [Custom Components](https://www.ag-grid.com/react-data-grid/component-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) | ✅                | ✅                 |
+| [AI Toolkit](https://www.ag-grid.com/react-data-grid/ai-toolkit/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                     | ❌                | ✅                 |
 | [Integrated Charting](https://www.ag-grid.com/react-data-grid/integrated-charts/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)     | ❌                | ✅                 |
+| [Formulas](https://www.ag-grid.com/react-data-grid/formulas/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                         | ❌                | ✅                 |
+| [Find](https://www.ag-grid.com/react-data-grid/find/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                                 | ❌                | ✅                 |
 | [Range Selection](https://www.ag-grid.com/react-data-grid/range-selection/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)           | ❌                | ✅                 |
 | [Row Grouping and Aggregation](https://www.ag-grid.com/react-data-grid/grouping/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)     | ❌                | ✅                 |
 | [Pivoting](https://www.ag-grid.com/react-data-grid/pivoting/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github)                         | ❌                | ✅                 |
@@ -129,7 +135,7 @@ We've created several demos to showcase AG Grid's rich feature set across differ
   <summary>🏦 <b>Financial Demo</b></summary>
   <br>
   <p>Financial data example featuring live updates and sparklines:</p>
-  <a href="https://ag-grid.com/example-finance/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
+  <a href="https://www.ag-grid.com/example-finance/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
     <picture>
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/finance-demo-light.gif?raw=true" media="(prefers-color-scheme: light)">
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/finance-demo-dark.gif?raw=true" media="(prefers-color-scheme: dark)">
@@ -137,21 +143,21 @@ We've created several demos to showcase AG Grid's rich feature set across differ
     </picture>
   </a>
   <br>
-  <div align="right"><span><a href="https://ag-grid.com/example-finance/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/finance">Source Code</a></span></div>
+  <div align="right"><span><a href="https://www.ag-grid.com/example-finance/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/finance">Source Code</a></span></div>
 <br>
 </details>
 <details>
   <summary>📦 <b>Inventory Demo</b></summary>
   <br>
   <p>Inventory data example to view and manage products:</p>
-  <a href="https://ag-grid.com/example-inventory/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
+  <a href="https://www.ag-grid.com/example-inventory/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
     <picture>
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/inventory-demo-light.gif?raw=true" media="(prefers-color-scheme: light)">
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/inventory-demo-dark.gif?raw=true" media="(prefers-color-scheme: dark)">
       <img src="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/inventory-demo-light.gif?raw=true" alt="Finance">
     </picture>
   </a>
-  <div align="right"><span><a href="https://ag-grid.com/example-inventory/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/inventory">Source Code</a></span></div>
+  <div align="right"><span><a href="https://www.ag-grid.com/example-inventory/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/inventory">Source Code</a></span></div>
 <br>
 </details>
 <details>
@@ -159,14 +165,14 @@ We've created several demos to showcase AG Grid's rich feature set across differ
   <summary>🧑‍💼 <b>HR Demo</b></summary>
   <br>
   <p>HR data example showing hierarchical employee data:</p>
-  <a href="https://ag-grid.com/example-hr/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
+  <a href="https://www.ag-grid.com/example-hr/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">
     <picture>
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/hr-demo-light.gif?raw=true" media="(prefers-color-scheme: light)">
       <source srcset="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/hr-demo-dark.gif?raw=true" media="(prefers-color-scheme: dark)">
       <img src="https://github.com/ag-grid/ag-grid/blob/latest/readme-assets/hr-demo-light.gif?raw=true" alt="Finance">
     </picture>
   </a>
-  <div align="right"><span><a href="https://ag-grid.com/example-hr/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/hr">Source Code</a></span></div>
+  <div align="right"><span><a href="https://www.ag-grid.com/example-hr/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github">Live Demo</a></span>&nbsp;•&nbsp;<span><a href="https://github.com/ag-grid/ag-grid-demos/tree/main/hr">Source Code</a></span></div>
 <br>
 </details>
 
@@ -188,14 +194,30 @@ $ npm install --save ag-grid-react
 
 <!-- START SETUP -->
 
-**1. Import the React Data Grid**
+**1. Register Modules**
+
+Register the `AllCommunityModule` to access all Community features:
+
+```js
+import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
+
+// Register all Community features
+ModuleRegistry.registerModules([AllCommunityModule]);
+```
+
+<blockquote>
+    <p>ℹ️ <b>Note:</b></p>
+    <p>To minimize bundle size, only register the modules you want to use. See the <a href="https://www.ag-grid.com/react-data-grid/modules/">Modules</a> page for more information.</p>
+</blockquote>
+
+**2. Import the React Data Grid**
 
 ```js
 // React Data Grid Component
 import { AgGridReact } from 'ag-grid-react';
 ```
 
-**2. Define Rows and Columns**
+**3. Define Rows and Columns**
 
 ```js
 const GridExample = () => {
@@ -218,7 +240,7 @@ const GridExample = () => {
 };
 ```
 
-**3. React Data Grid Component**
+**4. React Data Grid Component**
 
 ```js
 return (
@@ -245,58 +267,44 @@ We also provide [Seed Projects](https://github.com/ag-grid/ag-grid-seed) to help
     <tr>
       <th>Environment</th>
       <th>Framework</th>
-      <th>Packages</th>
-      <th>Modules</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>Create React App (CRA)</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/create-react-app">Create React App (CRA)</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/react.svg?raw=true" alt="React Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/create-react-app">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/create-react-app">Modules</a></td>
     </tr>
     <tr>
-      <td>Vite</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-react">Vite</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/react.svg?raw=true" alt="React Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-react">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/vite-react">Modules</a></td>
     </tr>
     <tr>
-      <td>Vite - TypeScript</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/create-next-app">Create Next App</a></td>
+      <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/react.svg?raw=true" alt="React Logo"></td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-typescript">Vite - TypeScript</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/community/frameworks/typescript.svg?raw=true" alt="TypeScript Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-typescript">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/vite-typescript">Modules</a></td>
     </tr>
     <tr>
-      <td>Webpack 5 - TypeScript</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/webpack5-typescript">Webpack 5 - TypeScript</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/community/frameworks/typescript.svg?raw=true" alt="TypeScript Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/webpack5-typescript">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/webpack5-typescript">Modules</a></td>
     </tr>
     <tr>
-      <td>Webpack 5 - React</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/webpack5-javascript">Webpack 5 - React</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/javascript.svg?raw=true" alt="React Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/webpack5-javascript">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/webpack5-javascript">Modules</a></td>
     </tr>
     <tr>
-      <td>Angular CLI</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/angular-cli">Angular CLI</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/angular.svg?raw=true" alt="Angular Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/angular-cli">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/angular-cli">Modules</a></td>
     </tr>
     <tr>
-      <td>Nuxt</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/nuxt-vue3">Nuxt</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/vue.svg?raw=true" alt="Vue3 Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/nuxt-vue3">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/nuxt-vue3">Modules</a></td>
     </tr>
     <tr>
-      <td>Vite</td>
+      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-vue3">Vite</a></td>
       <td align="middle"><img width="22" height="22" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/fw-logos/vue.svg?raw=true" alt="Vue3 Logo"></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/packages/vite-vue3">Packages</a></td>
-      <td><a href="https://github.com/ag-grid/ag-grid-seed/tree/main/enterprise/modules/vite-vue3">Modules</a></td>
     </tr>
   </tbody>
 </table>
@@ -311,18 +319,18 @@ You can create your own Custom Components to customise the behaviour of the grid
 
 There are a number of different [Component Types](https://www.ag-grid.com/react-data-grid/components/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) that you can provide to the grid, including:
 
--   [Cell Component](https://www.ag-grid.com/react-data-grid/component-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the contents of a cell.
--   [Header Component](https://www.ag-grid.com/react-data-grid/column-headers/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the header of a column and column groups.
--   [Edit Component](https://www.ag-grid.com/react-data-grid/cell-editors/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the editing of a cell.
--   [Filter Component](https://www.ag-grid.com/react-data-grid/component-filter/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom column filter that appears inside the column menu.
--   [Floating Filter](https://www.ag-grid.com/react-data-grid/component-floating-filter/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom column floating filter that appears inside the column menu.
--   [Date Component](https://www.ag-grid.com/react-data-grid/filter-date/#custom-selection-component?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the date selection component in the date filter.
--   [Loading Component](https://www.ag-grid.com/react-data-grid/component-loading-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the loading cell row when using Server Side Row Model.
--   [Overlay Component](https://www.ag-grid.com/react-data-grid/overlays/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise loading and no rows overlay components.
--   [Status Bar Component](https://www.ag-grid.com/react-data-grid/status-bar/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom status bar components.
--   [Tool Panel Component](https://www.ag-grid.com/react-data-grid/component-tool-panel/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom tool panel components.
--   [Tooltip Component](https://www.ag-grid.com/react-data-grid/tooltips/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom cell tooltip components.
--   [Menu Item Component](https://www.ag-grid.com/react-data-grid/component-menu-item/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the menu items shown in the Column and Context Menus.
+- [Cell Component](https://www.ag-grid.com/react-data-grid/component-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the contents of a cell.
+- [Header Component](https://www.ag-grid.com/react-data-grid/column-headers/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the header of a column and column groups.
+- [Edit Component](https://www.ag-grid.com/react-data-grid/cell-editors/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the editing of a cell.
+- [Filter Component](https://www.ag-grid.com/react-data-grid/component-filter/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom column filter that appears inside the column menu.
+- [Floating Filter](https://www.ag-grid.com/react-data-grid/component-floating-filter/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom column floating filter that appears inside the column menu.
+- [Date Component](https://www.ag-grid.com/react-data-grid/filter-date/#custom-selection-component?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the date selection component in the date filter.
+- [Loading Component](https://www.ag-grid.com/react-data-grid/component-loading-cell-renderer/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the loading cell row when using Server Side Row Model.
+- [Overlay Component](https://www.ag-grid.com/react-data-grid/overlays-overview/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise loading and no rows overlay components or provide a custom overlay.
+- [Status Bar Component](https://www.ag-grid.com/react-data-grid/status-bar/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom status bar components.
+- [Tool Panel Component](https://www.ag-grid.com/react-data-grid/component-tool-panel/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom tool panel components.
+- [Tooltip Component](https://www.ag-grid.com/react-data-grid/tooltips/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): For custom cell tooltip components.
+- [Menu Item Component](https://www.ag-grid.com/react-data-grid/component-menu-item/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github): To customise the menu items shown in the Column and Context Menus.
 
 To supply a custom cell renderer and filter components to the Grid, create a direct reference to your component within the `gridOptions.columnDefs` property:
 
@@ -340,7 +348,7 @@ gridOptions = {
 
 ### Themes
 
-AG Grid has 4 [themes](https://ag-grid.com/react-data-grid/themes/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), each available in `light` & `dark` modes:
+AG Grid has 4 [themes](https://www.ag-grid.com/react-data-grid/themes/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github), each available in `light` & `dark` modes:
 
 <table>
     <tr>
@@ -482,11 +490,11 @@ See the [LICENSE file](./LICENSE.txt) for more info.
 
 <div><h2><img vertical-align="middle" width="32" height="32" src="https://github.com/ag-grid/ag-grid/blob/latest/documentation/ag-grid-docs/public/images/ag-logos/svg-logos/AG-BrandMark_Light-Theme.svg?raw=true" alt="AG ChartsLogo">AG Charts</h2></div>
 
-If you've made it this far, you may be interested in our latest project: [AG Charts](https://ag-grid.com/charts?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) - The best React Charting library in the world.
+If you've made it this far, you may be interested in our latest project: [AG Charts](https://www.ag-grid.com/charts?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) - The best React Charting library in the world.
 
 Initially built to power [Integrated Charts](https://www.ag-grid.com/react-data-grid/integrated-charts/?utm_source=ag-grid-react-readme&utm_medium=repository&utm_campaign=github) in AG Grid, we open-sourced this project in 2018. Having seen the steady rise in popularity since then, we have decided to invest in AG Charts with a dedicated Enterprise version (`ag-charts-enterprise`) in addition to our continued support of `ag-charts-community`.
 
-<a href="https://ag-grid.com/charts/?utm_source=ag-charts-readme&utm_medium=repository&utm_campaign=github">
+<a href="https://www.ag-grid.com/charts/?utm_source=ag-charts-readme&utm_medium=repository&utm_campaign=github">
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://github.com/ag-grid/ag-charts/blob/2ee85f286ccc151cb5e4517f711bafd03366db3c/packages/ag-charts-website/public/images/readme-assets/gallery-dark.gif?raw=true"/>
     <source media="(prefers-color-scheme: light)" srcset="https://github.com/ag-grid/ag-charts/blob/2ee85f286ccc151cb5e4517f711bafd03366db3c/packages/ag-charts-website/public/images/readme-assets/gallery.gif?raw=true"/>
@@ -495,7 +503,7 @@ Initially built to power [Integrated Charts](https://www.ag-grid.com/react-data-
 </a>
 
 <div align="right">
-    <a href="https://ag-grid.com/charts/?utm_source=ag-charts-readme&utm_medium=repository&utm_campaign=github"><br><img alt="Static Badge" src="https://img.shields.io/badge/ag%E2%80%93charts.com-Learn%20More%20-blue?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KDTwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KDTxnIGlkPSJTVkdSZXBvX2JnQ2FycmllciIgc3Ryb2tlLXdpZHRoPSIwIi8%2BCg08ZyBpZD0iU1ZHUmVwb190cmFjZXJDYXJyaWVyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KDTxnIGlkPSJTVkdSZXBvX2ljb25DYXJyaWVyIj4gPHBhdGggZD0iTTE4IDIwLjc1SDZDNS4yNzA2NSAyMC43NSA0LjU3MTE4IDIwLjQ2MDMgNC4wNTU0NiAxOS45NDQ1QzMuNTM5NzMgMTkuNDI4OCAzLjI1IDE4LjcyOTMgMy4yNSAxOFY2QzMuMjUgNS4yNzA2NSAzLjUzOTczIDQuNTcxMTggNC4wNTU0NiA0LjA1NTQ2QzQuNTcxMTggMy41Mzk3MyA1LjI3MDY1IDMuMjUgNiAzLjI1SDEyQzEyLjE5ODkgMy4yNSAxMi4zODk3IDMuMzI5MDIgMTIuNTMwMyAzLjQ2OTY3QzEyLjY3MSAzLjYxMDMyIDEyLjc1IDMuODAxMDkgMTIuNzUgNEMxMi43NSA0LjE5ODkxIDEyLjY3MSA0LjM4OTY4IDEyLjUzMDMgNC41MzAzM0MxMi4zODk3IDQuNjcwOTggMTIuMTk4OSA0Ljc1IDEyIDQuNzVINkM1LjY2ODQ4IDQuNzUgNS4zNTA1NCA0Ljg4MTcgNS4xMTYxMiA1LjExNjEyQzQuODgxNyA1LjM1MDU0IDQuNzUgNS42Njg0OCA0Ljc1IDZWMThDNC43NSAxOC4zMzE1IDQuODgxNyAxOC42NDk1IDUuMTE2MTIgMTguODgzOUM1LjM1MDU0IDE5LjExODMgNS42Njg0OCAxOS4yNSA2IDE5LjI1SDE4QzE4LjMzMTUgMTkuMjUgMTguNjQ5NSAxOS4xMTgzIDE4Ljg4MzkgMTguODgzOUMxOS4xMTgzIDE4LjY0OTUgMTkuMjUgMTguMzMxNSAxOS4yNSAxOFYxMkMxOS4yNSAxMS44MDExIDE5LjMyOSAxMS42MTAzIDE5LjQ2OTcgMTEuNDY5N0MxOS42MTAzIDExLjMyOSAxOS44MDExIDExLjI1IDIwIDExLjI1QzIwLjE5ODkgMTEuMjUgMjAuMzg5NyAxMS4zMjkgMjAuNTMwMyAxMS40Njk3QzIwLjY3MSAxMS42MTAzIDIwLjc1IDExLjgwMTEgMjAuNzUgMTJWMThDMjAuNzUgMTguNzI5MyAyMC40NjAzIDE5LjQyODggMTkuOTQ0NSAxOS45NDQ1QzE5LjQyODggMjAuNDYwMyAxOC43MjkzIDIwLjc1IDE4IDIwLjc1WiIgZmlsbD0iI2ZmZmZmZiIvPiA8cGF0aCBkPSJNMjAgOC43NUMxOS44MDE5IDguNzQ3NDEgMTkuNjEyNiA4LjY2NzU2IDE5LjQ3MjUgOC41Mjc0N0MxOS4zMzI0IDguMzg3MzcgMTkuMjUyNiA4LjE5ODExIDE5LjI1IDhWNC43NUgxNkMxNS44MDExIDQuNzUgMTUuNjEwMyA0LjY3MDk4IDE1LjQ2OTcgNC41MzAzM0MxNS4zMjkgNC4zODk2OCAxNS4yNSA0LjE5ODkxIDE1LjI1IDRDMTUuMjUgMy44MDEwOSAxNS4zMjkgMy42MTAzMiAxNS40Njk3IDMuNDY5NjdDMTUuNjEwMyAzLjMyOTAyIDE1LjgwMTEgMy4yNSAxNiAzLjI1SDIwQzIwLjE5ODEgMy4yNTI1OSAyMC4zODc0IDMuMzMyNDQgMjAuNTI3NSAzLjQ3MjUzQzIwLjY2NzYgMy42MTI2MyAyMC43NDc0IDMuODAxODkgMjAuNzUgNFY4QzIwLjc0NzQgOC4xOTgxMSAyMC42Njc2IDguMzg3MzcgMjAuNTI3NSA4LjUyNzQ3QzIwLjM4NzQgOC42Njc1NiAyMC4xOTgxIDguNzQ3NDEgMjAgOC43NVoiIGZpbGw9IiNmZmZmZmYiLz4gPHBhdGggZD0iTTEzLjUgMTEuMjVDMTMuMzA3MSAxMS4yMzUyIDEzLjEyNzYgMTEuMTQ1NSAxMyAxMUMxMi44NzcgMTAuODYyNSAxMi44MDkgMTAuNjg0NSAxMi44MDkgMTAuNUMxMi44MDkgMTAuMzE1NSAxMi44NzcgMTAuMTM3NSAxMyAxMEwxOS41IDMuNUMxOS41Njg3IDMuNDI2MzEgMTkuNjUxNSAzLjM2NzIxIDE5Ljc0MzUgMy4zMjYyMkMxOS44MzU1IDMuMjg1MjMgMTkuOTM0OCAzLjI2MzE5IDIwLjAzNTUgMy4yNjE0MUMyMC4xMzYyIDMuMjU5NjMgMjAuMjM2MiAzLjI3ODE2IDIwLjMyOTYgMy4zMTU4OEMyMC40MjMgMy4zNTM2IDIwLjUwNzggMy40MDk3NCAyMC41NzkgMy40ODA5NkMyMC42NTAzIDMuNTUyMTggMjAuNzA2NCAzLjYzNzAxIDIwLjc0NDEgMy43MzA0QzIwLjc4MTggMy44MjM3OSAyMC44MDA0IDMuOTIzODIgMjAuNzk4NiA0LjAyNDUyQzIwLjc5NjggNC4xMjUyMyAyMC43NzQ4IDQuMjI0NTQgMjAuNzMzOCA0LjMxNjU0QzIwLjY5MjggNC40MDg1NCAyMC42MzM3IDQuNDkxMzQgMjAuNTYgNC41NkwxNCAxMUMxMy44NzI0IDExLjE0NTUgMTMuNjkyOSAxMS4yMzUyIDEzLjUgMTEuMjVaIiBmaWxsPSIjZmZmZmZmIi8%2BIDwvZz4KDTwvc3ZnPg%3D%3D">
+    <a href="https://www.ag-grid.com/charts/?utm_source=ag-charts-readme&utm_medium=repository&utm_campaign=github"><br><img alt="Static Badge" src="https://img.shields.io/badge/ag%E2%80%93charts.com-Learn%20More%20-blue?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KDTwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KDTxnIGlkPSJTVkdSZXBvX2JnQ2FycmllciIgc3Ryb2tlLXdpZHRoPSIwIi8%2BCg08ZyBpZD0iU1ZHUmVwb190cmFjZXJDYXJyaWVyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KDTxnIGlkPSJTVkdSZXBvX2ljb25DYXJyaWVyIj4gPHBhdGggZD0iTTE4IDIwLjc1SDZDNS4yNzA2NSAyMC43NSA0LjU3MTE4IDIwLjQ2MDMgNC4wNTU0NiAxOS45NDQ1QzMuNTM5NzMgMTkuNDI4OCAzLjI1IDE4LjcyOTMgMy4yNSAxOFY2QzMuMjUgNS4yNzA2NSAzLjUzOTczIDQuNTcxMTggNC4wNTU0NiA0LjA1NTQ2QzQuNTcxMTggMy41Mzk3MyA1LjI3MDY1IDMuMjUgNiAzLjI1SDEyQzEyLjE5ODkgMy4yNSAxMi4zODk3IDMuMzI5MDIgMTIuNTMwMyAzLjQ2OTY3QzEyLjY3MSAzLjYxMDMyIDEyLjc1IDMuODAxMDkgMTIuNzUgNEMxMi43NSA0LjE5ODkxIDEyLjY3MSA0LjM4OTY4IDEyLjUzMDMgNC41MzAzM0MxMi4zODk3IDQuNjcwOTggMTIuMTk4OSA0Ljc1IDEyIDQuNzVINkM1LjY2ODQ4IDQuNzUgNS4zNTA1NCA0Ljg4MTcgNS4xMTYxMiA1LjExNjEyQzQuODgxNyA1LjM1MDU0IDQuNzUgNS42Njg0OCA0Ljc1IDZWMThDNC43NSAxOC4zMzE1IDQuODgxNyAxOC42NDk1IDUuMTE2MTIgMTguODgzOUM1LjM1MDU0IDE5LjExODMgNS42Njg0OCAxOS4yNSA2IDE5LjI1SDE4QzE4LjMzMTUgMTkuMjUgMTguNjQ5NSAxOS4xMTgzIDE4Ljg4MzkgMTguODgzOUMxOS4xMTgzIDE4LjY0OTUgMTkuMjUgMTguMzMxNSAxOS4yNSAxOFYxMkMxOS4yNSAxMS44MDExIDE5LjMyOSAxMS42MTAzIDE5LjQ2OTcgMTEuNDY5N0MxOS42MTAzIDExLjMyOSAxOS44MDExIDExLjI1IDIwIDExLjI1QzIwLjE5ODkgMTEuMjUgMjAuMzg5NyAxMS4zMjkgMjAuNTMwMyAxMS40Njk3QzIwLjY3MSAxMS42MTAzIDIwLjc1IDExLjgwMTEgMjAuNzUgMTJWMThDMjAuNzUgMTguNzI5MyAyMC40NjAzIDE5LjQyODggMTkuOTQ0NSAxOS45NDQ1QzE5LjQyODggMjAuNDYwMyAxOC43MjkzIDIwLjc1IDE4IDIwLjc1WiIgZmlsbD0iI2ZmZmZmZiIvPiA8cGF0aCBkPSJNMjAgOC43NUMxOS44MDE5IDguNzQ3NDEgMTkuNjEyNiA4LjY2NzU2IDE5LjQ3MjUgOC41Mjc0N0MxOS4zMzI0IDguMzg3MzcgMTkuMjUyNiA4LjE5ODExIDE5LjI1IDhWNC43NUgxNkMxNS44MDExIDQuNzUgMTUuNjEwMyA0LjY3MDk4IDE1LjQ2OTcgNC41MzAzM0MxNS4zMjkgNC4zODk2OCAxNS4yNSA0LjE5ODkxIDE1LjI1IDRDMTUuMjUgMy44MDEwOSAxNS4zMjkgMy42MTAzMiAxNS40Njk3IDMuNDY5NjdDMTUuNjEwMyAzLjMyOTAyIDE1LjgwMTEgMy4yNSAxNiAzLjI1SDIwQzIwLjE5ODEgMy4yNTI1OSAyMC4zODc0IDMuMzMyNDQgMjAuNTI3NSAzLjQ3MjUzQzIwLjY2NzYgMy42MTI2MyAyMC43NDc0IDMuODAxODkgMjAuNzUgNFY4QzIwLjc0NzQgOC4xOTgxMSAyMC42Njc2IDguMzg3MzcgMjAuNTI3NSA4LjUyNzQ3QzIwLjM4NzQgOC42Njc1NiAyMC4xOTgxIDguNzQ3NDEgMjAgOC43NVoiIGZpbGw9IiNmZmZmZmYiLz4gPHBhdGggZD0iTTEzLjUgMTEuMjVDMTMuMzA3MSAxMS4yMzUyIDEzLjEyNzYgMTEuMTQ1NSAxMyAxMUMxMi44NzcgMTAuODYyNSAxMi44MDkgMTAuNjg0NSAxMi44MDkgMTAuNUMxMi44MDkgMTAuMzE1NSAxMi44NzcgMTAuMTM3NSAxMyAxMEwxOS41IDMuNUMxOS41Njg3IDMuNDI2MzEgMTkuNjUxNSAzLjM2NzIxIDE5Ljc0MzUgMy4zMjYyMkMxOS44MzU1IDMuMjg1MjMgMTkuOTM0OCAzLjI2MzE5IDIwLjAzNTUgMy4yNjE0MUMyMC4xMzYyIDMuMjU5NjMgMjAuMjM2MiAzLjI3ODE2IDIwLjMyOTYgMy4zMTU4OEMyMC40MjMgMy4zNTM2IDIwLjUwNzggMy40MDk3NCAyMC41NzkgMy40ODA5NkMyMC42NTAzIDMuNTUyMTggMjAuNzA2NCAzLjYzNzAxIDIwLjc0NDEgMy43MzA0QzIwLjc4MTggMy44MjM3OSAyMC44MDA0IDMuOTIzODIgMjAuNzk4NiA0LjAyNDUyQzIwLjc5NjggNC4xMjUyMyAyMC43NzQ4IDQuMjI0NTQgMjAuNzMzOCA0LjMxNjU0QzIwLjY5MjggNC40MDg1NCAyMC42MzM3IDQuNDkxMzQgMjAuNTYgNC41NkwxNCAxMUMxMy44NzI0IDExLjE0NTUgMTMuNjkyOSAxMS4yMzUyIDEzLjUgMTEuMjVaIiBmaWxsPSIjZmZmZmZmIi8%2BIDwvZz4KDTwvc3ZnPg%3D%3D">
 </a>
 </div>
 
@@ -508,6 +516,6 @@ Initially built to power [Integrated Charts](https://www.ag-grid.com/react-data-
 <a href="https://x.com/ag_grid"><img src="https://img.shields.io/badge/-X%20(Twitter)-black?style=for-the-badge&logo=x" alt="Twitter Badge" height="36"></a>
 <a href="https://www.linkedin.com/company/ag-grid/"><img src="https://img.shields.io/badge/-LinkedIn-blue?style=for-the-badge&logo=linkedin" alt="LinkedIn Badge" height="36"></a>
 <a href="https://www.youtube.com/c/ag-grid"><img src="https://img.shields.io/badge/-YouTube-red?style=for-the-badge&logo=youtube" alt="YouTube Badge" height="36"></a>
-<a href="https://blog.ag-grid.com"><img src="https://img.shields.io/badge/-Blog-grey?style=for-the-badge&logo=rss" alt="Blog Badge" height="36"></a>
+<a href="https://www.ag-grid.com/blog/"><img src="https://img.shields.io/badge/-Blog-grey?style=for-the-badge&logo=rss" alt="Blog Badge" height="36"></a>
 
 </div>

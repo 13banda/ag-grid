@@ -1,16 +1,21 @@
 import type { ColDef, GridApi, GridOptions, IServerSideDatasource } from 'ag-grid-community';
-import { HighlightChangesModule, ModuleRegistry, RowApiModule, ValidationModule, createGrid } from 'ag-grid-community';
+import {
+    HighlightChangesModule,
+    ModuleRegistry,
+    RowApiModule,
+    createGrid,
+    enableDevValidations,
+} from 'ag-grid-community';
 import { RowGroupingModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
 import { FakeServer } from './fakeServer';
 
-ModuleRegistry.registerModules([
-    RowApiModule,
-    HighlightChangesModule,
-    RowGroupingModule,
-    ServerSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, HighlightChangesModule, RowGroupingModule, ServerSideRowModelModule]);
 
 let versionCounter: number = 0;
 const columnDefs: ColDef[] = [{ field: 'athlete' }, { field: 'date' }, { field: 'country' }, { field: 'version' }];
@@ -33,11 +38,13 @@ const gridOptions: GridOptions = {
 function updateRows(athlete?: string, date?: string) {
     versionCounter += 1;
     gridApi!.forEachNode((rowNode) => {
-        if (athlete != null && rowNode.data.athlete !== athlete) {
+        if (athlete != null && rowNode.data?.athlete !== athlete) {
+            // if the athlete doesn't match, skip this row
+            // Or row data is empty as it could be the loading row
             return;
         }
 
-        if (date != null && rowNode.data.date !== date) {
+        if (date != null && rowNode.data?.date !== date) {
             return;
         }
 

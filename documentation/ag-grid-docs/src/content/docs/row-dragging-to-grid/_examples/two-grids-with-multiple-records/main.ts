@@ -14,9 +14,14 @@ import {
     RowDragModule,
     RowSelectionModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -24,7 +29,6 @@ ModuleRegistry.registerModules([
     RowDragModule,
     RowSelectionModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 class SportRenderer implements ICellRendererComp {

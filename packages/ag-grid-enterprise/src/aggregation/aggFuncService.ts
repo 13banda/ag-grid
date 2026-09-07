@@ -1,5 +1,7 @@
+import { _exists, _last } from 'ag-stack';
+
 import type { AgColumn, IAggFunc, IAggFuncParams, IAggFuncService, NamedBean } from 'ag-grid-community';
-import { BeanStub, _exists, _last } from 'ag-grid-community';
+import { BeanStub } from 'ag-grid-community';
 
 const defaultAggFuncNames = {
     sum: 'Sum',
@@ -10,12 +12,15 @@ const defaultAggFuncNames = {
     count: 'Count',
     avg: 'Average',
 } as const;
+
+const DEFAULT_AGG_FUNC_ORDER: DefaultAggFuncName[] = ['sum', 'avg', 'max', 'min', 'count', 'first', 'last'];
 type DefaultAggFuncName = keyof typeof defaultAggFuncNames;
 
 export class AggFuncService extends BeanStub implements NamedBean, IAggFuncService {
     beanName = 'aggFuncSvc' as const;
 
-    private aggFuncsMap: { [key in string]: IAggFunc } = {};
+    private readonly aggFuncsMap = new Map<string, IAggFunc>();
+    private orderedFuncNames: string[] = [];
     private initialised = false;
 
     public postConstruct(): void {
@@ -32,22 +37,16 @@ export class AggFuncService extends BeanStub implements NamedBean, IAggFuncServi
     }
 
     private initialiseWithDefaultAggregations(): void {
-        const aggMap = this.aggFuncsMap as { [key in DefaultAggFuncName]: IAggFunc };
-        aggMap['sum'] = aggSum;
-        aggMap['first'] = aggFirst;
-        aggMap['last'] = aggLast;
-        aggMap['min'] = aggMin;
-        aggMap['max'] = aggMax;
-        aggMap['count'] = aggCount;
-        aggMap['avg'] = aggAvg;
+        const funcMap = this.aggFuncsMap;
+        funcMap.set('sum', aggSum);
+        funcMap.set('first', aggFirst);
+        funcMap.set('last', aggLast);
+        funcMap.set('min', aggMin);
+        funcMap.set('max', aggMax);
+        funcMap.set('count', aggCount);
+        funcMap.set('avg', aggAvg);
         this.initialised = true;
-    }
-
-    private isAggFuncPossible(column: AgColumn, func: string): boolean {
-        const allKeys = this.getFuncNames(column);
-        const allowed = allKeys.includes(func);
-        const funcExists = _exists(this.aggFuncsMap[func]);
-        return allowed && funcExists;
+        this.updateOrderedFuncNames();
     }
 
     public getDefaultFuncLabel(fctName: DefaultAggFuncName): string {
@@ -55,13 +54,16 @@ export class AggFuncService extends BeanStub implements NamedBean, IAggFuncServi
     }
 
     public getDefaultAggFunc(column: AgColumn): string | null {
-        const defaultAgg = column.getColDef().defaultAggFunc;
+        const defaultAgg = column.colDef.defaultAggFunc;
 
-        if (_exists(defaultAgg) && this.isAggFuncPossible(column, defaultAgg)) {
+        const isAggFuncPossible = (func: string) =>
+            _exists(this.aggFuncsMap.get(func)) && this.getFuncNames(column).includes(func);
+
+        if (_exists(defaultAgg) && isAggFuncPossible(defaultAgg)) {
             return defaultAgg;
         }
 
-        if (this.isAggFuncPossible(column, 'sum')) {
+        if (isAggFuncPossible('sum')) {
             return 'sum';
         }
 
@@ -74,24 +76,41 @@ export class AggFuncService extends BeanStub implements NamedBean, IAggFuncServi
         if (!aggFuncs) {
             return;
         }
-        Object.entries(aggFuncs).forEach(([key, aggFunc]) => {
-            this.aggFuncsMap[key] = aggFunc;
-        });
+        for (const key of Object.keys(aggFuncs)) {
+            if (aggFuncs[key]) {
+                this.aggFuncsMap.set(key, aggFuncs[key]);
+            }
+        }
+        this.updateOrderedFuncNames();
     }
 
     public getAggFunc(name: string): IAggFunc {
         this.init();
-        return this.aggFuncsMap[name];
+        return this.aggFuncsMap.get(name)!;
     }
 
     public getFuncNames(column: AgColumn): string[] {
-        const userAllowedFuncs = column.getColDef().allowedAggFuncs;
+        return column.colDef.allowedAggFuncs ?? this.orderedFuncNames.slice();
+    }
 
-        return userAllowedFuncs == null ? Object.keys(this.aggFuncsMap).sort() : userAllowedFuncs;
+    private updateOrderedFuncNames(): void {
+        const result: string[] = [];
+        for (const key of DEFAULT_AGG_FUNC_ORDER) {
+            if (this.aggFuncsMap.has(key)) {
+                result.push(key);
+            }
+        }
+        for (const key of [...this.aggFuncsMap.keys()].sort()) {
+            if (!(key in defaultAggFuncNames)) {
+                result.push(key);
+            }
+        }
+        this.orderedFuncNames = result;
     }
 
     public clear(): void {
-        this.aggFuncsMap = {};
+        this.aggFuncsMap.clear();
+        this.orderedFuncNames = [];
     }
 }
 
@@ -161,45 +180,62 @@ function aggMax(params: IAggFuncParams): number | bigint | null {
     return result;
 }
 
+// Proto used to reduce memory impact from repeat function instantiation
+const COUNT_PROTO = Object.freeze({
+    // the grid by default uses toString to render values for an object, so this
+    // is a trick to get the default cellRenderer to display the avg value
+    toString: function () {
+        return this.value.toString();
+    },
+    // used for sorting
+    toNumber: function () {
+        return this.value;
+    },
+} as any);
+
 function aggCount(params: IAggFuncParams) {
     const { values } = params;
-    let result = 0;
+    let count = 0;
 
     // for optimum performance, we use a for loop here rather than calling any helper methods or using functional code
     for (let i = 0; i < values.length; i++) {
         const value = values[i];
 
         // check if the value is from a group, in which case use the group's count
-        result += value != null && typeof value.value === 'number' ? value.value : 1;
+        count += value != null && typeof value.value === 'number' ? value.value : 1;
     }
 
     // the previous aggregation data
     const existingAggData = params.rowNode?.aggData?.[params.column.getColId()];
-    if (existingAggData && existingAggData.value === result) {
+    if (existingAggData?.value === count) {
         // the underlying values haven't changed, return the old object to avoid triggering change detection
         return existingAggData;
     }
 
     // it's important to wrap it in the object so we can determine if this is a group level
-    return {
-        value: result,
-        toString: function () {
-            return this.value.toString();
-        },
-        // used for sorting
-        toNumber: function () {
-            return this.value;
-        },
-    };
+    const result = Object.create(COUNT_PROTO);
+    result.value = count;
+    return result;
 }
+
+// Proto used to reduce memory impact from repeat function instantiation
+const AVERAGE_PROTO = Object.freeze({
+    // the grid by default uses toString to render values for an object, so this
+    // is a trick to get the default cellRenderer to display the avg value
+    toString: function () {
+        return typeof this.value === 'number' || typeof this.value === 'bigint' ? this.value.toString() : '';
+    },
+    // used for sorting
+    toNumber: function () {
+        return this.value;
+    },
+} as any);
 
 // the average function is tricky as the multiple levels require weighted averages
 // for the non-leaf node aggregations.
 function aggAvg(params: IAggFuncParams): {
     value: number | bigint | null;
     count: number;
-    toString(): string;
-    toNumber(): number;
 } {
     const { values } = params;
     let sum: any = 0; // the logic ensures that we never combine bigint arithmetic with numbers, but TS is hard to please
@@ -241,25 +277,13 @@ function aggAvg(params: IAggFuncParams): {
 
     // the previous aggregation data
     const existingAggData = params.rowNode?.aggData?.[params.column?.getColId()];
-    if (existingAggData && existingAggData.count === count && existingAggData.value === value) {
+    if (existingAggData?.count === count && existingAggData.value === value) {
         // the underlying values haven't changed, return the old object to avoid triggering change detection
         return existingAggData;
     }
 
-    // the result will be an object. when this cell is rendered, only the avg is shown.
-    // however when this cell is part of another aggregation, the count is also needed
-    // to create a weighted average for the next level.
-    return {
-        count,
-        value,
-        // the grid by default uses toString to render values for an object, so this
-        // is a trick to get the default cellRenderer to display the avg value
-        toString: function () {
-            return typeof this.value === 'number' || typeof this.value === 'bigint' ? this.value.toString() : '';
-        },
-        // used for sorting
-        toNumber: function () {
-            return this.value as any;
-        },
-    };
+    const result = Object.create(AVERAGE_PROTO);
+    result.count = count;
+    result.value = value;
+    return result;
 }

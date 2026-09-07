@@ -1,19 +1,23 @@
 ---
-import { getCollection, getEntry } from 'astro:content';
+import { getCollection, getEntry, type CollectionEntry } from 'astro:content';
 import Layout from '../layouts/Layout.astro';
 import { getDocsPages } from '../components/docs/utils/pageData';
-import type { Framework } from '@ag-grid-types';
-import { Changelog } from '@components/changelog/Changelog';
+import { Changelog } from '@ag-website-shared/components/changelog/Changelog';
+import styles from '@ag-website-shared/components/changelog/changelog.module.scss';
 import { DocsNavFromLocalStorage } from '@ag-website-shared/components/docs-navigation/DocsNavFromLocalStorage';
+import { DISABLE_MARKDOWN_DOCS } from '@constants';
+import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 
 export async function getStaticPaths() {
     const pages = await getCollection('docs');
     return getDocsPages(pages);
 }
 
-const pageName = Astro.params.pageName as Framework;
+const pageName = 'changelog';
 
-const { data: docsNavData } = await getEntry('docs-nav', 'docsNav');
+const { data: docsNavData } = (await getEntry('docsNav', 'nav')) as CollectionEntry<'docsNav'>;
+
+const markdownUrl = DISABLE_MARKDOWN_DOCS ? undefined : urlWithBaseUrl('/changelog.md');
 ---
 
 <Layout
@@ -21,10 +25,15 @@ const { data: docsNavData } = await getEntry('docs-nav', 'docsNav');
     description={'Identify the specific version in which a feature request or bug fix was included. Find changelog items by issue number, summary content, or version.'}
     showDocsNav={true}
     showSearchBar={true}
+    markdownUrl={markdownUrl}
 >
     <div class:list={['contentViewport layout-grid']}>
         <DocsNavFromLocalStorage client:load menuData={docsNavData} pageName={pageName} />
 
-        <Changelog client:load />
+        <div class:list={['page-margin', styles.container]}>
+            <h1>AG Grid Changelog</h1>
+
+            <Changelog client:load library="grid" />
+        </div>
     </div>
 </Layout>

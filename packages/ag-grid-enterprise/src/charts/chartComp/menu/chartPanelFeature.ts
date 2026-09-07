@@ -1,5 +1,7 @@
+import { _removeFromParent } from 'ag-stack';
+
 import type { ChartType, Component } from 'ag-grid-community';
-import { BeanStub, _removeFromParent } from 'ag-grid-community';
+import { BeanStub } from 'ag-grid-community';
 
 import type { ChartController } from '../chartController';
 import type { ChartSeriesType } from '../utils/seriesTypeMapper';
@@ -29,7 +31,7 @@ export class ChartPanelFeature extends BeanStub {
     public addComponent(component: Component): void {
         this.createBean(component);
         this.panels.push(component);
-        component.addCssClass(this.cssClass);
+        component.addCss(this.cssClass);
         this.eGui.appendChild(component.getGui());
     }
 
@@ -52,10 +54,10 @@ export class ChartPanelFeature extends BeanStub {
     }
 
     private destroyPanels(): void {
-        this.panels.forEach((panel) => {
+        for (const panel of this.panels) {
             _removeFromParent(panel.getGui());
             this.destroyBean(panel);
-        });
+        }
         this.panels = [];
     }
 

@@ -50,20 +50,18 @@
     background-color: var(--ag-range-selection-highlight-color) !important;
 }
 
-.ag-row {
-    background-color: var(--ag-background-color);
+.ag-row,
+.ag-spanned-row {
     color: var(--ag-cell-text-color);
     font-family: var(--ag-cell-font-family);
     white-space: nowrap;
-    width: 100%;
-    height: var(--ag-row-height);
-    font-size: var(--ag-data-font-size);
-    border-bottom: var(--ag-row-border);
+    font-size: var(--ag-cell-font-size);
+    font-weight: var(--ag-cell-font-weight);
 
     /* Work out the correct line height. --ag-row-height is the default row
            height, --ag-line-height is the actual row height, only set if variable row
            heights are enabled.
-    
+
           - use line height rather than flex align to centre single line text within a
             default height row, because if the row is made larger than the default height
             then we want all additional space to go at the bottom.
@@ -71,28 +69,138 @@
             content won't fit
           - subtract the row border width to ensure that text is still centrally aligned
             when there is a thick row border
+          - subtract 2px to account for the 1px border around the cell
             */
     --ag-internal-content-line-height: calc(
-        min(var(--ag-row-height), var(--ag-line-height, 1000px)) - var(--ag-internal-row-border-width, 1px)
+        min(var(--ag-row-height), var(--ag-line-height, 1000px)) - var(--ag-internal-row-border-width, 1px) - 2px
     );
 }
 
-/* Hide the border of the last last row when there is no gap between the row and
+.ag-row {
+    width: 100%;
+    height: var(--ag-row-height);
+
+    &.ag-row-editing-invalid {
+        background-color: var(--ag-full-row-edit-invalid-background-color);
+    }
+}
+
+.ag-row.ag-full-width-row:not(.ag-embedded-full-width-row) {
+    border-bottom: var(--ag-row-border);
+}
+
+.ag-row:where(:not(.ag-header-row, .ag-full-width-row)),
+.ag-row:where(.ag-embedded-full-width-row) {
+    > .ag-grid-pinned-left-cells,
+    > .ag-grid-scrolling-cells,
+    > .ag-grid-pinned-right-cells {
+        border-bottom: var(--ag-row-border);
+    }
+}
+
+/* Remove the border-bottom for the last row in a pinned-bottom container as
+   the bottom border of the grid serves */
+:where(.ag-grid-pinned-bottom-rows-container) {
+    .ag-row-last:where(:not(.ag-header-row, .ag-full-width-row)),
+    .ag-row-last:where(.ag-embedded-full-width-row) {
+        > .ag-grid-pinned-left-cells,
+        > .ag-grid-scrolling-cells,
+        > .ag-grid-pinned-right-cells {
+            border-bottom: none;
+        }
+    }
+}
+
+:where(.ag-grid-sticky-bottom-rows-container) {
+    .ag-row:where(:not(.ag-header-row, .ag-full-width-row)),
+    .ag-row:where(.ag-embedded-full-width-row) {
+        > .ag-grid-pinned-left-cells,
+        > .ag-grid-scrolling-cells,
+        > .ag-grid-pinned-right-cells {
+            /* FIXME: it would be preferable to selectively apply the border top
+            to rows that are not sticky bottom, rather than apply to all and
+            remove for sticky bottom */
+            border-bottom: none;
+            border-top: var(--ag-row-border);
+        }
+    }
+}
+
+:where(.ag-row:not(.ag-header-row)) {
+    background-color: var(--ag-data-background-color);
+
+    --ag-internal-row-overlay-color: transparent;
+    --ag-internal-row-overlay-image: none;
+}
+
+.ag-grid-container-wrapper {
+    width: 100%;
+    height: 100%;
+}
+
+.ag-row:not(.ag-header-row) {
+    /* Pinned rows need an opaque background, but the row background might be semi-transparent (very common
+       for --ag-odd-row-background-color) so we use inheritance to pass the background down from the row */
+    > .ag-grid-pinned-left-cells,
+    > .ag-grid-pinned-right-cells {
+        background-color: inherit;
+
+        /* apply an opaque background */
+        background-image: linear-gradient(var(--ag-data-background-color), var(--ag-data-background-color));
+    }
+
+    .ag-grid-container-wrapper {
+        /* re-apply the transparent row color over the opaque background */
+        background-color: inherit;
+    }
+}
+
+.ag-body-vertical-content-no-gap .ag-has-bottom-pinned-rows {
+    .ag-grid-scrolling-container .ag-row-last,
+    .ag-grid-pinned-bottom-rows .ag-grid-sticky-bottom-rows-container .ag-row-last {
+        > .ag-grid-pinned-left-cells,
+        > .ag-grid-scrolling-cells,
+        > .ag-grid-pinned-right-cells {
+            border-bottom: none;
+        }
+    }
+}
+
+.ag-grid-scrollable-area.ag-has-top-pinned-rows
+    .ag-grid-pinned-top-rows
+    > .ag-grid-pinned-top-rows-container
+    > .ag-row.ag-row-last {
+    > .ag-grid-pinned-left-cells,
+    > .ag-grid-scrolling-cells,
+    > .ag-grid-pinned-right-cells {
+        border-bottom: none;
+    }
+}
+
+/* Hide the border of the last row when there is no gap between the row and
    grid edge to prevent a double border. The use of the child  combinator `>`
    is to ensure that the ag-body-vertical-content-no-gap class only hides the
    border of rows in the same grid, not in nested detail grids  */
-:where(
-    /* there are either 3 or 4 elements between the body and the row as the
-       center cols container has an extra layer of nesting than other containers */
-    .ag-body-vertical-content-no-gap > div > div > div,
-    .ag-body-vertical-content-no-gap > div > div > div > div
-) > .ag-row-last {
+.ag-body-vertical-content-no-gap
+    > .ag-grid-viewport
+    > .ag-grid-scrollable-area
+    > .ag-grid-scrolling-rows
+    > .ag-grid-scrolling-container
+    > .ag-row-last.ag-full-width-row {
     border-bottom-color: transparent;
 }
 
-.ag-sticky-bottom {
-    border-top: var(--ag-row-border);
-    box-sizing: content-box !important;
+.ag-body-vertical-content-no-gap
+    > .ag-grid-viewport
+    > .ag-grid-scrollable-area
+    > .ag-grid-scrolling-rows
+    > .ag-grid-scrolling-container
+    > .ag-row-last:not(.ag-full-width-row) {
+    > .ag-grid-pinned-left-cells,
+    > .ag-grid-scrolling-cells,
+    > .ag-grid-pinned-right-cells {
+        border-bottom-color: transparent;
+    }
 }
 
 .ag-group-expanded,
@@ -113,6 +221,16 @@
     border-right: var(--ag-column-border);
 }
 
+.ag-spanned-cell-wrapper {
+    background-color: var(--ag-data-background-color);
+    position: absolute;
+}
+
+.ag-spanned-cell-wrapper > .ag-spanned-cell {
+    display: block;
+    position: relative;
+}
+
 /* Only display the right border of the rightmost column when there is a gap between the column and grid edge */
 :where(.ag-body-horizontal-content-no-gap) .ag-column-last {
     border-right-color: transparent;
@@ -123,6 +241,9 @@
     align-items: center;
     padding-left: calc(var(--ag-indentation-level) * var(--ag-row-group-indent-size));
 
+    /* stylelint-disable-next-line ag/no-low-performance-key-selector --
+        Requires a slow selector because we allow custom cell editor components
+        as direct children of the wrapper, so we can't control the class name */
     > *:where(:not(.ag-cell-value, .ag-group-value)) {
         /* cell widgets like checkboxes don't respond to line-height, so set their
                height to vertically centre them */
@@ -141,6 +262,15 @@
     }
 }
 
+:where(.ag-cell-wrap-text:not(.ag-cell-auto-height)) .ag-cell-wrapper {
+    height: 100%;
+    align-items: normal;
+
+    :where(.ag-cell-value) {
+        height: 100%;
+    }
+}
+
 .ag-row > .ag-cell-wrapper.ag-row-group {
     padding-left: calc(
         var(--ag-cell-horizontal-padding) + var(--ag-row-group-indent-size) * var(--ag-indentation-level)
@@ -150,12 +280,19 @@
 .ag-cell-focus:not(.ag-cell-range-selected):focus-within,
 .ag-context-menu-open .ag-cell-focus:not(.ag-cell-range-selected),
 .ag-full-width-row.ag-row-focus:focus .ag-cell-wrapper.ag-row-group,
+.ag-context-menu-open .ag-full-width-row.ag-row-focus .ag-cell-wrapper.ag-row-group,
 .ag-cell-range-single-cell,
 .ag-cell-range-single-cell.ag-cell-range-handle {
     border: 1px solid;
     border-color: var(--ag-range-selection-border-color);
     border-style: var(--ag-range-selection-border-style);
     outline: initial;
+}
+
+/* remove the box shadow added by default to all focussed divs because rows
+           use a border only to indicate focus */
+.ag-full-width-row.ag-row-focus:focus {
+    box-shadow: none;
 }
 
 .ag-row-drag,
@@ -165,26 +302,69 @@
     margin-right: var(--ag-cell-widget-spacing);
 }
 
+.ag-drag-handle-disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
 .ag-group-child-count {
     margin-left: 3px;
 }
 
-.ag-row-highlight-above::after,
-.ag-row-highlight-below::after {
-    content: '';
+.ag-grid-pinned-left-cells::after,
+.ag-grid-scrolling-cells::after,
+.ag-grid-pinned-right-cells::after,
+.ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+    content: var(--ag-internal-row-highlight-content, none);
     position: absolute;
-    width: calc(100% - 1px);
-    height: 1px;
-    background-color: var(--ag-range-selection-border-color);
-    left: 1px;
+    inset: var(--ag-internal-row-highlight-inset, auto);
+    height: var(--ag-row-drag-indicator-width);
+    background-color: var(--ag-row-drag-indicator-color);
+    border-radius: calc(var(--ag-row-drag-indicator-width) / 2);
+    pointer-events: none;
 }
 
-.ag-row-highlight-above::after {
-    top: 0;
+/* a nested grid must not inherit the highlight of the row hosting it */
+.ag-root-wrapper {
+    --ag-internal-row-highlight-content: initial;
 }
 
-.ag-row-highlight-below::after {
-    bottom: 0;
+.ag-row-highlight-above {
+    --ag-internal-row-highlight-content: '';
+    --ag-internal-row-highlight-inset: 0 0 auto;
+}
+
+.ag-row-highlight-below {
+    --ag-internal-row-highlight-content: '';
+    --ag-internal-row-highlight-inset: auto 0 0;
+}
+
+.ag-row-highlight-indent > .ag-grid-scrolling-cells::after,
+.ag-row-highlight-indent.ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+    margin-left: calc(
+        2 * (var(--ag-cell-widget-spacing) + var(--ag-icon-size)) + var(--ag-cell-horizontal-padding) +
+            var(--ag-row-highlight-level) * var(--ag-row-group-indent-size)
+    );
+}
+
+.ag-row-highlight-inside {
+    > .ag-grid-pinned-left-cells::after,
+    > .ag-grid-scrolling-cells::after,
+    > .ag-grid-pinned-right-cells::after,
+    &.ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+        --ag-internal-row-highlight-content: '';
+
+        inset: 0;
+        height: auto;
+        border-radius: 0;
+        background-color: var(--ag-selected-row-background-color);
+        border: 1px solid var(--ag-range-selection-border-color);
+    }
+}
+
+.ag-grid-scrolling-rows,
+.ag-grid-pinned-bottom-rows-container {
+    background-color: var(--ag-data-background-color);
 }
 
 .ag-row-odd {
@@ -194,40 +374,62 @@
 /* row selection and hover colors are added on a ::before pseudo element so
       that they overlay on top of the alternating row backgrounds rather than
       replacing them */
-.ag-row-selected::before {
-    content: '';
-    background-color: var(--ag-selected-row-background-color);
-    display: block;
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
+.ag-row-selected,
+.ag-row-hover:not(.ag-full-width-row) {
+    .ag-grid-pinned-left-cells::before,
+    .ag-grid-pinned-right-cells::before,
+    .ag-grid-scrolling-cells::before {
+        content: '';
+        display: block;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-color: var(--ag-internal-row-overlay-color);
+        background-image: var(--ag-internal-row-overlay-image);
+    }
 }
 
-.ag-row-hover:not(.ag-full-width-row)::before,
+.ag-row-selected.ag-full-width-row::before,
 .ag-row-hover.ag-full-width-row.ag-row-group::before {
     content: '';
-    background-color: var(--ag-row-hover-color);
     display: block;
     position: absolute;
     inset: 0;
     pointer-events: none;
+    background-color: var(--ag-internal-row-overlay-color);
+    background-image: var(--ag-internal-row-overlay-image);
 }
 
-.ag-row-hover.ag-row-selected::before {
-    background-color: var(--ag-row-hover-color);
+.ag-row.ag-row-selected {
+    --ag-internal-row-overlay-color: var(--ag-selected-row-background-color);
+}
+
+.ag-row-hover:not(.ag-full-width-row),
+.ag-row-hover.ag-full-width-row.ag-row-group {
+    --ag-internal-row-overlay-color: var(--ag-row-hover-color);
+}
+
+/* stylelint-disable no-descending-specificity */
+
+.ag-row-hover.ag-row-selected {
+    --ag-internal-row-overlay-color: var(--ag-row-hover-color);
 
     /* apply hover with a background-image so that it overlays on top of the
-        existing background-color */
-    background-image: linear-gradient(var(--ag-selected-row-background-color), var(--ag-selected-row-background-color));
+    existing background-color */
+    --ag-internal-row-overlay-image: linear-gradient(
+        var(--ag-selected-row-background-color),
+        var(--ag-selected-row-background-color)
+    );
 }
 
-/* Default the content position to relative so that it doesn't appear under the background */
-.ag-row-hover.ag-full-width-row.ag-row-group > * {
-    position: relative;
-}
+/* stylelint-enable no-descending-specificity */
 
 .ag-column-hover {
     background-color: var(--ag-column-hover-color);
+}
+
+.ag-header-range-highlight {
+    background-color: var(--ag-range-header-highlight-color);
 }
 
 .ag-right-aligned-cell {
@@ -243,8 +445,8 @@
 }
 
 .ag-cell:not(.ag-cell-inline-editing),
-    /* stylelint-disable-next-line no-descending-specificity */
-    .ag-full-width-row .ag-cell-wrapper.ag-row-group {
+/* stylelint-disable-next-line no-descending-specificity */
+.ag-full-width-row .ag-cell-wrapper.ag-row-group {
     padding-left: calc(
         var(--ag-cell-horizontal-padding) - 1px + var(--ag-row-group-indent-size) * var(--ag-indentation-level)
     );
@@ -265,19 +467,20 @@
 }
 
 .ag-details-row {
-    background-color: var(--ag-background-color);
+    background-color: var(--ag-data-background-color);
     padding: calc(var(--ag-spacing) * 3.75);
 }
 
 .ag-layout-auto-height,
 .ag-layout-print {
-    .ag-center-cols-viewport,
-    .ag-center-cols-container {
-        min-height: 150px;
+    .ag-grid-scrolling-rows {
+        min-height: var(--ag-auto-height-min-body-height);
     }
 }
 
-.ag-overlay-loading-wrapper {
+.ag-overlay-loading-wrapper,
+.ag-overlay-exporting-wrapper,
+.ag-overlay-modal-wrapper {
     background-color: var(--ag-modal-overlay-background-color);
 }
 
@@ -301,15 +504,15 @@
 
 @keyframes ag-skeleton-loading {
     0% {
-        opacity: 1;
+        background-color: var(--ag-row-loading-skeleton-effect-color);
     }
 
     50% {
-        opacity: 0.4;
+        background-color: color-mix(in srgb, transparent, var(--ag-row-loading-skeleton-effect-color) 40%);
     }
 
     100% {
-        opacity: 1;
+        background-color: var(--ag-row-loading-skeleton-effect-color);
     }
 }
 
@@ -322,21 +525,4 @@
 
 .ag-loading-icon {
     padding-right: var(--ag-cell-widget-spacing);
-}
-
-.ag-icon-loading {
-    animation-name: spin;
-    animation-duration: 1000ms;
-    animation-iteration-count: infinite;
-    animation-timing-function: linear;
-}
-
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }

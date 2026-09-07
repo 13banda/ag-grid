@@ -1,9 +1,9 @@
 import type { _ClientSideRowModelGridApi } from '../api/gridApi';
-import { CsrmSsrmSharedApiModule } from '../api/sharedApiModule';
+import { onRowHeightChanged, resetRowHeights } from '../api/rowModelSharedApi';
+import { CsrmSsrmSharedApiModule, RowModelSharedApiModule } from '../api/sharedApiModule';
 import type { _ModuleWithApi, _ModuleWithoutApi } from '../interfaces/iModule';
 import { SortModule } from '../sort/sortModule';
 import { VERSION } from '../version';
-import { ClientSideNodeManager } from './clientSideNodeManager';
 import { ClientSideRowModel } from './clientSideRowModel';
 import {
     applyTransaction,
@@ -16,8 +16,8 @@ import {
     isRowDataEmpty,
     onGroupExpandedOrCollapsed,
     refreshClientSideRowModel,
-    resetRowHeights,
 } from './clientSideRowModelApi';
+import { FilterStage } from './filterStage';
 import { SortStage } from './sortStage';
 
 /**
@@ -27,7 +27,7 @@ export const ClientSideRowModelModule: _ModuleWithoutApi = {
     moduleName: 'ClientSideRowModel',
     version: VERSION,
     rowModels: ['clientSide'],
-    beans: [ClientSideNodeManager, ClientSideRowModel, SortStage],
+    beans: [ClientSideRowModel, FilterStage, SortStage],
     dependsOn: [SortModule],
 };
 
@@ -37,7 +37,6 @@ export const ClientSideRowModelModule: _ModuleWithoutApi = {
 export const ClientSideRowModelApiModule: _ModuleWithApi<_ClientSideRowModelGridApi<any>> = {
     moduleName: 'ClientSideRowModelApi',
     version: VERSION,
-    rowModels: ['clientSide'],
     apiFunctions: {
         onGroupExpandedOrCollapsed,
         refreshClientSideRowModel,
@@ -45,11 +44,12 @@ export const ClientSideRowModelApiModule: _ModuleWithApi<_ClientSideRowModelGrid
         forEachLeafNode,
         forEachNodeAfterFilter,
         forEachNodeAfterFilterAndSort,
-        resetRowHeights,
         applyTransaction,
         applyTransactionAsync,
         flushAsyncTransactions,
         getBestCostNodeSelection,
+        resetRowHeights,
+        onRowHeightChanged,
     },
-    dependsOn: [CsrmSsrmSharedApiModule],
+    dependsOn: [CsrmSsrmSharedApiModule, RowModelSharedApiModule],
 };

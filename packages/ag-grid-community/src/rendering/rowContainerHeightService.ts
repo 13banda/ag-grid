@@ -1,7 +1,8 @@
+import { _getMaxDivHeight } from 'ag-stack';
+
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
-import { _getMaxDivHeight } from '../utils/browser';
-import { _logIfDebug } from '../utils/function';
+import { _logIfDebug } from '../utils/log';
 
 /**
  * This class solves the 'max height' problem, where the user might want to show more data than
@@ -21,6 +22,8 @@ export class RowContainerHeightService extends BeanStub implements NamedBean {
     private modelHeight: number | null; // how many pixels the model needs
     public uiContainerHeight: number | null; // how many pixels we actually have
     private pixelsToShave: number; // the number of pixels we need to shave
+
+    public stickyBottomRowsHeight: number = 0;
 
     // the number of pixels we add to each rowTop - depends on the scroll position
     public divStretchOffset: number;
@@ -101,7 +104,7 @@ export class RowContainerHeightService extends BeanStub implements NamedBean {
         this.stretching =
             modelHeight != null && // null happens when in print layout
             this.maxDivHeight > 0 &&
-            modelHeight! > this.maxDivHeight;
+            modelHeight > this.maxDivHeight;
         if (this.stretching) {
             this.calculateOffset();
         } else {
@@ -111,6 +114,13 @@ export class RowContainerHeightService extends BeanStub implements NamedBean {
 
     public getRealPixelPosition(modelPixel: number): number {
         return modelPixel - this.divStretchOffset;
+    }
+
+    public getAdjustedUiContainerHeight(): number | null {
+        if (this.uiContainerHeight == null) {
+            return null;
+        }
+        return this.uiContainerHeight - this.stickyBottomRowsHeight;
     }
 
     private getUiBodyHeight(): number {

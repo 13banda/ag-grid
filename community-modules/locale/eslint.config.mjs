@@ -1,7 +1,8 @@
-import rootESLint from '../../eslint.config.mjs';
+import rootESLint, { sonarjsConfig } from '../../eslint.config.mjs';
 
 export default [
     ...rootESLint,
+    ...sonarjsConfig,
     {
         rules: {
             'no-restricted-imports': 'error',
@@ -12,7 +13,6 @@ export default [
             'no-useless-escape': 'error',
             'prefer-spread': 'error',
             'no-irregular-whitespace': 'error',
-            '@typescript-eslint/ban-types': 'error',
             '@typescript-eslint/no-unused-vars': 'error',
             'prefer-const': ['error', { destructuring: 'all' }],
             'prefer-rest-params': 'error',
@@ -21,6 +21,7 @@ export default [
             '@typescript-eslint/ban-ts-comment': 'error',
             '@typescript-eslint/no-non-null-asserted-optional-chain': 'error',
             '@typescript-eslint/no-unnecessary-type-constraint': 'error',
+            // '@typescript-eslint/no-unnecessary-type-assertion': 'error', rule fails on CI'@typescript-eslint/no-unnecessary-type-assertion': 'error',
             '@typescript-eslint/no-this-alias': 'error',
         },
     },

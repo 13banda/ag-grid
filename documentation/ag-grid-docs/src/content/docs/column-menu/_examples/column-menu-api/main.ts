@@ -4,19 +4,23 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule } from 'ag-grid-enterprise';
+import { CalculatedColumnsModule, ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
+    CalculatedColumnsModule,
     TextFilterModule,
     NumberFilterModule,
     ClientSideRowModelModule,
-    ColumnsToolPanelModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -40,14 +44,11 @@ const gridOptions: GridOptions<IOlympicData> = {
         minWidth: 100,
         filter: true,
     },
+    calculatedColumns: true,
     onColumnMenuVisibleChanged: (event: ColumnMenuVisibleChangedEvent) => {
         console.log('columnMenuVisibleChanged', event);
     },
 };
-
-function showColumnChooser() {
-    gridApi.showColumnChooser();
-}
 
 function showColumnFilter(colKey: string) {
     gridApi.showColumnFilter(colKey);
@@ -55,10 +56,6 @@ function showColumnFilter(colKey: string) {
 
 function showColumnMenu(colKey: string) {
     gridApi.showColumnMenu(colKey);
-}
-
-function hideColumnChooser() {
-    gridApi.hideColumnChooser();
 }
 
 // setup the grid after the page has finished loading

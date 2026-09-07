@@ -1,7 +1,8 @@
+import type { IComponent } from 'ag-stack';
+
 import type { DateFilterParams } from '../filter/provided/date/iDateFilter';
 import type { IAfterGuiAttachedParams } from '../interfaces/iAfterGuiAttachedParams';
 import type { AgGridCommon } from '../interfaces/iCommon';
-import type { IComponent } from '../interfaces/iComponent';
 
 export interface BaseDate {
     /** Optional: Sets the disabled state of this component */
@@ -42,11 +43,19 @@ export interface BaseDateParams<TData = any, TContext = any> extends AgGridCommo
     filterParams: DateFilterParams;
 
     location?: 'filter' | 'floatingFilter';
+
+    /**
+     * Method for component to tell AG Grid that an input has been focussed.
+     * Used by the grid to refresh validation messages when moving between inputs in an "inRange" filter.
+     */
+    onFocusIn?: () => void;
 }
 
 export interface IDateParams<TData = any, TContext = any> extends BaseDateParams<TData, TContext> {
     /** Method for component to tell AG Grid that the date has changed. */
     onDateChanged: () => void;
+    /** Method for the provided component to tell AG Grid that its input was cleared. */
+    onDateCleared?: () => void;
 }
 
 export interface IDateComp extends IComponent<IDateParams>, IDate {}

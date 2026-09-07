@@ -1,40 +1,32 @@
-import { KeyCode } from '../constants/keyCode';
+import { KeyCode, _exists, _getActiveDomElement, _requestAnimationFrame } from 'ag-stack';
+
 import { BeanStub } from '../context/beanStub';
 import type { BeanCollection } from '../context/context';
-import { _getActiveDomElement } from '../gridOptionsUtils';
-import { _requestAnimationFrame } from '../misc/animationFrameService';
 import type { HeaderNavigationDirection } from '../navigation/headerNavigationService';
-import { _focusNextGridCoreContainer } from '../utils/focus';
-import { _exists } from '../utils/generic';
+import { _focusNextGridCoreContainer } from '../utils/gridFocus';
 import { ManagedFocusFeature } from '../widgets/managedFocusFeature';
 import { getColumnHeaderRowHeight, getFloatingFiltersHeight, getGroupRowsHeight } from './headerUtils';
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IGridHeaderComp {
-    addOrRemoveCssClass(cssClassName: string, on: boolean): void;
-    setHeightAndMinHeight(height: string): void;
+    toggleCss(cssClassName: string, on: boolean): void;
+    setHeightAndMinHeight(height: number): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class GridHeaderCtrl extends BeanStub {
     private comp: IGridHeaderComp;
     public eGui: HTMLElement;
     public headerHeight: number;
+    private headerHeightWithBorder: number;
+    private headerRowFocusFeatures: ManagedFocusFeature[] = [];
 
-    public setComp(comp: IGridHeaderComp, eGui: HTMLElement, eFocusableElement: HTMLElement): void {
+    public setComp(comp: IGridHeaderComp, eGui: HTMLElement): void {
         this.comp = comp;
         this.eGui = eGui;
 
         const { beans } = this;
-        const { headerNavigation, touchSvc, ctrlsSvc } = beans;
-
-        if (headerNavigation) {
-            this.createManagedBean(
-                new ManagedFocusFeature(eFocusableElement, {
-                    onTabKeyDown: this.onTabKeyDown.bind(this),
-                    handleKeyDown: this.handleKeyDown.bind(this),
-                    onFocusOut: this.onFocusOut.bind(this),
-                })
-            );
-        }
+        const { touchSvc, ctrlsSvc } = beans;
 
         // for setting ag-pivot-on / ag-pivot-off CSS classes
         this.addManagedEventListeners({
@@ -50,6 +42,26 @@ export class GridHeaderCtrl extends BeanStub {
         touchSvc?.mockHeaderContextMenu(this, listener);
 
         ctrlsSvc.register('gridHeaderCtrl', this);
+    }
+
+    public setHeaderRowFocusableElements(eFocusableElements: HTMLElement[]): void {
+        this.headerRowFocusFeatures = this.destroyBeans(this.headerRowFocusFeatures);
+
+        if (!this.beans.headerNavigation) {
+            return;
+        }
+
+        for (const eFocusableElement of eFocusableElements) {
+            this.headerRowFocusFeatures.push(
+                this.createManagedBean(
+                    new ManagedFocusFeature(eFocusableElement, {
+                        onTabKeyDown: this.onTabKeyDown.bind(this),
+                        handleKeyDown: this.handleKeyDown.bind(this),
+                        onFocusOut: this.onFocusOut.bind(this),
+                    })
+                )
+            );
+        }
     }
 
     private setupHeaderHeight(): void {
@@ -68,11 +80,11 @@ export class GridHeaderCtrl extends BeanStub {
         );
 
         this.addManagedEventListeners({
-            displayedColumnsChanged: listener,
+            headerRowsChanged: listener,
             columnHeaderHeightChanged: listener,
             // add this to the animation frame to avoid a feedback loop
             columnGroupHeaderHeightChanged: () => _requestAnimationFrame(this.beans, () => listener()),
-            gridStylesChanged: listener,
+            stylesChanged: listener,
             advancedFilterEnabledChanged: listener,
         });
     }
@@ -86,40 +98,36 @@ export class GridHeaderCtrl extends BeanStub {
         const headerHeight = getColumnHeaderRowHeight(beans);
 
         if (beans.filterManager?.hasFloatingFilters()) {
-            totalHeaderHeight += getFloatingFiltersHeight(beans)!;
+            totalHeaderHeight += getFloatingFiltersHeight(beans);
         }
 
         totalHeaderHeight += groupHeight;
-        totalHeaderHeight += headerHeight!;
-
-        if (this.headerHeight === totalHeaderHeight) {
-            return;
+        totalHeaderHeight += headerHeight;
+        if (this.headerHeightWithBorder !== totalHeaderHeight) {
+            this.headerHeightWithBorder = totalHeaderHeight;
+            this.comp.setHeightAndMinHeight(totalHeaderHeight);
         }
 
-        this.headerHeight = totalHeaderHeight;
-
-        // one extra pixel is needed here to account for the
-        // height of the border
-        const px = `${totalHeaderHeight + 1}px`;
-        this.comp.setHeightAndMinHeight(px);
-
-        this.eventSvc.dispatchEvent({
-            type: 'headerHeightChanged',
-        });
+        if (this.headerHeight !== totalHeaderHeight) {
+            this.headerHeight = totalHeaderHeight;
+            this.eventSvc.dispatchEvent({
+                type: 'headerHeightChanged',
+            });
+        }
     }
 
     private onPivotModeChanged(beans: BeanCollection): void {
-        const pivotMode = beans.colModel.isPivotMode();
+        const pivotMode = beans.colModel.pivotMode;
 
-        this.comp.addOrRemoveCssClass('ag-pivot-on', pivotMode);
-        this.comp.addOrRemoveCssClass('ag-pivot-off', !pivotMode);
+        this.comp.toggleCss('ag-pivot-on', pivotMode);
+        this.comp.toggleCss('ag-pivot-off', !pivotMode);
     }
 
     private onDisplayedColumnsChanged(beans: BeanCollection): void {
         const columns = beans.visibleCols.allCols;
         const shouldAllowOverflow = columns.some((col) => col.isSpanHeaderHeight());
 
-        this.comp.addOrRemoveCssClass('ag-header-allow-overflow', shouldAllowOverflow);
+        this.comp.toggleCss('ag-header-allow-overflow', shouldAllowOverflow);
     }
 
     protected onTabKeyDown(e: KeyboardEvent): void {
@@ -132,7 +140,7 @@ export class GridHeaderCtrl extends BeanStub {
         if (
             headerNavigation!.navigateHorizontally(direction, true, e) ||
             (!backwards && focusSvc.focusOverlay(false)) ||
-            _focusNextGridCoreContainer(beans, backwards, true)
+            _focusNextGridCoreContainer(beans, backwards, 'force')
         ) {
             // preventDefault so that the tab key doesn't cause focus to get lost
             e.preventDefault();
@@ -164,7 +172,7 @@ export class GridHeaderCtrl extends BeanStub {
                 if (!_exists(direction)) {
                     direction = 'DOWN';
                 }
-                if (headerNavigation!.navigateVertically(direction, null, e)) {
+                if (headerNavigation!.navigateVertically(direction, e)) {
                     // preventDefault so that the arrow keys don't cause an extra scroll
                     e.preventDefault();
                 }
@@ -183,20 +191,23 @@ export class GridHeaderCtrl extends BeanStub {
             return;
         }
 
-        if (!eGui.contains(relatedTarget as HTMLElement)) {
+        const nextFocusInHeaderRow =
+            relatedTarget instanceof HTMLElement && eGui.contains(relatedTarget.closest('.ag-header-row'));
+        if (!nextFocusInHeaderRow) {
             beans.focusSvc.focusedHeader = null;
         }
     }
 
     private onHeaderContextMenu(mouseEvent?: MouseEvent, touch?: Touch, touchEvent?: TouchEvent): void {
-        const { menuSvc, ctrlsSvc } = this.beans;
+        const { menuSvc } = this.beans;
         if ((!mouseEvent && !touchEvent) || !menuSvc?.isHeaderContextMenuEnabled()) {
             return;
         }
 
         const { target } = (mouseEvent ?? touch)!;
 
-        if (target === this.eGui || target === ctrlsSvc.getHeaderRowContainerCtrl()?.eViewport) {
+        // header cells' own contextmenu events bubble up to this listener and must not also open the grid-level menu
+        if (target instanceof Element && !target.closest('.ag-header-cell, .ag-header-group-cell')) {
             menuSvc.showHeaderContextMenu(undefined, mouseEvent, touchEvent);
         }
     }

@@ -1,21 +1,26 @@
+import { ContactForm } from '@ag-website-shared/components/contact-form/ContactForm';
+import { Icon } from '@ag-website-shared/components/icon/Icon';
+import { YOUTUBE_LICENSE_PRICING_URL, ZENDESK_URL } from '@ag-website-shared/constants';
 import ChartsActive from '@ag-website-shared/images/inline-svgs/pricing/charts-active.svg?react';
 import ChartsInactive from '@ag-website-shared/images/inline-svgs/pricing/charts-inactive.svg?react';
 import GridActive from '@ag-website-shared/images/inline-svgs/pricing/grid-active.svg?react';
 import GridInactive from '@ag-website-shared/images/inline-svgs/pricing/grid-inactive.svg?react';
 import { chartsUrlWithPrefix } from '@ag-website-shared/utils/chartsUrlWithPrefix';
 import { gridUrlWithPrefix } from '@ag-website-shared/utils/gridUrlWithPrefix';
+import { CustomerLogos } from '@components/customer-logos/CustomerLogos';
 import { useFrameworkFromStore } from '@utils/hooks/useFrameworkFromStore';
+import { urlWithPrefix } from '@utils/urlWithPrefix';
 import classnames from 'classnames';
 import { useEffect, useRef, useState } from 'react';
 import type { FunctionComponent } from 'react';
 
 import chartsFeaturesData from '../../content/license-features/chartsFeaturesMatrix.json';
 import gridFeaturesData from '../../content/license-features/gridFeaturesMatrix.json';
-import { InfoEmailLink } from './InfoEmailLink';
 import { Licenses } from './Licenses';
 import SocialProof from './SocialProof';
 import { ComparisonTable } from './comparison-table/ComparisonTable';
 import styles from './license-pricing.module.scss';
+import { DEV_LICENSE_DATA } from './licenseData';
 
 export type LicenseTab = 'grid' | 'charts';
 
@@ -26,18 +31,30 @@ interface Props {
 export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) => {
     const [showFullWidthBar, setShowFullWidthBar] = useState(false);
 
-    const contactSalesRef = useRef(null); // Step 1: Create a ref for the contactSales div
+    const licensesOuterRef = useRef(null);
+    const stickyBarAnchorRef = useRef(null);
     const framework = useFrameworkFromStore();
+
+    const gridLicenseData = DEV_LICENSE_DATA.filter(
+        (license) => license.tabGroup === 'grid' || license.tabGroup === 'both'
+    );
+    const chartsLicenseData = DEV_LICENSE_DATA.filter(
+        (license) => license.tabGroup === 'charts' || license.tabGroup === 'both'
+    );
 
     useEffect(() => {
         const handleScroll = () => {
-            // Step 2: Determine the position of the contactSales div
-            const contactSalesPosition = contactSalesRef.current
-                ? contactSalesRef.current.getBoundingClientRect().top
+            // Only show the bar once the pricing cards have been scrolled past.
+            const scrolledPastLicenses = licensesOuterRef.current
+                ? licensesOuterRef.current.getBoundingClientRect().bottom < 200
+                : false;
+
+            // ...and hide it again as the trial/contact section comes into view.
+            const stickyBarAnchorPosition = stickyBarAnchorRef.current
+                ? stickyBarAnchorRef.current.getBoundingClientRect().top
                 : 0;
 
-            // Check if contactSales div is at the top of the viewport or if the scroll is beyond a certain point
-            if (window.scrollY > 390 && contactSalesPosition > 0) {
+            if (scrolledPastLicenses && stickyBarAnchorPosition > 200) {
                 setShowFullWidthBar(true);
             } else {
                 setShowFullWidthBar(false);
@@ -45,6 +62,9 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
         };
 
         window.addEventListener('scroll', handleScroll);
+
+        // Call once on mount to set initial state
+        handleScroll();
 
         return () => {
             window.removeEventListener('scroll', handleScroll);
@@ -59,27 +79,82 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
     };
 
     const featuresData = chartsIsSelected ? chartsFeaturesData : gridFeaturesData;
+    const licenseData = chartsIsSelected ? chartsLicenseData : gridLicenseData;
 
     return (
         <>
-            {showFullWidthBar && (
-                <div className={styles.fullWidthBar}>
-                    <div className={classnames('layout-max-width-small', styles.fullWidthBarContainer)}>
-                        <div className={styles.fullWidthBarLeft}> </div>
-                        <div className={styles.fullWidthBarItem}>
-                            AG {chartsIsSelected ? 'Charts' : 'Grid'} Community
-                        </div>
-                        <div className={styles.fullWidthBarItem}>
-                            AG {chartsIsSelected ? 'Charts' : 'Grid'} Enterprise
-                        </div>
-                        <div className={styles.fullWidthBarItem}>AG Grid Bundle</div>
+            <div className={classnames('layout-max-width-small', styles.container)}>
+                <div className={styles.salesForm}>
+                    <div className={styles.salesFormCopy}>
+                        <h3 className="text-2xl">
+                            <span>Contact Our Sales Team</span>
+                        </h3>
 
-                        <div className={styles.fullWidthBarRight}></div>
+                        <p className={styles.salesContactsubHeading}>
+                            Get help with pricing, explore use-cases for your team, and more
+                        </p>
+
+                        <div className={styles.testimonialContainer}>
+                            <p className={styles.testimonalHeading}>Millions use AG Grid every day:</p>
+                            <div className={styles.customerLogosWrapper}>
+                                <CustomerLogos />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={classnames(styles.salesFormForm, 'trial-licence-form')}>
+                        <ContactForm
+                            formLocation={defaultSelection === 'grid' ? 'Grid pricing page' : 'Charts pricing page'}
+                        />
                     </div>
                 </div>
-            )}
+            </div>
 
-            <div className={styles.introSection}>
+            <div className={classnames(styles.fullWidthBar, { [styles.active]: showFullWidthBar })}>
+                <div className={classnames('layout-max-width-small', styles.fullWidthBarContainer)}>
+                    {licenseData.map((license, i) => {
+                        const isCommunity = license.id === 'community';
+                        const ctaId =
+                            license.id === 'community'
+                                ? 'get-started'
+                                : license.id.includes('enterprise')
+                                  ? 'buy-now'
+                                  : 'bundle-buy-now';
+
+                        return (
+                            <div className={styles.fullWidthBarItem} key={i}>
+                                <span className={classnames(styles.fwProduct, 'text-lg')}>{license.subHeading}</span>
+                                <div>
+                                    <span className={styles.fwPrice}>
+                                        {isCommunity ? (
+                                            <b>Free</b>
+                                        ) : (
+                                            <>
+                                                <span className={styles.fwPriceDollars}>
+                                                    ${license.priceFullDollars}
+                                                </span>
+                                            </>
+                                        )}
+                                    </span>
+
+                                    <a
+                                        id={ctaId}
+                                        className={classnames(
+                                            styles.fwAction,
+                                            isCommunity ? 'button-tertiary' : 'button'
+                                        )}
+                                        href={license.buyLink}
+                                    >
+                                        {isCommunity ? 'Get started' : 'Buy now'}
+                                    </a>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div id="pricing" className={styles.introSection}>
                 <div className={styles.gradient}></div>
                 <div className={styles.switchContainer}>
                     <div className={styles.toggleWrapper}>
@@ -109,7 +184,7 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
             <div className={classnames('layout-max-width-small', styles.container)}>
                 <div className={styles.topSection}>
                     <div className={styles.intro}>
-                        <div className={styles.licensesOuter}>
+                        <div ref={licensesOuterRef} className={styles.licensesOuter}>
                             <Licenses className={styles.licensesInfo} isChecked={chartsIsSelected} />
                         </div>
 
@@ -139,25 +214,71 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
                             })}
                         </div>
 
-                        <div ref={contactSalesRef} className={styles.contactSales}>
-                            <h3 className="text-2xl">Need help?</h3>
+                        <div ref={stickyBarAnchorRef} className={styles.trialLicence}>
+                            <div className={styles.trialLicenceCopy}>
+                                <h3
+                                    className={classnames(styles.trialLicenceHeader, 'text-2xl')}
+                                    id="request-trial-licence"
+                                >
+                                    <Icon name="enterprise" svgClasses={styles.enterpriseIcon} />
+                                    <p style={{ maxWidth: '16ch' }}>Start Your 30-Day Enterprise Bundle Trial</p>
+                                </h3>
 
-                            <p className="text-secondary">
-                                Email{' '}
-                                <InfoEmailLink emailSubject="AG Grid Developer license query" trackingType="headerLink">
-                                    info@ag-grid.com
-                                </InfoEmailLink>{' '}
-                                and start a conversation. We can provide quotes, give bulk pricing, and answer any sales
-                                or contract-related questions you may have.
-                            </p>
+                                <p style={{ maxWidth: '48ch' }}>
+                                    Explore the full enterprise capabilities of AG Grid and AG Charts with a free 30-day
+                                    trial licence — no restrictions, no watermarks.
+                                </p>
 
-                            <InfoEmailLink
-                                emailSubject="AG Grid Developer license query"
-                                className="button"
-                                trackingType="footer"
-                            >
-                                info@ag-grid.com
-                            </InfoEmailLink>
+                                <a
+                                    id="request-trial-licence"
+                                    className={classnames('button', styles.trialButton)}
+                                    href={urlWithPrefix({
+                                        framework,
+                                        url: './community-vs-enterprise/#request-a-30-day-enterprise-bundle-trial-licence',
+                                    })}
+                                >
+                                    Get a trial license
+                                </a>
+                            </div>
+
+                            <div className={styles.trialLicenceSeparator}></div>
+
+                            <div className={classnames(styles.trialLicenceCopy, 'trial-licence-form')}>
+                                <div className={styles.trialLicenceCopyItem}>
+                                    <Icon name="pricingFeatures" />
+                                    <p>
+                                        <b>Full enterprise features</b>
+                                        <br />
+                                        Access all advanced grid and charts features without console warnings or
+                                        watermarks.
+                                    </p>
+                                </div>
+
+                                <div className={styles.trialLicenceSeparator}></div>
+
+                                <div className={styles.trialLicenceCopyItem}>
+                                    <Icon name="alarm" />
+                                    <p>
+                                        <b>30 days of access</b>
+                                        <br />
+                                        Enough time to evaluate integration, performance, and fit.
+                                    </p>
+                                </div>
+
+                                <div className={styles.trialLicenceSeparator}></div>
+
+                                <div className={styles.trialLicenceCopyItem}>
+                                    <Icon name="support" />
+                                    <p>
+                                        <b>Engineering support</b>
+                                        <br />
+                                        Get direct assistance from our developers via <a href={ZENDESK_URL}>
+                                            Zendesk
+                                        </a>{' '}
+                                        throughout your trial.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         <div className={styles.licenceKeyDocs}>
@@ -165,11 +286,17 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
                             <p>
                                 Read our documentation on{' '}
                                 {defaultSelection === 'grid' ? (
-                                    <a href={gridUrlWithPrefix({ framework, url: './license-install' })}>
+                                    <a
+                                        id="licence-install-cta"
+                                        href={gridUrlWithPrefix({ framework, url: './license-install' })}
+                                    >
                                         Installing Your Licence Key
                                     </a>
                                 ) : (
-                                    <a href={chartsUrlWithPrefix({ framework, url: './license-install' })}>
+                                    <a
+                                        id="licence-install-cta"
+                                        href={chartsUrlWithPrefix({ framework, url: './license-install' })}
+                                    >
                                         Installing Your Licence Key
                                     </a>
                                 )}
@@ -179,20 +306,25 @@ export const LicensePricing: FunctionComponent<Props> = ({ defaultSelection }) =
 
                         <div className={styles.videoPrompt}>
                             <a
-                                href="https://www.youtube.com/watch?v=VPr__OKxH50"
+                                id="licence-explainer-video-thumbnail"
+                                href={YOUTUBE_LICENSE_PRICING_URL}
                                 target="_blank"
                                 className={styles.thumbnail}
                             >
                                 <img
                                     src="https://img.youtube.com/vi/VPr__OKxH50/hqdefault.jpg"
-                                    alt="AG Grid license explained video"
+                                    alt="AG Grid licence explained video"
                                 />
                             </a>
 
                             <div>
-                                <h3>Which licenses do I need?</h3>
+                                <h3>Which licences do I need?</h3>
                                 <p>
-                                    <a href="https://www.youtube.com/watch?v=VPr__OKxH50" target="_blank">
+                                    <a
+                                        id="licence-explainer-video-text"
+                                        href={YOUTUBE_LICENSE_PRICING_URL}
+                                        target="_blank"
+                                    >
                                         <span className="icon"></span>
                                         Watch our short explainer video
                                     </a>

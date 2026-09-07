@@ -1,0 +1,210 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import styles from '../../pages-styles/campaigns.module.scss';
+
+import { TrialLicenceForm } from '@ag-website-shared/components/trial-licence-form/TrialLicenceForm';
+import { AutomatedIntegratedCharts } from '@ag-website-shared/components/automated-examples/AutomatedIntegratedCharts';
+import { Icon } from '@ag-website-shared/components/icon/Icon';
+import ImageCarousel from '@components/campaigns-components/ImageCarousel';
+
+import { getIsProduction } from '@utils/env';
+import { ZENDESK_URL } from '@ag-website-shared/constants';
+
+const TRIAL_LICENCE_FORM_URL = getIsProduction()
+    ? 'https://us-central1-aggrid-ecommerce.cloudfunctions.net/CreateLeadForTrialChartsCampaign'
+    : 'https://us-central1-stripe-testing-19784.cloudfunctions.net/CreateLeadForTrialChartsCampaign';
+
+const QUOTES_DATA = [
+    {
+        quote: 'Replacing our slow, unstable Tableau reports will be a big ‘quality of life’ improvement.',
+        source: 'A leading global aerospace and defence company',
+    },
+    {
+        quote: 'Your Grid and Charts are the backbone of this project.',
+        source: 'An AI-driven investment research platform',
+    },
+    {
+        quote: 'The speed of AG Grid’s charting library is insanely impressive.',
+        source: 'Developer on X',
+    },
+];
+
+const CAMPAIGN_CODE = `SPRING20`;
+
+const UTM_TRACKER = '?utm_source=power-of-ag-charts&utm_medium=landing-page&utm_campaign=integrated-enterprise-charts';
+
+const MAILTO_HREF = `mailto:info@ag-grid.com?subject=AG Charts Enterprise: ${CAMPAIGN_CODE} enquiry`;
+---
+
+<!-- Grid font for Quartz theme -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+
+<Layout
+    title={'Unlock the power of AG Charts'}
+    description={'Create fast, flexible and fully customisable charts with minimal configuration for maximum impact.'}
+    showDocsNav={false}
+    showSearchBar={true}
+    hidePageFromSearchEngines={true}
+>
+    <div class={styles.homepageHero}>
+        <div class:list={[styles.heroInner, 'layout-max-width-small']}>
+            <div class={styles.heroHeadings}>
+                <h1>Enhance your Insights with <span class={styles.noWrap}>AG Charts</span> Enterprise</h1>
+
+                <h2>
+                    Access advanced features and chart types without any additional development. Simply update your
+                    licence and import the <code class={styles.noWrap}>ag-charts-enterprise</code> package.
+                </h2>
+
+                <div>
+                    <a
+                        href={'https://www.ag-grid.com/charts/gallery/' + UTM_TRACKER}
+                        target="_blank"
+                        class="button-secondary">See the charts <Icon name="chevronRight" /></a
+                    >
+                    <a href={MAILTO_HREF} class="button-secondary">Buy now <Icon name="email" /></a>
+                </div>
+            </div>
+
+            <ImageCarousel client:load />
+        </div>
+    </div>
+
+    <div class={styles.campaignOuter}>
+        <div class={styles.autoICExample}>
+            <AutomatedIntegratedCharts client:load visibilityThreshold={0.8} />
+        </div>
+
+        <div class={styles.quotesOuter}>
+            {
+                QUOTES_DATA.map(({ quote, source }) => {
+                    return (
+                        <div class={styles.quote}>
+                            <blockquote>{quote}</blockquote>
+                            <p class="text-sm">– {source}</p>
+                        </div>
+                    );
+                })
+            }
+        </div>
+
+        <div class={styles.campaignBenefitsContainer}>
+            <div class={styles.campaignBenefitsList}>
+                <h2>Built for Developers</h2>
+                <ul>
+                    <li>
+                        Add advanced chart types and features to your existing app, with no additional development
+                        required.
+                    </li>
+                    <li>Access 20+ new chart types, including Heatmaps, Funnels, Gauges, Ranges, and more.</li>
+                    <li>Make your charts interactive with features like Zooming, Context Menus, and Annotations.</li>
+                    <li>
+                        Leverage our easy-to-use API to extend, customise and enhance our charts in any way you like.
+                    </li>
+                    <li>Add charts to your app with the standalone library for non-data grid use cases.</li>
+                </ul>
+                <a
+                    href={'https://www.ag-grid.com/charts/gallery/' + UTM_TRACKER}
+                    target="_blank"
+                    class="button-tertiary text-md">View Gallery <Icon name="arrowRight" /></a
+                >
+            </div>
+
+            <div class={styles.campaignBenefitsList}>
+                <h2>Benefits for Business</h2>
+                <ul>
+                    <li>
+                        Unlock more meaningful insights into your data with complex charts to match the needs of your
+                        data.
+                    </li>
+                    <li>
+                        Analyse your data in more detail with advanced interactivity features, including zoom and
+                        context menus.
+                    </li>
+                    <li>
+                        Annotate your charts in real-time with the annotations toolbar - add lines, arrows, text, shapes
+                        and more.
+                    </li>
+                    <li>Export your visualisations to images and share them across your organisation.</li>
+                    <li>Take advantage of exclusive bundle pricing for existing AG Grid customers.</li>
+                </ul>
+                <a href={MAILTO_HREF} class="button-tertiary text-md">Contact Sales <Icon name="email" /></a>
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <h3 class="text-2xl" id="request-trial-licence">
+                <Icon name="enterprise" svgClasses={styles.enterpriseIcon} />
+                <span>Try AG Charts Enterprise for Free</span>
+            </h3>
+
+            <p>Fill out the form to receive a trial licence for AG Grid and AG Charts</p>
+        </div>
+
+        <div class={styles.trialLicence}>
+            <div class={styles.trialLicenceCopy}>
+                <div class={styles.trialLicenceCopyItem}>
+                    <Icon name="alarm" />
+                    <p>
+                        <b>Two Week Trial</b>
+                        <br />
+                        Trial licences are valid for two weeks from the date of issue, or{' '}
+                        <a href={MAILTO_HREF}>contact&nbsp;us</a> to extend.
+                    </p>
+                </div>
+
+                <div class={styles.trialLicenceSeparator}></div>
+
+                <div class={styles.trialLicenceCopyItem}>
+                    <Icon name="terminal" />
+                    <p>
+                        <b>Suppresses Console Warnings</b>
+                        <br />
+                        Removes console errors and watermarks from AG Grid and AG&nbsp;Chart&nbsp;components.
+                    </p>
+                </div>
+
+                <div class={styles.trialLicenceSeparator}></div>
+
+                <div class={styles.trialLicenceCopyItem}>
+                    <Icon name="support" />
+                    <p>
+                        <b>Access Support</b>
+                        <br />
+                        Access dedicated support from our engineering team via{' '}
+                        <a href={ZENDESK_URL + UTM_TRACKER} target="_blank">Zendesk</a>.
+                    </p>
+                </div>
+            </div>
+
+            <div class={styles.trialLicenceSeparator}></div>
+
+            <div class={styles.trialLicenceForm}>
+                <TrialLicenceForm client:load submitUrl={TRIAL_LICENCE_FORM_URL} />
+            </div>
+        </div>
+
+        <div class={styles.finalCTA}>
+            <h2 class="text-2xl">Want to Learn More?</h2>
+
+            <div>
+                View our
+                <a href={'https://www.ag-grid.com/charts/gallery/' + UTM_TRACKER} target="_blank">gallery of charts</a>
+                or contact sales at
+                <a href={MAILTO_HREF}>info@ag-grid.com</a>.
+            </div>
+        </div>
+    </div>
+</Layout>
+
+<script>
+    import { initScrollClassListener } from '@ag-website-shared/utils/initScrollClassListener';
+
+    initScrollClassListener({
+        targetSelector: '.site-header',
+        scrolledClass: 'header-scrolled',
+        scrollPosition: 480,
+    });
+</script>

@@ -1,0 +1,337 @@
+name: Module Size vs Release
+
+on:
+  push:
+    branches:
+      - 'latest'
+      - 'b[0-9][0-9]?.[0-9][0-9]?.[0-9][0-9]?'
+    # Only re-measure vs the release baseline when a change could actually move bundle
+    # sizes: grid source, its build config, dependency manifests, or the module-size
+    # measurement infra. Skips config/docs-only merges. workflow_dispatch is unaffected.
+    paths:
+      - 'packages/**'
+      - 'community-modules/**'
+      - 'yarn.lock'
+      - 'nx.json'
+      - 'tsconfig.*.json'
+      # module-size measurement infrastructure
+      - 'testing/module-size/**'
+      - 'testing/module-size-angular/**'
+      - '.github/workflows/module-size-vs-release.yml'
+      - '.github/actions/module-size-test/**'
+      - 'scripts/ci/*module-size*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to compare against (e.g., b35.1.0) or leave empty to auto-detect latest release'
+        type: string
+        required: false
+      test_branch:
+        description: 'Branch to test (defaults to latest for push events, current branch for workflow_dispatch)'
+        type: string
+        required: false
+
+env:
+  # Disable git's post-fetch background gc/maintenance for every git invocation in this
+  # workflow (via git's GIT_CONFIG_* protocol); otherwise it rewrites .git/shallow
+  # concurrently with the next chained `git fetch --depth 1`, intermittently failing job
+  # setup with "fatal: shallow file has changed since we read it". Fixed in git >= 2.55.
+  GIT_CONFIG_COUNT: 2
+  GIT_CONFIG_KEY_0: gc.auto
+  GIT_CONFIG_VALUE_0: '0'
+  GIT_CONFIG_KEY_1: maintenance.auto
+  GIT_CONFIG_VALUE_1: 'false'
+  NX_NO_CLOUD: true
+  NX_BRANCH: ${{ github.ref }}
+  SHARP_IGNORE_GLOBAL_LIBVIPS: true
+  YARN_REGISTRY: "https://registry.ag-grid.com"
+  CI: true
+  SHARD_COUNT: 3
+
+concurrency:
+  group: module-size-release-${{ inputs.release_tag || 'scheduled' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare Context
+    runs-on: ubuntu-latest
+    outputs:
+      release-tag: ${{ steps.resolve.outputs.release-tag }}
+      shard-matrix: ${{ steps.resolve.outputs.shard-matrix }}
+      test-branch: ${{ steps.resolve.outputs.test-branch }}
+    steps:
+      - name: Resolve release tag and test branch
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SHARD_COUNT: ${{ env.SHARD_COUNT }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          INPUT_BRANCH: ${{ inputs.test_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        with:
+          script: |
+            const shardCount = parseInt(process.env.SHARD_COUNT, 10);
+            const shards = Array.from({ length: shardCount }, (_, i) => i + 1);
+            core.setOutput('shard-matrix', JSON.stringify(shards));
+
+            // Resolve test branch: input > current branch (for workflow_dispatch) > latest (for push)
+            let testBranch = process.env.INPUT_BRANCH;
+            if (!testBranch) {
+              testBranch = process.env.EVENT_NAME === 'workflow_dispatch' ? process.env.REF_NAME : 'latest';
+            }
+            core.setOutput('test-branch', testBranch);
+            console.log(`Using test branch: ${testBranch}`);
+
+            let releaseTag = process.env.INPUT_TAG;
+
+            // If no tag provided (scheduled run), find the latest release tag
+            if (!releaseTag) {
+              const { data: releases } = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 10
+              });
+
+              // Find the latest non-prerelease tag matching release-XX.X.X pattern
+              const release = releases.find(r => !r.prerelease && /^release-\d+\.\d+\.\d+$/.test(r.tag_name));
+              if (!release) {
+                core.setFailed('Could not find a valid release tag');
+                return;
+              }
+              // Use the latest release tag
+              releaseTag = release.tag_name;
+              console.log(`Using latest release tag: ${releaseTag}`);
+            }
+
+            core.setOutput('release-tag', releaseTag);
+
+  # Check for cached release results (releases are immutable, so cache indefinitely)
+  check-release-cache:
+    name: Check Release Cache
+    runs-on: ubuntu-latest
+    needs: prepare
+    outputs:
+      cache-hit: ${{ steps.cache-check.outputs.cache-hit }}
+    steps:
+      - name: Check cache for release results
+        id: cache-check
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ./release-results.json
+          key: module-size-release-${{ needs.prepare.outputs.release-tag }}
+          lookup-only: true
+
+  # Build and run module size tests on test branch (sharded)
+  module-size-latest:
+    name: Module Size ${{ needs.prepare.outputs.test-branch }} (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.shard-matrix) }}
+      fail-fast: false
+    env:
+      TEST_BRANCH: ${{ needs.prepare.outputs.test-branch }}
+    steps:
+      - name: Checkout for actions
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_BRANCH }}
+          fetch-depth: 1
+
+      - name: Run module size tests
+        uses: ./.github/actions/module-size-test
+        with:
+          ref: ${{ env.TEST_BRANCH }}
+          shard: ${{ matrix.shard }}
+          total-shards: ${{ strategy.job-total }}
+          artifact-prefix: module-size-latest
+          base-ref: ${{ env.TEST_BRANCH }}
+
+  # Build and run module size tests on release tag (sharded) - only if cache miss
+  module-size-release:
+    name: Module Size Release (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    needs: [prepare, check-release-cache]
+    if: needs.check-release-cache.outputs.cache-hit != 'true'
+    strategy:
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.shard-matrix) }}
+      fail-fast: false
+    env:
+      TEST_BRANCH: ${{ needs.prepare.outputs.test-branch }}
+    steps:
+      - name: Checkout for actions
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_BRANCH }}
+          fetch-depth: 1
+
+      - name: Run module size tests
+        uses: ./.github/actions/module-size-test
+        with:
+          ref: ${{ needs.prepare.outputs.release-tag }}
+          shard: ${{ matrix.shard }}
+          total-shards: ${{ strategy.job-total }}
+          artifact-prefix: module-size-release
+          cache-mode: 'off'
+          actions-ref: ${{ env.TEST_BRANCH }}
+
+  # Cache release results (only when we had to build)
+  cache-release-results:
+    name: Cache Release Results
+    runs-on: ubuntu-latest
+    needs: [prepare, check-release-cache, module-size-release]
+    if: always() && needs.module-size-release.result == 'success'
+    env:
+      TEST_BRANCH: ${{ needs.prepare.outputs.test-branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_BRANCH }}
+          sparse-checkout: |
+            scripts/ci/merge-module-size-results.mjs
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Download all release shard results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: module-size-release-shard-*
+          path: ./release-shards
+          merge-multiple: true
+
+      - name: Merge shard results
+        run: |
+          node scripts/ci/merge-module-size-results.mjs ./release-shards ./release-results.json
+
+      - name: Save to cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ./release-results.json
+          key: module-size-release-${{ needs.prepare.outputs.release-tag }}
+
+  # Compare results and create/update GitHub issue
+  compare-and-report:
+    name: Compare & Report
+    runs-on: ubuntu-latest
+    needs: [prepare, check-release-cache, module-size-latest, module-size-release, cache-release-results]
+    if: |
+      always() &&
+      needs.module-size-latest.result == 'success' &&
+      (needs.check-release-cache.outputs.cache-hit == 'true' || needs.module-size-release.result == 'success')
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.release-tag }}
+      CACHE_HIT: ${{ needs.check-release-cache.outputs.cache-hit }}
+      TEST_BRANCH: ${{ needs.prepare.outputs.test-branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TEST_BRANCH }}
+          sparse-checkout: |
+            scripts/ci/compare-module-sizes.mjs
+            scripts/ci/merge-module-size-results.mjs
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Download all latest shard results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: module-size-latest-shard-*
+          path: ./latest-shards
+          merge-multiple: true
+
+      - name: Merge latest shard results
+        run: |
+          node scripts/ci/merge-module-size-results.mjs ./latest-shards ./latest-results.json
+
+      # If cache hit, restore from cache
+      - name: Restore release results from cache
+        if: env.CACHE_HIT == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ./release-results.json
+          key: module-size-release-${{ env.RELEASE_TAG }}
+          fail-on-cache-miss: true
+
+      # If cache miss, download artifacts and merge
+      - name: Download all release shard results
+        if: env.CACHE_HIT != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: module-size-release-shard-*
+          path: ./release-shards
+          merge-multiple: true
+
+      - name: Merge release shard results
+        if: env.CACHE_HIT != 'true'
+        run: |
+          node scripts/ci/merge-module-size-results.mjs ./release-shards ./release-results.json
+
+      - name: Compare module sizes
+        run: |
+          node scripts/ci/compare-module-sizes.mjs \
+            ./release-results.json \
+            ./latest-results.json \
+            ./comparison-report.md
+
+      - name: Output report to summary
+        run: |
+          echo "# Module Size Comparison: \`${{ env.TEST_BRANCH }}\` vs \`${{ env.RELEASE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat ./comparison-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload comparison report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-size-vs-release-${{ env.RELEASE_TAG }}
+          path: ./comparison-report.md
+          retention-days: 90
+
+  # Report failure
+  report-failure:
+    name: Report Failure
+    runs-on: ubuntu-latest
+    needs: [prepare, check-release-cache, module-size-latest, module-size-release, compare-and-report]
+    if: |
+      always() &&
+      needs.compare-and-report.result == 'skipped'
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.release-tag }}
+      TEST_BRANCH: ${{ needs.prepare.outputs.test-branch }}
+      LATEST_RESULT: ${{ needs.module-size-latest.result }}
+      RELEASE_RESULT: ${{ needs.module-size-release.result }}
+      CACHE_HIT: ${{ needs.check-release-cache.outputs.cache-hit }}
+    steps:
+      - name: Report failure
+        run: |
+          if [[ "$LATEST_RESULT" != "success" ]]; then
+            REASON="$TEST_BRANCH branch module size tests failed ($LATEST_RESULT)"
+          elif [[ "$CACHE_HIT" != "true" && "$RELEASE_RESULT" != "success" ]]; then
+            REASON="Release $RELEASE_TAG module size tests failed ($RELEASE_RESULT)"
+          else
+            REASON="Unknown failure"
+          fi
+
+          echo "# Module Size Comparison Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test branch:** $TEST_BRANCH" >> $GITHUB_STEP_SUMMARY
+          echo "**Release tag:** $RELEASE_TAG" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** $REASON" >> $GITHUB_STEP_SUMMARY
+
+          echo "::error::Module size comparison failed: $REASON"
+          exit 1

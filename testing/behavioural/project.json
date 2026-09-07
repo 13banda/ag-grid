@@ -10,13 +10,47 @@
         "cwd": "{projectRoot}"
       }
     },
+    "build:test": {
+      "dependsOn": ["^build:types"]
+    },
     "test": {
-      "executor": "@nx/vite:test",
+      "command": "npx vitest run",
+      "dependsOn": ["build:test"],
+      "outputs": ["{workspaceRoot}/reports/ag-behavioural-testing.xml"],
       "options": {
-        "config": "{projectRoot}/vitest.config.ts",
-        "reporters": ["default"]
+        "cwd": "{projectRoot}",
+        "config": "vitest.config.ts"
+      },
+      "configurations": {
+        "ci": {
+          "outputFile": "../../reports/ag-behavioural-testing.xml",
+          "reporters": ["junit"]
+        },
+        "watch": {
+          "watch": true
+        },
+        "run": {
+          "watch": false
+        },
+        "update": {
+          "update": true
+        }
+      }
+    },
+    "benchmark": {
+      "command": "vitest bench --run",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "configurations": {
+        "watch": {
+          "watch": true
+        },
+        "update": {
+          "update": true
+        }
       }
     }
   },
-  "tags": ["test", "module"]
+  "tags": ["test", "module", "sharding"]
 }

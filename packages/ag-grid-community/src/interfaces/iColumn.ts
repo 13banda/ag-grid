@@ -1,8 +1,15 @@
+import type { IEventEmitter } from 'ag-stack';
+
 import type { AgProvidedColumnGroupEvent } from '../entities/agProvidedColumnGroup';
-import type { AbstractColDef, ColDef, ColGroupDef, IAggFunc, SortDirection } from '../entities/colDef';
+import type { AbstractColDef, ColAggFunc, ColDef, ColGroupDef, HeaderLocation } from '../entities/colDef';
+import type {
+    ShowValuesAsDefResolved,
+    ShowValuesAsResolved,
+    ShowValuesAsResult,
+} from '../entities/colDef-showValuesAs';
 import type { ColumnEvent } from '../events';
 import type { BrandedType } from '../interfaces/brandedType';
-import type { IEventEmitter } from './iEventEmitter';
+import type { SortDef, SortDirection } from '../interfaces/iSort';
 import type { IRowNode } from './iRowNode';
 
 export type HeaderColumnId = BrandedType<string, 'HeaderColumnId'>;
@@ -73,6 +80,8 @@ export type ColumnEventName =
     | 'headerHighlightChanged'
     | 'sortChanged'
     | 'colDefChanged'
+    | 'headerNameChanged'
+    | 'formulaRefChanged'
     | 'menuVisibleChanged'
     | 'columnRowGroupChanged'
     | 'columnPivotChanged'
@@ -87,9 +96,7 @@ export enum ColumnHighlightPosition {
 }
 
 export interface Column<TValue = any>
-    extends IHeaderColumn<TValue, ColumnEventName>,
-        IProvidedColumn,
-        IEventEmitter<ColumnEventName> {
+    extends IHeaderColumn<TValue, ColumnEventName>, IProvidedColumn, IEventEmitter<ColumnEventName> {
     /**
      * Returns the column definition provided by the application.
      * This may not be correct, as items can be superseded by default column options.
@@ -153,8 +160,15 @@ export interface Column<TValue = any>
     /** Returns `true` if a menu is visible for this column. */
     isMenuVisible(): boolean;
 
-    /** If sorting is active, returns the sort direction e.g. `'asc'` or `'desc'`. */
+    /**
+     * If sorting is active, returns the sort direction e.g. `'asc'` or `'desc'`.
+     *
+     * -     **Prefer `getSortDef`**
+     */
     getSort(): SortDirection | undefined;
+
+    /** If sorting is active, returns the sort definition. */
+    getSortDef(): SortDef | null;
 
     /** Returns `true` if sorting is enabled for this column via the `sortable` property. */
     isSortable(): boolean;
@@ -175,7 +189,16 @@ export interface Column<TValue = any>
     getSortIndex(): number | null | undefined;
 
     /** If aggregation is set for the column, returns the aggregation function. */
-    getAggFunc(): string | IAggFunc | null | undefined;
+    getAggFunc(): ColAggFunc;
+
+    /** The active "Show Values As" mode for the column (`.type` is the mode name), or `null` if none.
+     *  `TOut` is the transformed output type. The available modes are on {@link getShowValuesAsDef}. */
+    getShowValuesAs<TOut extends ShowValuesAsResult = any>(): ShowValuesAsResolved<any, TValue, TOut> | null;
+
+    /** The column's resolved "Show Values As" config — every available mode plus the default precision — or
+     *  `null` if the column has none. Not parameterised by output type: each mode has its own. The active mode
+     *  is {@link getShowValuesAs}. */
+    getShowValuesAsDef(): ShowValuesAsDefResolved<any, TValue> | null;
 
     /** @deprecated v32 Use col.getLeft() + col.getActualWidth() instead. */
     getRight(): number;
@@ -220,6 +243,10 @@ export interface Column<TValue = any>
      * Equivalent: `getId`, `getUniqueId` */
     getColId(): string;
 
+    /** Returns this column's resolved display name — the header text after any `headerValueGetter` / locale
+     *  resolution for `location` (default `'columnDrop'`), falling back to the colDef `headerName`, then the colId. */
+    getDisplayName(location?: HeaderLocation): string;
+
     /** Returns the auto header height. */
     getAutoHeaderHeight(): number | null;
 
@@ -262,6 +289,9 @@ export interface Column<TValue = any>
     /** Returns `true` if this column can be used as a row group column. */
     isAllowRowGroup(): boolean;
 
+    /** Returns `true` if formulas are permitted for this column. */
+    isAllowFormula(): boolean;
+
     /** isColumn is always `true`. Used to distinguish between columns and column groups.  */
     isColumn: true;
 }
@@ -272,6 +302,10 @@ export type AgColumnGroupEvent = 'leftChanged' | 'displayedChildrenChanged';
 export interface ColumnGroup<TValue = any> extends IHeaderColumn<TValue, AgColumnGroupEvent> {
     /** Returns the group column id. */
     getGroupId(): string;
+
+    /** Returns this group's resolved display name for `location` (default `'columnDrop'`), falling back to the
+     *  colGroupDef `headerName`, then the group id. */
+    getDisplayName(location?: HeaderLocation): string;
 
     /** @deprecated v32 Internal method no longer to be exposed on Column interface. */
     getPartId(): number;

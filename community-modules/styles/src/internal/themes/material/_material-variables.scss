@@ -22,9 +22,13 @@
     --ag-range-selection-background-color-2: rgba(122, 134, 203, 0.19);
     --ag-range-selection-background-color-3: rgba(122, 134, 203, 0.27);
     --ag-range-selection-background-color-4: rgba(122, 134, 203, 0.34);
+    --ag-row-numbers-selected-color: color-mix(in srgb, transparent, var(--ag-material-accent-color) 50%);
+    --ag-calculated-column-highlight-color: color-mix(in srgb, transparent, var(--ag-material-accent-color) 12%);
+    --ag-column-header-edit-highlight-color: color-mix(in srgb, transparent, var(--ag-material-accent-color) 12%);
     --ag-range-selection-highlight-color: #fce4ec;
     --ag-row-hover-color: #fafafa;
     --ag-column-hover-color: #fafafa;
+    --ag-icon-button-hover-background-color: color-mix(in srgb, transparent, var(--ag-foreground-color) 6%);
     --ag-control-panel-background-color: #fafafa;
     --ag-selected-row-background-color: rgba(33, 150, 243, 0.3);
     --ag-checkbox-unchecked-color: #333;
@@ -34,6 +38,15 @@
     --ag-advanced-filter-column-pill-color: #a6e194;
     --ag-advanced-filter-option-pill-color: #f3c08b;
     --ag-advanced-filter-value-pill-color: #85c0e4;
+    --ag-find-match-color: var(--ag-foreground-color);
+    --ag-find-match-background-color: #ffff00;
+    --ag-find-active-match-color: var(--ag-foreground-color);
+    --ag-find-active-match-background-color: #ffa500;
+    --ag-filter-panel-apply-button-color: var(--ag-material-primary-color);
+    --ag-filter-panel-apply-button-background-color: transparent;
+
+    --ag-column-panel-apply-button-color: var(--ag-material-primary-color);
+    --ag-column-panel-apply-button-background-color: transparent;
 
     // derived colours (no color blending)
     --ag-range-selection-border-color: var(--ag-material-primary-color);
@@ -49,6 +62,7 @@
     --ag-icon-size: 18px;
     --ag-header-height: calc(var(--ag-grid-size) * 7);
     --ag-row-height: calc(var(--ag-grid-size) * 6);
+    --ag-auto-height-min-body-height: 150px;
     --ag-cell-horizontal-padding: calc(var(--ag-grid-size) * 3);
     --ag-list-item-height: calc(var(--ag-grid-size) * 4);
     --ag-row-group-indent-size: calc(var(--ag-grid-size) * 3 + var(--ag-icon-size));
@@ -61,8 +75,9 @@
     --ag-widget-vertical-spacing: calc(var(--ag-grid-size) * 1.75);
 
     // Fonts
-    --ag-font-family: Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen-Sans, Ubuntu, Cantarell,
-        'Helvetica Neue', sans-serif;
+    --ag-font-family:
+        Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue',
+        sans-serif;
     --ag-font-size: 13px;
     --ag-icon-font-family: agGridMaterial;
 
@@ -73,11 +88,14 @@
     --ag-input-focus-border-color: var(--ag-material-primary-color);
 
     --ag-input-focus-box-shadow: 0 0 0 5px rgba(32, 33, 36, 0.122);
+    --ag-input-error-focus-box-shadow: 0 0 0 5px
+        color-mix(in srgb, var(--ag-background-color), var(--ag-invalid-color) 0.5%);
 
-    --ag-card-shadow: 0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14),
-        0 1px 5px 0 rgba(0, 0, 0, 0.12);
+    --ag-card-shadow:
+        0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12);
     --ag-card-radius: 2px;
     --ag-invalid-color: #e02525;
+    --ag-note-indicator-color: var(--ag-material-accent-color);
 }
 
 @mixin -dark-vars {
@@ -85,11 +103,14 @@
     --ag-material-accent-color: #bb86fcff;
 
     --ag-range-selection-border-color: var(--ag-material-accent-color);
+    --ag-find-match-color: var(--ag-background-color);
+    --ag-find-active-match-color: var(--ag-background-color);
 
     --ag-background-color: #121212ff;
     --ag-foreground-color: #ffffffff;
     --ag-data-color: #f5f5f5ff;
     --ag-header-cell-hover-background-color: #000000ff;
+    --ag-icon-button-hover-background-color: #000000ff;
     --ag-advanced-filter-join-pill-color: #7a3a37ff;
     --ag-advanced-filter-column-pill-color: #355f2dff;
     --ag-advanced-filter-option-pill-color: #5a3168ff;
@@ -126,6 +147,23 @@
     --ag-value-change-delta-down-color: #e53935ff;
     --ag-menu-background-color: #2c2c2cff;
     --ag-row-loading-skeleton-effect-color: #{color.change(#cacbcc, $alpha: 0.4)};
+
+    --ag-cell-batch-edit-text-color: #f3d0b3;
+
+    --ag-formula-token-1-color: #4da3e5;
+    --ag-formula-token-1-background-color: rgb(77 163 229 / 16%);
+    --ag-formula-token-2-color: #f55864;
+    --ag-formula-token-2-background-color: rgb(245 88 100 / 16%);
+    --ag-formula-token-3-color: #b688f2;
+    --ag-formula-token-3-background-color: rgb(182 136 242 / 16%);
+    --ag-formula-token-4-color: #24bb4a;
+    --ag-formula-token-4-background-color: rgb(36 187 74 / 16%);
+    --ag-formula-token-5-color: #e772ba;
+    --ag-formula-token-5-background-color: rgb(231 114 186 / 16%);
+    --ag-formula-token-6-color: #f69b5f;
+    --ag-formula-token-6-background-color: rgb(246 155 95 / 16%);
+    --ag-formula-token-7-color: #a3e6ff;
+    --ag-formula-token-7-background-color: rgb(163 230 255 / 16%);
 
     color-scheme: dark;
 }

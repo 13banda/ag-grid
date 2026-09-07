@@ -1,16 +1,14 @@
 import type { Group } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { accumulateData } from '../miniChartHelpers';
 import { MiniChartWithPolarAxes } from '../miniChartWithPolarAxes';
 
-export class MiniRadialBar extends MiniChartWithPolarAxes {
-    static chartType: ChartType = 'radialBar';
+export class MiniRadialBarClass extends MiniChartWithPolarAxes {
     private readonly series: Group[];
 
-    private data = [
+    private readonly data = [
         [6, 8, 10],
         [4, 4, 3],
         [5, 4, 2],
@@ -32,7 +30,7 @@ export class MiniRadialBar extends MiniChartWithPolarAxes {
         const innerRadiusRatio = 0.4;
         const innerRadius = radius * innerRadiusRatio;
 
-        const radiusScale = new _Scene.BandScale();
+        const radiusScale = new _Scene.CategoryScale();
         radiusScale.domain = data[0].map((_, index) => index);
         radiusScale.range = [innerRadius, radius];
         radiusScale.paddingInner = 0.5;
@@ -91,3 +89,8 @@ export class MiniRadialBar extends MiniChartWithPolarAxes {
         });
     }
 }
+
+export const MiniRadialBar: MiniChartSelector = {
+    chartType: 'radialBar',
+    miniChart: MiniRadialBarClass,
+};

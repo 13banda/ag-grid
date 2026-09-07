@@ -77,7 +77,7 @@ Instead use `useMemo` or `useState` to ensure a consistent reference is maintain
 ```jsx
 const App = () => {
     // GOOD - only one instance created
-    const defaultColDef = useMemo( ()=> { filter: true }, []);
+    const defaultColDef = useMemo( ()=> ({ filter: true }), []);
 
     return <AgGridReact defaultColDef={defaultColDef} />;
 };
@@ -93,7 +93,7 @@ const App = () => {
     const rowBuffer = 0;
 
     return (
-        <AgGridReact 
+        <AgGridReact
             // GOOD
             rowBuffer={rowBuffer}
 
@@ -136,7 +136,7 @@ const App = () => {
     const [clickedCount, setClickedCount] = useState(0);
 
     // GOOD callback, no hook, no stale data
-    const onCellClicked = () => setClickedRow(clickedCount++);
+    const onCellClicked = () => setClickedCount(clickedCount + 1);
 
     // BAD callback - stale data, dependency missing, will ALWAYS print 0
     const onCellValueChanged = useCallback( ()=> {
@@ -148,8 +148,8 @@ const App = () => {
         console.log(`number of clicks is ${clickedCount}`);
     }, [clickedCount]);
 
-    return <AgGridReact 
-                onCellClicked={onCellClicked} 
+    return <AgGridReact
+                onCellClicked={onCellClicked}
                 onCellValueChanged={onCellValueChanged}
                 onFilterOpened={onFilterOpened}
             />;
@@ -168,7 +168,7 @@ const App = () => {
 
         // reference the Cell Renderer above
         { field: 'make', cellRenderer: MyCellRenderer },
-        
+
         // or put inline
         { field: 'model', cellRenderer: p => <span>{p.value}</span> },
 

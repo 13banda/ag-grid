@@ -1,0 +1,30 @@
+import { TestGridsManager } from 'ag-test-utils';
+
+import { CellStyleModule } from 'ag-grid-community';
+import { MasterDetailModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+import { getTestGenerator } from '../../../util';
+import { rowModelGridOptions } from '../../grid-config';
+import {
+    getGridOptions_masterDetail,
+    getTestConcerns_masterDetail,
+    groupCellSnapshotter,
+} from '../../grouping-test-utils';
+
+describe('ag-grid groupCellRenderer', () => {
+    const gridsManager = new TestGridsManager({ modules: [CellStyleModule, MasterDetailModule, RowGroupingModule] });
+    const createTests = getTestGenerator(gridsManager, groupCellSnapshotter);
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    const gridOptions = rowModelGridOptions.csrm;
+    describe('with rowModelType=clientSide - with master detail', () => {
+        createTests(getTestConcerns_masterDetail(gridOptions), getGridOptions_masterDetail(gridOptions));
+    });
+});

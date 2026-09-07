@@ -1,6 +1,7 @@
 import { AgChartsEnterpriseModule } from 'ag-charts-enterprise';
 
 import type {
+    DefaultChartMenuItem,
     FirstDataRenderedEvent,
     GetChartMenuItemsParams,
     GridApi,
@@ -13,12 +14,17 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, IntegratedChartsModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextFilterModule,
@@ -27,7 +33,6 @@ ModuleRegistry.registerModules([
     IntegratedChartsModule.with(AgChartsEnterpriseModule),
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -50,12 +55,20 @@ const gridOptions: GridOptions = {
     onFirstDataRendered,
 };
 
-function chartMenuItems(params: GetChartMenuItemsParams): (string | MenuItemDef)[] {
+function chartMenuItems(params: GetChartMenuItemsParams): (DefaultChartMenuItem | MenuItemDef)[] {
     // Remove edit chart and advanced settings.
     // `defaultItems` will automatically update the link/unlink options based on the current state.
-    return params.defaultItems.filter((item: string) => {
+    const items: (DefaultChartMenuItem | MenuItemDef)[] = params.defaultItems.filter((item: string) => {
         return item !== 'chartEdit' && item !== 'chartAdvancedSettings';
     });
+    items.push({
+        name: 'Close Chart',
+        action: () => {
+            params.api.getChartRef(params.chartId)?.destroyChart();
+        },
+    });
+
+    return items;
 }
 
 function onFirstDataRendered(params: FirstDataRenderedEvent) {

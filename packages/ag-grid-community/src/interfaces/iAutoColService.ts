@@ -1,20 +1,15 @@
-import type { ColKey, ColumnCollections } from '../columns/columnModel';
 import type { AgColumn } from '../entities/agColumn';
+import type { GridOptions } from '../entities/gridOptions';
 import type { ColumnEventType } from '../events';
+import type { PropertyChangedEvent, PropertyValueChangedEvent } from '../gridOptionsService';
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IAutoColService {
-    autoCols: ColumnCollections | null;
+    /** Generated auto-group columns. Flat-array — empty when no auto-cols are active. */
+    columns: AgColumn[];
 
-    addAutoCols(cols: ColumnCollections): void;
+    /** Sync internal cols against current row-group state. */
+    refreshCols(source: ColumnEventType): AgColumn[] | null;
 
-    createAutoCols(
-        cols: ColumnCollections,
-        updateOrders: (callback: (cols: AgColumn[] | null) => AgColumn[] | null) => void
-    ): void;
-
-    updateAutoCols(source: ColumnEventType): void;
-
-    getAutoCol(key: ColKey): AgColumn | null;
-
-    getAutoCols(): AgColumn[] | null;
+    updateColumns(event: PropertyChangedEvent | PropertyValueChangedEvent<keyof GridOptions>): void;
 }

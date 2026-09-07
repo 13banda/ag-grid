@@ -1,4 +1,3 @@
-import React from 'react';
 import type { FunctionComponent } from 'react';
 
 import styles from './StyleGuide.module.scss';
@@ -30,6 +29,30 @@ export const Inputs: FunctionComponent = () => {
                     <div>
                         <label>Disabled:</label>
                         <input className="disabled" type="text" defaultValue="joe@ag-grid.com" />
+                    </div>
+                </div>
+
+                <div className={styles.textareaList}>
+                    <div>
+                        <label>Placeholder:</label>
+                        <textarea placeholder="Enter message" />
+                    </div>
+                    <div>
+                        <label>Filled:</label>
+                        <textarea defaultValue="Hello, this is a message." />
+                    </div>
+                    <div>
+                        <label>Hover:</label>
+                        <textarea className="hover" defaultValue="Hello, this is a message." />
+                    </div>
+                    <div>
+                        <label>Focused:</label>
+                        <textarea className="focus" defaultValue="Hello, this is a message." />
+                    </div>
+
+                    <div>
+                        <label>Disabled:</label>
+                        <textarea className="disabled" defaultValue="Hello, this is a message." disabled />
                     </div>
                 </div>
 
@@ -138,6 +161,156 @@ export const Inputs: FunctionComponent = () => {
                             <option>Option two</option>
                             <option>Option three</option>
                         </select>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Input Fields</h2>
+            <h3>Stacked</h3>
+            <div className={styles.inputsOuter}>
+                <div className={styles.textInputGroup}>
+                    <code>.input-field</code>
+                    <div className={styles.textInput}>
+                        <div className="input-field">
+                            <label>Text:</label>
+                            <input type="text" placeholder="Enter email" />
+                        </div>
+                        <div className="input-field">
+                            <label>Textarea:</label>
+                            <textarea placeholder="Enquiry message" />
+                        </div>
+                        <div className="input-field">
+                            <label>Checkbox:</label>
+                            <input type="checkbox" />
+                        </div>
+                        <div className="input-field">
+                            <label>Radio:</label>
+                            <input type="radio" />
+                        </div>
+                        <div className="input-field">
+                            <label>Switch:</label>
+                            <input type="checkbox" className="switch" />
+                        </div>
+
+                        <div className="input-field">
+                            <label>Select:</label>
+                            <select>
+                                <option>Select</option>
+                                <option>Option one</option>
+                                <option>Option two</option>
+                                <option>Option three</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div className={styles.textInputGroup}>
+                    <code>.input-field.input-error</code>
+                    <div className={styles.textInput}>
+                        <div className="input-field input-error">
+                            <label>Text:</label>
+                            <input type="text" placeholder="Enter email" />
+                        </div>
+                        <div className="input-field input-error">
+                            <label>Textarea:</label>
+                            <textarea placeholder="Enquiry message" />
+                        </div>
+                        <div className="input-field input-error">
+                            <label>Checkbox:</label>
+                            <input type="checkbox" />
+                        </div>
+                        <div className="input-field input-error">
+                            <label>Radio:</label>
+                            <input type="radio" />
+                        </div>
+                        <div className="input-field input-error">
+                            <label>Switch:</label>
+                            <input type="checkbox" className="switch" />
+                        </div>
+
+                        <div className="input-field input-error">
+                            <label>Select:</label>
+                            <select>
+                                <option>Select</option>
+                                <option>Option one</option>
+                                <option>Option two</option>
+                                <option>Option three</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Inline</h3>
+            <div className={styles.inputsOuter}>
+                <div className={styles.textInputGroupStacked}>
+                    <code>.input-field.inline</code>
+                    <div className={styles.textInput}>
+                        <div className="input-field inline">
+                            <label>Text:</label>
+                            <input type="text" placeholder="Enter email" />
+                        </div>
+                        <div className="input-field inline">
+                            <label>Textarea:</label>
+                            <textarea placeholder="Enquiry message" />
+                        </div>
+                        <div className="input-field inline">
+                            <label>Checkbox:</label>
+                            <input type="checkbox" />
+                        </div>
+                        <div className="input-field inline">
+                            <label>Radio:</label>
+                            <input type="radio" />
+                        </div>
+                        <div className="input-field inline">
+                            <label>Switch:</label>
+                            <input type="checkbox" className="switch" />
+                        </div>
+
+                        <div className="input-field inline">
+                            <label>Select:</label>
+                            <select>
+                                <option>Select</option>
+                                <option>Option one</option>
+                                <option>Option two</option>
+                                <option>Option three</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.textInputGroupStacked}>
+                    <code>.input-field.inline.input-error</code>
+                    <div className={styles.textInput}>
+                        <div className="input-field inline input-error">
+                            <label>Text:</label>
+                            <input type="text" placeholder="Enter email" />
+                        </div>
+                        <div className="input-field inline input-error">
+                            <label>Textarea:</label>
+                            <textarea placeholder="Enquiry message" />
+                        </div>
+                        <div className="input-field inline input-error">
+                            <label>Checkbox:</label>
+                            <input type="checkbox" />
+                        </div>
+                        <div className="input-field inline input-error">
+                            <label>Radio:</label>
+                            <input type="radio" />
+                        </div>
+                        <div className="input-field inline input-error">
+                            <label>Switch:</label>
+                            <input type="checkbox" className="switch" />
+                        </div>
+
+                        <div className="input-field inline input-error">
+                            <label>Select:</label>
+                            <select>
+                                <option>Select</option>
+                                <option>Option one</option>
+                                <option>Option two</option>
+                                <option>Option three</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

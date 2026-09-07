@@ -14,8 +14,16 @@ export const DEFAULT_INTERNAL_FRAMEWORK: InternalFramework = 'reactFunctional';
 
 export const USE_PACKAGES = true; // process.env?.USE_PACKAGES ?? false;
 
+export const ALL_INTERNAL_FRAMEWORKS: readonly InternalFramework[] = [
+    'vanilla',
+    'typescript',
+    'reactFunctional',
+    'reactFunctionalTs',
+    'angular',
+    'vue3',
+];
 export const INTERNAL_FRAMEWORKS: readonly InternalFramework[] = USE_PACKAGES
-    ? ['vanilla', 'typescript', 'reactFunctional', 'reactFunctionalTs', 'angular', 'vue3']
+    ? ALL_INTERNAL_FRAMEWORKS
     : (['typescript', 'reactFunctional', 'reactFunctionalTs', 'angular', 'vue3'] as const);
 
 export const FRAMEWORK_DISPLAY_TEXT: Record<Framework, string> = {
@@ -27,8 +35,13 @@ export const FRAMEWORK_DISPLAY_TEXT: Record<Framework, string> = {
 
 export const DISABLE_EXAMPLE_RUNNER = isTruthy(import.meta.env?.DISABLE_EXAMPLE_RUNNER);
 
+// Turn off per-page markdown (`.md`) generation for LLMs. When set, no `.md`
+// routes are emitted and the docs pages omit the markdown affordances
+export const DISABLE_MARKDOWN_DOCS = isTruthy(import.meta.env?.DISABLE_MARKDOWN_DOCS);
+
 export const agChartsVersion = gridEnterprisePackageJson.optionalDependencies['ag-charts-enterprise'];
 export const agGridVersion = import.meta.env?.PUBLIC_PACKAGE_VERSION ?? corePackageJson.version;
+export const agStackVersion = agGridVersion;
 export const agGridEnterpriseVersion = agGridVersion;
 export const agGridReactVersion = agGridVersion;
 export const agGridAngularVersion = agGridVersion;
@@ -40,6 +53,7 @@ export const agLibraryVersion = agGridVersion;
 export const NPM_CDN = 'https://cdn.jsdelivr.net/npm';
 export const PUBLISHED_URLS = {
     '@ag-grid-community/styles': `${NPM_CDN}/@ag-grid-community/styles@${agGridVersion}`,
+    'ag-stack': `${NPM_CDN}/ag-stack@${agStackVersion}`,
     'ag-grid-community': `${NPM_CDN}/ag-grid-community@${agGridVersion}`,
     'ag-grid-enterprise': `${NPM_CDN}/ag-grid-enterprise@${agGridEnterpriseVersion}/`,
     'ag-grid-angular': `${NPM_CDN}/ag-grid-angular@${agGridAngularVersion}/`,
@@ -51,6 +65,8 @@ export const PUBLISHED_URLS = {
 // also need to update plugins/ag-grid-generate-example-files/src/executors/generate/generator/constants.ts if this value is changed
 export const integratedChartsUsesChartsEnterprise = false;
 export const PUBLISHED_UMD_URLS = {
+    'ag-charts-core': `${NPM_CDN}/ag-charts-core@${agChartsVersion}/dist/umd/ag-charts-core.min.js`,
+    'ag-stack': `${NPM_CDN}/ag-stack@${agGridVersion}/dist/ag-stack.min.js`,
     'ag-grid-community': `${NPM_CDN}/ag-grid-community@${agGridVersion}/dist/ag-grid-community.min.js`,
     'ag-grid-enterprise': `${NPM_CDN}/ag-grid-enterprise@${agGridVersion}/dist/ag-grid-enterprise.min.js`,
     'ag-charts-community': `${NPM_CDN}/ag-charts-community@${agChartsVersion}/dist/umd/ag-charts-community.min.js`,
@@ -84,10 +100,17 @@ export const STAGING_SITE_URL = 'https://grid-staging.ag-grid.com';
 export const PRODUCTION_SITE_URLS = ['https://ag-grid.com', 'https://www.ag-grid.com'];
 export const USE_PUBLISHED_PACKAGES = isTruthy(import.meta.env?.PUBLIC_USE_PUBLISHED_PACKAGES);
 
-/**
- * Enable debug pages to be built
- */
-export const ENABLE_GENERATE_DEBUG_PAGES = import.meta.env?.ENABLE_GENERATE_DEBUG_PAGES;
+export const URL_CONFIG: Record<'local' | 'staging' | 'production', { hosts: string[]; baseUrl?: string }> = {
+    local: {
+        hosts: ['localhost:4610'],
+    },
+    staging: {
+        hosts: ['grid-staging.ag-grid.com'],
+    },
+    production: {
+        hosts: ['www.ag-grid.com', 'ag-grid.com'],
+    },
+};
 
 /**
  * Show debug logs
@@ -105,18 +128,33 @@ export const SITE_BASE_URL_SEGMENTS = SITE_BASE_URL?.split('/').filter(Boolean).
 export const FILES_BASE_PATH = '/files';
 
 /**
+ * URL path used to redirect to the user selected framework
+ *
+ * Useful when the framework is not known eg, root pages
+ */
+export const FRAMEWORK_REDIRECT_PATH = 'data-grid';
+
+/**
  * Charts robots disallow json url for merging with grid
  */
 export const CHARTS_ROBOTS_DISALLOW_JSON_URL = import.meta.env?.CHARTS_ROBOTS_DISALLOW_JSON_URL;
 
+/**
+ * Studio robots disallow json url for merging with grid
+ */
+export const STUDIO_ROBOTS_DISALLOW_JSON_URL = import.meta.env?.STUDIO_ROBOTS_DISALLOW_JSON_URL;
+
 export const PRODUCTION_CHARTS_SITE_URL = 'https://www.ag-grid.com/charts';
 export const LEGACY_CHARTS_SITE_URL = 'https://charts.ag-grid.com';
 
+export const LIBRARY = 'grid';
 /*
  * Charts URL
  */
 function getChartsUrl() {
-    if (SITE_URL == null) return;
+    if (SITE_URL == null) {
+        return;
+    }
 
     if (SITE_URL?.includes('localhost')) {
         return 'https://localhost:4600';
@@ -130,7 +168,9 @@ export const CHARTS_SITE_URL = getChartsUrl();
 export const PRODUCTION_GRID_SITE_URL = 'https://www.ag-grid.com';
 export const GRID_ARCHIVE_BASE_URL = `${PRODUCTION_GRID_SITE_URL}/archive`;
 function calculateGridUrl() {
-    if (SITE_URL == null) return;
+    if (SITE_URL == null) {
+        return;
+    }
 
     if (SITE_URL?.includes('localhost')) {
         return SITE_URL; // NOTE: Will be different if this is on the charts website
@@ -141,3 +181,23 @@ function calculateGridUrl() {
 }
 
 export const GRID_URL = calculateGridUrl();
+
+export const PRODUCTION_STUDIO_SITE_URL = 'https://www.ag-grid.com/studio';
+
+export const LIVE_SITEMAP_URL = import.meta.env?.LIVE_SITEMAP_URL;
+
+export const EXAMPLE_RANDOM_SEED = 'AG Grid Random Seed';
+
+export const TRIAL_LICENCE_FORM_URL = import.meta.env?.PUBLIC_TRIAL_LICENCE_FORM_URL;
+
+export const EXAMPLE_STYLE_FILE_NAME = 'ag-example-styles.css';
+export const DEBUG_SCRIPT_FILE_NAME = 'ag-grid-debug.js';
+
+export const PRODUCTION_CHANGELOG_JSON_URL = 'https://www.ag-grid.com/changelog/changelog.json';
+
+export const ZI_FORM_ID = 'aad0527d-5af6-4263-8dcd-60f3ac998d5d';
+
+// Google Tag Manager
+export const PUBLIC_GTM_ID = import.meta.env?.PUBLIC_GTM_ID;
+export const PUBLIC_GTM_AUTH = import.meta.env?.PUBLIC_GTM_AUTH;
+export const PUBLIC_GTM_PREVIEW = import.meta.env?.PUBLIC_GTM_PREVIEW;

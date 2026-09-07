@@ -1,0 +1,89 @@
+name: setup-nx
+
+# Thin, config-only wrapper over the shared ./external/ag-shared/github/actions/setup-nx-core.
+# It declares ONLY this repo's layout literals (cache paths, node_modules clean globs, and the
+# two hashFiles() keys — which must be literal here because hashFiles() cannot take a runtime
+# input) and forwards every behavioural input to the shared core. Keep behaviour changes in the
+# core so they percolate to ag-charts / ag-studio via the ag-shared subrepo.
+
+inputs:
+    yarn_postinstall:
+        description: 'Always ensure yarn postinstall is run.'
+        required: false
+        default: 'true'
+        options:
+            - 'true'
+            - 'false'
+            - 'no-install'
+    fetch_base:
+        description: 'Shallow fetch latest branch.'
+        required: false
+        default: 'shallow'
+        options:
+            - 'shallow'
+            - 'full'
+            - 'skip'
+    nx_restore:
+        description: 'Restore Nx Cache.'
+        required: false
+        default: 'true'
+    base_ref:
+        description: 'Base branch/SHA for diff detection'
+        default: 'latest'
+        required: false
+    cache_mode:
+        description: 'Read/write mode for caches'
+        required: false
+        default: 'rw'
+        options:
+            - 'rw'
+            - 'ro'
+            - 'off'
+    free_disk_space:
+        description: 'Delete large preinstalled toolchains to reclaim root-partition space (avoids runner ENOSPC). Off by default: the delete is slow and unpredictable. Only set true on a job that actually exhausts disk.'
+        required: false
+        default: 'false'
+        options:
+            - 'true'
+            - 'false'
+    tidy_nx_cache:
+        description: 'Reset the Nx cache before a build when it exceeds a branch-type size threshold. Set false to skip the tidy step.'
+        required: false
+        default: 'true'
+        options:
+            - 'true'
+            - 'false'
+
+outputs:
+    base:
+        description: 'Base branch/SHA for diff detection'
+        value: ${{ steps.core.outputs.base }}
+    type:
+        description: 'Type of job execution detected'
+        value: ${{ steps.core.outputs.type }}
+
+runs:
+    using: 'composite'
+    steps:
+        - name: Setup Nx (shared core)
+          id: core
+          uses: ./external/ag-shared/github/actions/setup-nx-core
+          with:
+              yarn_postinstall: ${{ inputs.yarn_postinstall }}
+              fetch_base: ${{ inputs.fetch_base }}
+              nx_restore: ${{ inputs.nx_restore }}
+              base_ref: ${{ inputs.base_ref }}
+              cache_mode: ${{ inputs.cache_mode }}
+              free_disk_space: ${{ inputs.free_disk_space }}
+              tidy_nx_cache: ${{ inputs.tidy_nx_cache }}
+              node_modules_paths: |
+                  node_modules/
+                  packages/*/node_modules/
+                  plugins/*/node_modules/
+                  community-modules/*/node_modules/
+                  testing/*/node_modules/
+                  testing/public-recipes/*/node_modules/
+                  documentation/*/node_modules/
+                  external/*/node_modules/
+              node_modules_hash: ${{ hashFiles('yarn.lock','patches/*.patch', 'packages/*/package.json', 'plugins/*/package.json', 'community-modules/*/package.json', 'documentation/*/package.json', 'testing/*/package.json', 'testing/public-recipes/*/package.json', 'external/*/package.json') }}
+              nx_cache_hash: ${{ hashFiles('yarn.lock','patches/*.patch', 'packages/*/package.json', 'plugins/*/package.json', 'documentation/*/package.json', 'testing/*/package.json', 'community-modules/*/package.json') }}

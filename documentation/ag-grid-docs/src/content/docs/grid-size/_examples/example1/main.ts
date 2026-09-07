@@ -4,16 +4,16 @@ import {
     ColumnApiModule,
     ColumnAutoSizeModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    ColumnAutoSizeModule,
-    ColumnApiModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnAutoSizeModule, ColumnApiModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -36,25 +36,23 @@ const gridOptions: GridOptions<IOlympicData> = {
 
 function onGridSizeChanged(params: GridSizeChangedEvent) {
     // get the current grids width
-    const gridWidth = document.querySelector('.ag-body-viewport')!.clientWidth;
+    const gridWidth = document.querySelector('.ag-grid-viewport')!.clientWidth;
 
     // keep track of which columns to hide/show
     const columnsToShow = [];
     const columnsToHide = [];
 
-    // iterate over all columns (visible or not) and work out
-    // now many columns can fit (based on their minWidth)
+    // iterate over all columns (visible or not) in their current displayed order,
+    // so that hiding follows the order the user sees rather than the column definition order
     let totalColsWidth = 0;
-    const allColumns = params.api.getColumns();
-    if (allColumns && allColumns.length > 0) {
-        for (let i = 0; i < allColumns.length; i++) {
-            const column = allColumns[i];
-            totalColsWidth += column.getMinWidth();
-            if (totalColsWidth > gridWidth) {
-                columnsToHide.push(column.getColId());
-            } else {
-                columnsToShow.push(column.getColId());
-            }
+    const allColumns = params.api.getAllGridColumns();
+    for (let i = 0, len = allColumns.length; i < len; i++) {
+        const column = allColumns[i];
+        totalColsWidth += column.getMinWidth();
+        if (totalColsWidth > gridWidth) {
+            columnsToHide.push(column.getColId());
+        } else {
+            columnsToShow.push(column.getColId());
         }
     }
 

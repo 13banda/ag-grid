@@ -1,0 +1,98 @@
+name: 'Run Framework Example Tests'
+description: 'Run Framework Example Tests'
+inputs:
+  framework:
+    description: 'Framework to use'
+    required: true
+    default: 'invalid-framework'
+  browsers:
+    description: 'Broswers to run tests on: all / chromium'
+    required: true
+    default: 'chromium'
+  base_url:
+    description: 'Override base URL'
+    type: string
+    required: false
+    default: 'https://grid-staging.ag-grid.com/'
+  test_pattern:
+    description: 'Test pattern to run'
+    required: false
+    default: ''
+    
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 1
+
+    # These tests run Playwright against a remote deployed site (base_url), so they need
+    # node_modules for Playwright + the test specs, but NOT the example generators or
+    # setup-prompts. The `initialise` job warms the node_modules cache (rw); here we consume
+    # it read-only and skip postinstall. nx_restore stays on so the ag-grid-community build
+    # below is served from the Nx cache. The test harness (src/utils/grid/test-utils.ts)
+    # imports ag-grid-community at runtime, so its package output must exist.
+    - name: Setup
+      id: setup
+      uses: ./.github/actions/setup-nx
+      with:
+        cache_mode: ro
+        yarn_postinstall: 'false'
+        nx_restore: 'true'
+        tidy_nx_cache: 'false'
+
+    - name: Build ag-grid-community (for the test harness import)
+      shell: bash
+      run: yarn nx run-many -p ag-grid-community -t build:package build:types
+
+    # Restore the Playwright browser binaries warmed by the `initialise` job (all three
+    # browsers, so the key matches regardless of this job's browser set). OS libraries are not
+    # part of the cache, so on a hit we only run install-deps; on a miss (e.g. the warm cache
+    # was evicted) fall back to a full install so the job is still self-sufficient.
+    - name: Resolve Playwright version
+      id: pw
+      shell: bash
+      run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Playwright browsers
+      id: pw-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+    - name: Install Playwright browsers
+      shell: bash
+      working-directory: documentation/ag-grid-docs
+      env:
+        PW_BROWSERS: ${{ inputs.browsers == 'all' && 'chromium firefox webkit' || 'chromium' }}
+      # Bounded + retried via the shared wrapper (AG-18231): `install-deps` shells out to
+      # `apt-get update`, which has no timeout, so a stalled mirror used to hang the job until
+      # the 6-hour limit cancelled it. ${GITHUB_WORKSPACE} is needed because this step's
+      # working-directory is documentation/ag-grid-docs.
+      run: |
+        PW_INSTALL="${GITHUB_WORKSPACE}/scripts/ci/install-playwright.sh"
+        if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+          bash "${PW_INSTALL}" deps ${PW_BROWSERS}
+        else
+          bash "${PW_INSTALL}" full ${PW_BROWSERS}
+        fi
+
+    # Run Playwright directly via ./docs-e2e.sh (bypasses Nx) so we avoid the Nx target's
+    # dependsOn on ag-grid-community:build:types/build:package, which is unnecessary for
+    # tests that hit a remote deployed site.
+    - name: Run ${{ inputs.framework }} Examples
+      env:
+        CI: 'true'
+      shell: bash
+      run: ./docs-e2e.sh ${{ inputs.test_pattern }} --framework ${{ inputs.framework }} --url "${{ inputs.base_url || 'https://grid-staging.ag-grid.com/' }}" ${{ inputs.browsers == 'all' && '--all-browsers' || '' }} --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    
+    - name: Upload Test Report
+      id: upload-recipes-report
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-${{ inputs.framework }}-examples-${{ matrix.shardIndex }}-of-${{ matrix.shardTotal }}
+        path: reports/
+        retention-days: ${{env.DEFAULT_RETENTION_DAYS}}

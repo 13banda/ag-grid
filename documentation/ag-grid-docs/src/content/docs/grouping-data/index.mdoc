@@ -3,6 +3,7 @@ title: "Row Grouping - Grouping Data"
 description: "Enable row grouping in the $framework Data Grid to allow rows to be grouped by columns. Define row groups, use the Grid API, or use the UI to group rows."
 enterprise: true
 ---
+
 Enable grouping on a column to group rows by equivalent values.
 
 ## Enabling Row Grouping
@@ -13,6 +14,7 @@ Parent rows are then introduced for each unique value in that column, containing
 {% gridExampleRunner title="Basic Grouping" name="basic-grouping" /%}
 
 The example above uses the following configuration to group rows by their `country` values:
+
 ```{% frameworkTransform=true %}
 const gridOptions = {
     columnDefs: [
@@ -30,6 +32,7 @@ This can be overridden with a custom order by providing the `rowGroupIndex` prop
 {% gridExampleRunner title="Grouping by Multiple Columns" name="row-group-index" /%}
 
 The example above demonstrates the following configuration for grouping rows by `year` first, and `country` second:
+
 ```{% frameworkTransform=true %}
 const gridOptions = {
     columnDefs: [
@@ -53,19 +56,69 @@ and `name` properties.
 {% gridExampleRunner title="Grouping by Object Data" name="grouping-object-data" /%}
 
 This demonstrates the following configuration for grouping rows by the `athlete` objects by their `id` property:
+
 ```{% frameworkTransform=true %}
 const gridOptions = {
     columnDefs: [
         {
             field: 'athlete',
             rowGroup: true,
-            keyCreator: (params) => params.value.id,
-            valueFormatter: (params) => params.value.name,
+            // params.value is undefined for group rows, so check before reading `id`/`name`
+            keyCreator: (params) => params.value?.id ?? '',
+            valueFormatter: (params) => params.value?.name ?? '',
         },
         // ...other column definitions
     ],
 };
 ```
+
+`keyCreator` and `valueFormatter` are called for group rows as well as leaf rows. A group row has no row `data`
+of its own, so `params.value` is `undefined` there even for the grouped column itself. See
+[TypeScript Generics](./typescript-generics/) for how typing these callbacks' params surfaces this case at
+compile time.
+
+## Grouping by Dates and Times
+
+When grouping by date/time values, the grid can optionally group by components of the date/time.
+
+To enable grouping by parts of the date for a particular column, use the `groupHierarchy` property of the [Column Definition](./column-properties/#reference-grouping-groupHierarchy).
+
+{% apiDocumentation source="column-properties/properties.json" section="grouping" names=["groupHierarchy"] /%}
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    columnDefs: [
+        {
+            field: 'date',
+            rowGroup: true,
+            groupHierarchy: ['year', 'month']
+        },
+        // ...other column definitions
+    ],
+};
+```
+
+This snippet is illustrated in the example below.
+
+{% gridExampleRunner title="Grouping by Dates and Times" name="grouping-date-time" /%}
+
+{% note %}
+By default, the grid requires datetime values to be formatted using the ISO-8601 format in order to be correctly parsed into their components.
+
+To use other date formats, provide a custom [Cell Data Type Definition](./cell-data-types/#providing-custom-cell-data-types) for the `dateString` and/or `dateTimeString` data types.
+{% /note %}
+
+## Defining Custom Grouping Hierarchies
+
+When using `groupHierarchy` as demonstrated in [Grouping by Dates and Times](./grouping-data/#grouping-by-dates-and-times), the grid provides built-in support for several components of a date/time value.
+
+Users may instead provide definitions of their own components via the `groupHierarchyConfig` grid option. These definitions may then be used in the `groupHierarchy` property of a column definition.
+
+{% apiDocumentation source="grid-options/properties.json" section="rowGrouping" names=["groupHierarchyConfig"] /%}
+
+The following example illustrates this by defining a custom grouping hierarchy component that allows grouping by the week number:
+
+{% gridExampleRunner title="Grouping by Dates and Times" name="grouping-custom-date-time" /%}
 
 ## Grouping on Null and Undefined Data
 
@@ -77,6 +130,7 @@ By setting the `groupAllowUnbalanced` property to `true`, the grid will instead 
 {% gridExampleRunner title="Grouping by Null and Undefined Data" name="grouping-null-undefined" /%}
 
 To enable unbalanced grouping, the following configuration is used:
+
 ```{% frameworkTransform=true %}
 const gridOptions = {
     groupAllowUnbalanced: true,
@@ -93,6 +147,7 @@ Filtering does not impact which groups get removed. Only groups containing a sin
 {% gridExampleRunner title="Removing Single Children" name="remove-single-children"  exampleHeight=540 /%}
 
 The following is an example of the configuration used to hide all parents of a single row:
+
 ```{% frameworkTransform=true %}
 const gridOptions = {
     groupHideParentOfSingleChild: true,
@@ -102,7 +157,3 @@ const gridOptions = {
 {% note %}
 The properties `groupHideParentOfSingleChild` and `groupHideOpenParents` are mutually exclusive.
 {% /note %}
-
-## Next Up
-
-Continue to the next section to learn about the different Row Grouping [Display Types](./grouping-display-types/).

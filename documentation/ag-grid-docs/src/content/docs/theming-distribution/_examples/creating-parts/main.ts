@@ -1,15 +1,13 @@
 import type { ColDef, GridOptions } from 'ag-grid-community';
-import {
-    AllCommunityModule,
-    ModuleRegistry,
-    colorSchemeVariable,
-    createGrid,
-    createPart,
-    createTheme,
-} from 'ag-grid-community';
+import { ModuleRegistry, createGrid, createPart, enableDevValidations, themeQuartz } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const myCheckboxStyle = createPart({
     // By setting the feature, adding this part to a theme will remove the
@@ -66,7 +64,7 @@ const myCheckboxStyle = createPart({
         `,
 });
 
-const myCustomTheme = createTheme().withPart(myCheckboxStyle).withPart(colorSchemeVariable);
+const myCustomTheme = themeQuartz.withPart(myCheckboxStyle);
 
 const columnDefs: ColDef[] = [{ field: 'make' }, { field: 'model' }, { field: 'price' }];
 

@@ -1,0 +1,166 @@
+---
+title: "Aggregation - Show Values As"
+enterprise: true
+---
+
+Show each value as a relative figure, such as a percentage of the grand total or of its parent group.
+
+"Show Values As" displays a column's value as a share of a grand, column or group total. The underlying data is unchanged — the value is transformed only for display.
+
+A mode can be chosen by the user from the column menu, set on the column definition, or applied through [Column State](./column-state/).
+
+{% gridExampleRunner title="Show Values As Overview" name="show-values-as-overview" exampleHeight=540 /%}
+
+This example groups Olympic winners by country and year, then shows raw medal totals alongside the same values as a percentage of their parent group.
+
+{% note %}
+Show Values As requires the `ShowValuesAsModule` and is only supported with the [Client-Side Row Model](./row-models/#client-side).
+{% /note %}
+
+## Column Menu
+
+The Show Values As submenu is off by default. To let the user switch mode from the [Column Menu](./column-menu/), register the `ColumnMenuModule` and set `enableShowValuesAs: true` on the required columns. Switching mode only updates the affected column — it does not re-aggregate, re-sort or re-filter.
+
+The effect depends on where you set it:
+
+- **On `defaultColDef`** - the grid applies `enableShowValuesAs` selectively only to columns that have a numeric type or an `aggFunc`.
+- **On a single column** - always applied, whatever the column type. Use this when the column type cannot be inferred, such as a `valueGetter` or custom `aggFunc` that returns a number from string or object data.
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    // Grid-wide: offered on value/numeric columns only.
+    defaultColDef: { enableShowValuesAs: true },
+    columnDefs: [
+        // Force the menu on a column the heuristic wouldn't include.
+        { field: 'label', enableShowValuesAs: true },
+    ],
+};
+```
+
+A numeric column that is not yet aggregated is promoted to a value column when a mode needing a total is chosen.
+
+## Built-in Modes
+
+| Mode                         | Shows each value as               | Applies when              |
+| ---------------------------- | --------------------------------- | ------------------------- |
+| `percentOfGrandTotal`        | Share of the column's grand total | Value or numeric column   |
+| `percentOfColumnTotal`       | Share of its column total         | Value or numeric column   |
+| `percentOfRowTotal`          | Share of the row total            | Pivoting                  |
+| `percentOfParentRowTotal`    | Share of its parent row group     | Row grouping or tree data |
+| `percentOfParentColumnTotal` | Share of its parent pivot column  | Pivoting                  |
+
+`percentOfGrandTotal` and `percentOfColumnTotal` give the same result outside [Pivot](./pivoting/) mode, where there is a single column total. They diverge only while pivoting: `percentOfGrandTotal` keeps the whole column's grand total as the denominator, whereas `percentOfColumnTotal` uses each pivot column's own total, so every pivot column sums to 100%.
+
+If a mode was already active when the grid left the view that supports it, the selection is kept — its cells show `#N/A`. In the column menu it appears greyed and cannot be selected.
+
+## Setting the Mode
+
+Set `showValuesAs` on a value column to the mode you want. Use [`initialShowValuesAs`](./column-updating-definitions/#changing-column-state) instead to set only the starting mode and leave the user free to change it from the menu.
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    columnDefs: [
+        { field: 'country', rowGroup: true, hide: true },
+        { field: 'gold', aggFunc: 'sum', showValuesAs: 'percentOfParentRowTotal' },
+        { field: 'total', aggFunc: 'sum', showValuesAs: 'percentOfGrandTotal' },
+    ],
+};
+```
+
+The object form takes an optional `precision` to override the configured decimal places for that selection:
+
+```{% frameworkTransform=true %}
+const colDef = {
+    field: 'gold',
+    aggFunc: 'sum',
+    showValuesAs: { type: 'percentOfGrandTotal', precision: 1 },
+};
+```
+
+### Column State
+
+The active mode is part of [Column State](./column-state/), so a runtime change is applied through `applyColumnState` rather than by mutating the column definition. Set `showValuesAs` to a mode to enable it, or to `null` to clear it:
+
+```{% frameworkTransform=true %}
+// Enable a mode
+api.applyColumnState({ state: [{ colId: 'gold', showValuesAs: 'percentOfGrandTotal' }] });
+
+// Disable it
+api.applyColumnState({ state: [{ colId: 'gold', showValuesAs: null }] });
+```
+
+The active mode is also part of [Grid State](./grid-state/), so it persists and restores through `initialState`, `api.getState()` and `api.setState()`.
+
+### Reading the Transformed Value
+
+The methods `api.getCellValue` and `rowNode.getDataValue` return the raw aggregate by default. To read the transformed value, pass `transformValues: true` to `api.getCellValue`, or `'transformed'` to `rowNode.getDataValue`:
+
+```{% frameworkTransform=true %}
+const shown = api.getCellValue({ rowNode, colKey: 'gold', transformValues: true });
+const same = rowNode.getDataValue('gold', 'transformed');
+```
+
+## Configuration
+
+`showValuesAsDef` configures Show Values As for a column, and deep-merges from `defaultColDef` for grid-wide settings. It controls the default `precision` (decimal places, default `2`) and `suppressHeaderIndicator` (the icon shown in the column header while a mode is active).
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    defaultColDef: {
+        showValuesAsDef: { precision: 1 },
+    },
+};
+```
+
+To turn Show Values As off for a column, set `showValuesAsDef` to `null` — on a single column, or on `defaultColDef` for every column:
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    // Disable for all columns
+    defaultColDef: {
+        showValuesAsDef: null,
+    },
+    columnDefs: [
+        // Disable for this column only
+        { field: 'gold', aggFunc: 'sum', showValuesAsDef: null },
+    ],
+};
+```
+
+## Row Grouping
+
+This example groups Olympic winners by country, showing gold medals as a percentage of their parent group and the medal total as a percentage of the column's grand total.
+
+{% gridExampleRunner title="Show Values As with Row Grouping" name="row-grouping" /%}
+
+## Flat Data
+
+Show Values As does not require grouping. On a flat grid each row can be shown as a share of the column's grand total. The example below enables a [Grand Total Row](./aggregation-total-rows/) so the 100% total is visible at the bottom.
+
+{% gridExampleRunner title="Show Values As on a Flat Grid" name="flat" /%}
+
+## Tree Data
+
+With [Tree Data](./tree-data/), aggregates are populated on parent nodes, so each node's value can be shown as a percentage of its parent row total.
+
+{% gridExampleRunner title="Show Values As with Tree Data" name="tree-data" /%}
+
+## Pivoting
+
+In [Pivot](./pivoting/) mode each pivot column carries its own total, so a value can be shown as a share of its column.
+
+{% gridExampleRunner title="Show Values As with Pivoting" name="pivot" /%}
+
+## Filtering
+
+Show Values As reads the column's existing aggregate, so its denominators follow the grid's [aggregation filtering](./aggregation-filtering/) rules. By default totals reflect only the rows that pass the filter, so the shown rows sum to 100%. Set `suppressAggFilteredOnly` to keep the unfiltered total in the denominator.
+
+## API Reference
+
+Show Values As is configured with the following column properties:
+
+{% apiDocumentation source="column-properties/properties.json" section="aggregation" names=["showValuesAs", "initialShowValuesAs", "showValuesAsDef", "enableShowValuesAs"] /%}
+
+The transformed value can be read through the grid API:
+
+{% apiDocumentation source="grid-api/api.json" section="miscellaneous" names=["getCellValue"] /%}

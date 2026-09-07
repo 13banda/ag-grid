@@ -13,13 +13,18 @@ import {
     ModuleRegistry,
     PaginationModule,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ViewportRowModelModule } from 'ag-grid-enterprise';
 
 import { createMockServer } from './mock-server';
 import { createViewportDatasource } from './viewport-datasource';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowSelectionModule,
@@ -27,7 +32,6 @@ ModuleRegistry.registerModules([
     CellStyleModule,
     ViewportRowModelModule,
     HighlightChangesModule,
-    ValidationModule /* Development Only */,
 ]);
 
 class RowIndexRenderer implements ICellRendererComp {

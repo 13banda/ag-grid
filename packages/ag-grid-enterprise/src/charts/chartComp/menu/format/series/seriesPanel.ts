@@ -1,18 +1,24 @@
 import type { AgRangeBarSeriesLabelPlacement } from 'ag-charts-types';
+import { RefPlaceholder, _removeFromParent } from 'ag-stack';
 
-import type { AgToggleButtonParams, BeanCollection, ListOption } from 'ag-grid-community';
-import { AgSelect, AgToggleButton, Component, RefPlaceholder, _error, _removeFromParent } from 'ag-grid-community';
+import type { BeanCollection, GridSelect, ListOption } from 'ag-grid-community';
+import { AgSelect, Component } from 'ag-grid-community';
 
-import type { AgGroupComponent, AgGroupComponentParams } from '../../../../../widgets/agGroupComponent';
-import { AgGroupComponentSelector } from '../../../../../widgets/agGroupComponent';
-import { AgColorPicker } from '../../../../widgets/agColorPicker';
-import { AgSlider } from '../../../../widgets/agSlider';
+import { AgGroupComponentSelector } from '../../../../../agStack/agGroupComponent';
+import { AgSlider } from '../../../../../agStack/agSlider';
+import type {
+    GridSlider,
+    GroupComponent,
+    GroupComponentParams,
+} from '../../../../../widgets/gridEnterpriseWidgetTypes';
+import { ColorPicker } from '../../../../widgets/colorPicker';
 import type { ChartTranslationKey, ChartTranslationService } from '../../../services/chartTranslationService';
 import type { ChartSeriesType } from '../../../utils/seriesTypeMapper';
 import { getSeriesType, isPieChartSeries } from '../../../utils/seriesTypeMapper';
 import { ChartMenuParamsFactory } from '../../chartMenuParamsFactory';
 import { FontPanel } from '../fontPanel';
 import type { FormatPanelOptions } from '../formatPanel';
+import { ToggleablePanel } from '../toggleablePanel';
 import { CalloutPanel } from './calloutPanel';
 import { CapsPanel } from './capsPanel';
 import { ConnectorLinePanel } from './connectorLinePanel';
@@ -21,18 +27,26 @@ import { SeriesItemsPanel } from './seriesItemsPanel';
 import { getShapeSelectOptions } from './seriesUtils';
 import { ShadowPanel } from './shadowPanel';
 import { TileSpacingPanel } from './tileSpacingPanel';
+import { TooltipPanel } from './tooltipPanel';
 import { WhiskersPanel } from './whiskersPanel';
 
 const tooltips = 'tooltips';
 const strokeWidth = 'strokeWidth';
+const lineWidth = 'lineWidth';
 const lineDash = 'lineDash';
 const lineOpacity = 'lineOpacity';
 const fillOpacity = 'fillOpacity';
 const labels = 'labels';
 const shadow = 'shadow';
+const stageLabels = 'stageLabels';
+const markers = 'markers';
+
+type ComposableComponent = Component & {
+    addItem: (item: Component) => void;
+};
 
 export class SeriesPanel extends Component {
-    private readonly seriesGroup: AgGroupComponent = RefPlaceholder;
+    private readonly seriesGroup: GroupComponent = RefPlaceholder;
 
     private chartTranslation: ChartTranslationService;
 
@@ -41,11 +55,11 @@ export class SeriesPanel extends Component {
     }
     private chartMenuUtils: ChartMenuParamsFactory;
 
-    private activePanels: Component<any>[] = [];
+    private readonly activePanels: Component<any>[] = [];
     private seriesType: ChartSeriesType;
 
     private readonly widgetFuncs = {
-        lineWidth: () => this.initStrokeWidth('lineWidth'),
+        lineWidth: () => this.initStrokeWidth(lineWidth),
         [strokeWidth]: () => this.initStrokeWidth('strokeWidth'),
         lineColor: () => this.initLineColor(),
         [lineDash]: () => this.initLineDash(),
@@ -55,7 +69,7 @@ export class SeriesPanel extends Component {
         [labels]: () => this.initLabels(),
         sectorLabels: () => this.initSectorLabels(),
         [shadow]: () => new ShadowPanel(this.chartMenuUtils),
-        [tooltips]: () => this.initTooltips(),
+        [tooltips]: () => new TooltipPanel(this.options.chartMenuParamsFactory),
         bins: () => this.initBins(),
         whiskers: () => new WhiskersPanel(this.chartMenuUtils),
         caps: () => new CapsPanel(this.chartMenuUtils),
@@ -64,31 +78,36 @@ export class SeriesPanel extends Component {
         tileSpacing: () => new TileSpacingPanel(this.chartMenuUtils),
         shape: () => this.initShape(),
         size: () => this.initSize('size', 'size'),
-        minSize: () => this.initSize('size', 'minSize'),
+        minSize: () => this.initSize('minSize', 'minSize'),
         maxSize: () => this.initSize('maxSize', 'maxSize'),
+        dropoff: () => this.initDropOff(),
+        stageLabels: () => this.initStageLabels(),
     } as const;
 
     private readonly seriesWidgetMappings: { [K in ChartSeriesType]?: (keyof typeof this.widgetFuncs)[] } = {
         bar: [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels, shadow],
         pie: [tooltips, strokeWidth, lineOpacity, fillOpacity, labels, 'sectorLabels', shadow],
         donut: [tooltips, strokeWidth, lineOpacity, fillOpacity, labels, 'sectorLabels', shadow],
-        line: [tooltips, 'lineWidth', lineDash, lineOpacity, 'markers', labels],
+        line: [tooltips, lineWidth, lineDash, lineOpacity, markers, labels],
         scatter: [tooltips, 'shape', 'size', strokeWidth, labels],
         bubble: [tooltips, 'shape', 'minSize', 'maxSize', strokeWidth, labels],
-        area: [tooltips, 'lineWidth', lineDash, lineOpacity, fillOpacity, 'markers', labels, shadow],
+        area: [tooltips, lineWidth, lineDash, lineOpacity, fillOpacity, markers, labels, shadow],
         histogram: [tooltips, 'bins', strokeWidth, lineDash, lineOpacity, fillOpacity, labels, shadow],
         'radial-column': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels],
         'radial-bar': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels],
-        'radar-line': [tooltips, strokeWidth, lineDash, lineOpacity, 'markers', labels],
-        'radar-area': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, 'markers', labels],
+        'radar-line': [tooltips, strokeWidth, lineDash, lineOpacity, markers, labels],
+        'radar-area': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, markers, labels],
         nightingale: [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels],
         'box-plot': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, 'whiskers', 'caps'],
         'range-bar': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels],
-        'range-area': [tooltips, 'lineWidth', lineDash, lineOpacity, fillOpacity, 'markers', labels, shadow],
+        'range-area': [tooltips, lineWidth, lineDash, lineOpacity, fillOpacity, markers, labels, shadow],
         treemap: [tooltips, 'tileSpacing'],
         sunburst: [tooltips],
-        heatmap: [tooltips, labels, 'lineColor', 'lineWidth', lineOpacity],
+        heatmap: [tooltips, labels, 'lineColor', lineWidth, lineOpacity],
         waterfall: [tooltips, 'connectorLine', 'seriesItems'],
+        funnel: [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels, 'dropoff', stageLabels, shadow],
+        'cone-funnel': [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels, stageLabels],
+        pyramid: [tooltips, strokeWidth, lineDash, lineOpacity, fillOpacity, labels, stageLabels, shadow],
     };
 
     constructor(private readonly options: FormatPanelOptions) {
@@ -103,7 +122,7 @@ export class SeriesPanel extends Component {
             chartController,
             registerGroupComponent,
         } = this.options;
-        const seriesGroupParams: AgGroupComponentParams = {
+        const seriesGroupParams: GroupComponentParams = {
             cssIdentifier: 'charts-format-top-level',
             direction: 'vertical',
             title: this.translate('series'),
@@ -149,7 +168,7 @@ export class SeriesPanel extends Component {
                     this.initSeriesSelect();
                 }
 
-                (this.seriesWidgetMappings[this.seriesType] ?? []).forEach((w) => {
+                for (const w of this.seriesWidgetMappings[this.seriesType] ?? []) {
                     const widgetFuncResult = this.widgetFuncs[w]();
                     let widget: Component<any>;
                     if (Array.isArray(widgetFuncResult)) {
@@ -161,13 +180,13 @@ export class SeriesPanel extends Component {
                     }
                     this.seriesGroup.addItem(widget);
                     this.activePanels.push(widget);
-                });
+                }
             })
-            .catch((e) => _error(105, { e }));
+            .catch((e) => this.beans.log.error(105, { e }));
     }
 
     private initSeriesSelect() {
-        const seriesSelect = this.createBean(
+        const seriesSelect = this.createBean<GridSelect>(
             new AgSelect(
                 this.chartMenuUtils.getDefaultSelectParamsWithoutValueParams(
                     'seriesType',
@@ -186,36 +205,63 @@ export class SeriesPanel extends Component {
         this.activePanels.push(seriesSelect);
     }
 
-    private initTooltips(): AgToggleButton {
-        return new AgToggleButton(
-            this.chartMenuUtils.addValueParams<AgToggleButtonParams>('tooltip.enabled', {
-                label: this.translate('tooltips'),
-                labelAlignment: 'left',
-                labelWidth: 'flex',
-                inputWidth: 'flex',
-            })
+    private initLineColor(): ColorPicker {
+        return new ColorPicker(this.chartMenuUtils.getDefaultColorPickerParams('stroke', 'strokeColor'));
+    }
+
+    private initStrokeWidth(labelKey: 'strokeWidth' | 'lineWidth', expression?: string): GridSlider {
+        return new AgSlider(
+            this.chartMenuUtils.getDefaultSliderParams(
+                expression ? `${expression}.${labelKey}` : 'strokeWidth',
+                labelKey,
+                10
+            )
         );
     }
 
-    private initLineColor(): AgColorPicker {
-        return new AgColorPicker(this.chartMenuUtils.getDefaultColorPickerParams('stroke', 'strokeColor'));
+    private initLineDash(expression?: string): GridSlider {
+        return new AgSlider(
+            this.chartMenuUtils.getDefaultSliderParams(
+                expression ? `${expression}.lineDash` : 'lineDash',
+                'lineDash',
+                30,
+                true
+            )
+        );
     }
 
-    private initStrokeWidth(labelKey: 'strokeWidth' | 'lineWidth'): AgSlider {
-        return new AgSlider(this.chartMenuUtils.getDefaultSliderParams('strokeWidth', labelKey, 10));
-    }
-
-    private initLineDash(): AgSlider {
-        return new AgSlider(this.chartMenuUtils.getDefaultSliderParams('lineDash', 'lineDash', 30, true));
-    }
-
-    private initOpacity(type: 'strokeOpacity' | 'fillOpacity'): AgSlider {
-        const params = this.chartMenuUtils.getDefaultSliderParams(type, type, 1);
+    private initOpacity(type: 'strokeOpacity' | 'fillOpacity', expression?: string): GridSlider {
+        const params = this.chartMenuUtils.getDefaultSliderParams(expression ? `${expression}.${type}` : type, type, 1);
         params.step = 0.05;
         return new AgSlider(params);
     }
 
-    private initLabels(): [FontPanel, (fontPanel: FontPanel) => void] {
+    private initDropOff(): [ToggleablePanel, (fontPanel: ComposableComponent) => void] {
+        const dropOffGroup = new ToggleablePanel({
+            tag: 'dropOff',
+            cssIdentifier: 'charts-format-sub-level',
+            title: this.translate('dropOff'),
+            suppressEnabledCheckbox: false,
+            chartMenuParamsFactory: this.chartMenuUtils,
+        });
+
+        const addItems = (groupComponent: ToggleablePanel) => {
+            for (const comp of [
+                this.initStrokeWidth('strokeWidth', 'dropOff'),
+                this.initLineDash('dropOff'),
+                this.initOpacity('strokeOpacity', 'dropOff'),
+                this.initOpacity('fillOpacity', 'dropOff'),
+            ]) {
+                const managed = groupComponent.createManagedBean(comp);
+                groupComponent.addItem(managed);
+                this.activePanels.push(managed);
+            }
+        };
+
+        return [dropOffGroup, addItems];
+    }
+
+    private initLabels(): [FontPanel, (fontPanel: ComposableComponent) => void] {
         const isPieChart = isPieChartSeries(this.seriesType);
         const seriesOptionLabelProperty = isPieChart ? 'calloutLabel' : 'label';
         const labelKey = isPieChart ? 'calloutLabels' : 'labels';
@@ -235,7 +281,7 @@ export class SeriesPanel extends Component {
                     { value: 'inside', text: this.translate('inside') },
                     { value: 'outside', text: this.translate('outside') },
                 ];
-                const placementSelect = labelPanelComp.createManagedBean(
+                const placementSelect = labelPanelComp.createManagedBean<GridSelect>(
                     new AgSelect(
                         this.chartMenuUtils.getDefaultSelectParams('label.placement', 'labelPlacement', options)
                     )
@@ -245,7 +291,7 @@ export class SeriesPanel extends Component {
                 this.activePanels.push(placementSelect);
 
                 // Add padding slider
-                const paddingSlider = labelPanelComp.createManagedBean(
+                const paddingSlider: GridSlider = labelPanelComp.createManagedBean(
                     new AgSlider(this.chartMenuUtils.getDefaultSliderParams('label.padding', 'padding', 200))
                 );
 
@@ -257,7 +303,7 @@ export class SeriesPanel extends Component {
         return [fontPanel, addItems];
     }
 
-    private initSectorLabels(): [FontPanel, (fontPanel: FontPanel) => void] {
+    private initSectorLabels(): [FontPanel, (fontPanel: ComposableComponent) => void] {
         const sectorParams = this.chartMenuUtils.getDefaultFontPanelParams('sectorLabel', 'sectorLabels');
         const fontPanel = new FontPanel(sectorParams);
 
@@ -268,14 +314,27 @@ export class SeriesPanel extends Component {
                 1
             );
             positionRatioParams.step = 0.05;
-            const positionRatioComp = sectorPanelComp.createManagedBean(new AgSlider(positionRatioParams));
+            const positionRatioComp: GridSlider = sectorPanelComp.createManagedBean(new AgSlider(positionRatioParams));
             sectorPanelComp.addItem(positionRatioComp);
         };
 
         return [fontPanel, addItems];
     }
 
-    private initBins(): AgSlider {
+    private initStageLabels(): FontPanel {
+        const params = this.chartMenuUtils.getDefaultFontPanelParams('stageLabel', stageLabels);
+        // The stage labels are drawn by the category axis, whose labels the theme clones from
+        // `stageLabel`, so the axis carries the effective font when none has been set here.
+        params.fontValueWhenUnset = (fontKey) => {
+            const isHorizontal = this.chartMenuUtils.getChartOptions().getValue('direction') === 'horizontal';
+            return this.options.chartOptionsService
+                .getCartesianAxisThemeOverridesProxy(isHorizontal ? 'xAxis' : 'yAxis')
+                .getValue(`label.${fontKey}`);
+        };
+        return new FontPanel(params);
+    }
+
+    private initBins(): GridSlider {
         const params = this.chartMenuUtils.getDefaultSliderParams('binCount', 'histogramBinCount', 20);
         const chartOptions = this.chartMenuUtils.getChartOptions();
         // this needs fixing
@@ -285,13 +344,13 @@ export class SeriesPanel extends Component {
         return new AgSlider(params);
     }
 
-    private initShape(): AgSelect {
+    private initShape(): GridSelect {
         return new AgSelect(
             this.chartMenuUtils.getDefaultSelectParams('shape', 'shape', getShapeSelectOptions(this.chartTranslation))
         );
     }
 
-    private initSize(expression: 'size' | 'maxSize', labelKey: 'size' | 'minSize' | 'maxSize'): AgSlider {
+    private initSize(expression: 'size' | 'minSize' | 'maxSize', labelKey: 'size' | 'minSize' | 'maxSize'): GridSlider {
         return new AgSlider(this.chartMenuUtils.getDefaultSliderParams(expression, labelKey, 60));
     }
 
@@ -319,10 +378,10 @@ export class SeriesPanel extends Component {
     }
 
     private destroyActivePanels(): void {
-        this.activePanels.forEach((panel) => {
+        for (const panel of this.activePanels) {
             _removeFromParent(panel.getGui());
             this.destroyBean(panel);
-        });
+        }
     }
 
     public override destroy(): void {

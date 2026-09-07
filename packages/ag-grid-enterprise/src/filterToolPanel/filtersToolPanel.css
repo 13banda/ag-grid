@@ -8,10 +8,13 @@
     display: flex;
     align-items: center;
     padding: 0 var(--ag-spacing);
-    font-weight: 500;
+    font-weight: var(--ag-header-font-weight);
     color: var(--ag-header-text-color);
 
-    > * {
+    > :where(.ag-filter-toolpanel-expand),
+    > :where(.ag-filter-toolpanel-search-input),
+    > :where(.ag-header-cell-text),
+    > :where(.ag-filter-icon) {
         display: flex;
         align-items: center;
     }
@@ -34,8 +37,9 @@
 }
 
 .ag-filter-toolpanel-search {
-    margin-top: var(--ag-widget-container-vertical-padding);
-    margin-bottom: var(--ag-spacing);
+    padding-top: var(--ag-widget-container-vertical-padding);
+    padding-bottom: var(--ag-spacing);
+    min-height: var(--ag-header-height);
 }
 
 :where(.ag-filter-toolpanel-group:not(.ag-has-filter) > .ag-group-title-bar)

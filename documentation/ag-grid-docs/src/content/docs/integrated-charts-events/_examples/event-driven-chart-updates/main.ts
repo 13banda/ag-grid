@@ -2,14 +2,20 @@ import { AgChartsEnterpriseModule } from 'ag-charts-enterprise';
 
 import type {
     ChartCreatedEvent,
+    ChartOptionsChangedEvent,
     ChartRangeSelectionChangedEvent,
     CreateRangeChartParams,
     FirstDataRenderedEvent,
     GridApi,
     GridOptions,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, IntegratedChartsModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -17,7 +23,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -42,6 +47,7 @@ const gridOptions: GridOptions = {
     onFirstDataRendered: onFirstDataRendered,
     onChartCreated: onChartCreated,
     onChartRangeSelectionChanged: onChartRangeSelectionChanged,
+    onChartOptionsChanged: onChartOptionsChanged,
 };
 
 function onFirstDataRendered(params: FirstDataRenderedEvent) {
@@ -66,6 +72,10 @@ function onChartCreated(event: ChartCreatedEvent) {
 function onChartRangeSelectionChanged(event: ChartRangeSelectionChangedEvent) {
     console.log('Changed range selection of chart with ID ' + event.chartId);
     updateTitle(gridApi!, event.chartId);
+}
+
+function onChartOptionsChanged(event: ChartOptionsChangedEvent) {
+    console.log('Changed options of chart with ID ' + event.chartId);
 }
 
 function updateTitle(api: GridApi, chartId: string) {

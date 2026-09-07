@@ -1,0 +1,282 @@
+import type { ExecutorContext, TaskGraph } from '@nx/devkit';
+import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
+import * as fs from 'fs/promises';
+import * as glob from 'glob';
+import * as os from 'os';
+import * as path from 'path';
+import * as ts from 'typescript';
+
+import {
+    createProgressState,
+    displayProgress,
+    finishProgress,
+    setInProgressTasks,
+    updateProgress,
+} from './progress-tracker';
+
+export type TaskResult = {
+    success: boolean;
+    terminalOutput: string;
+    startTime?: number;
+    endTime?: number;
+};
+
+export type BatchExecutorTaskResult = {
+    task: string;
+    result: TaskResult;
+};
+
+export async function exists(filePath: string) {
+    try {
+        return (await fs.stat(filePath))?.isFile();
+    } catch {
+        return false;
+    }
+}
+
+export async function readJSONFile(filePath: string) {
+    return (await exists(filePath)) ? JSON.parse(await fs.readFile(filePath, 'utf-8')) : null;
+}
+
+export async function readFile(filePath: string) {
+    return (await exists(filePath)) ? await fs.readFile(filePath, 'utf-8') : null;
+}
+
+export async function writeJSONFile(filePath: string, data: unknown, indent = 2) {
+    const dataContent = JSON.stringify(data, null, indent);
+    await writeFile(filePath, dataContent);
+}
+
+export async function writeFile(filePath: string, newContent: string | Buffer) {
+    const outputDir = path.dirname(filePath);
+    await fs.mkdir(outputDir, { recursive: true });
+    await fs.writeFile(filePath, newContent);
+}
+
+export async function deleteFile(filePath: string) {
+    if (await exists(filePath)) {
+        await fs.rm(filePath);
+    }
+}
+
+export function parseFileContents(contents: string) {
+    return ts.createSourceFile('tempFile.ts', contents, ts.ScriptTarget.Latest, true);
+}
+
+export function parseFile(filePath: string) {
+    return parseFileContents(readFileSync(filePath, 'utf8'));
+}
+
+export function inputGlob(fullPath: string) {
+    return glob.sync(`${fullPath}/**/*.ts`, {
+        ignore: [`${fullPath}/**/*.test.ts`, `${fullPath}/**/*.spec.ts`],
+    });
+}
+
+export function gitCurrentBranch() {
+    return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+}
+
+export function gitFiles(fullPath: string, commit: string) {
+    return execSync(
+        [
+            `git ls-tree -r --name-only ${commit}`,
+            `grep -E '^${fullPath}/[^:]*\\.ts$'`,
+            `grep -vE '\\.(test|spec)\\.ts$'`,
+        ].join(' | '),
+        { encoding: 'utf-8' }
+    )
+        .split('\n')
+        .filter(Boolean);
+}
+
+export function gitShow(file: string, commit: string) {
+    return execSync(`git show ${commit}:${file}`, { encoding: 'utf-8' });
+}
+
+export function readGitFiles(fullPath: string, commit: string) {
+    return gitFiles(fullPath, commit).map((file) => gitShow(file, commit));
+}
+
+export async function ensureDirectory(dirPath: string) {
+    await fs.mkdir(dirPath, { recursive: true });
+}
+
+export function batchExecutor<ExecutorOptions>(
+    executor: (opts: ExecutorOptions, ctx: ExecutorContext) => Promise<void>,
+    completeCb?: () => Promise<void> | void
+) {
+    return async function* (
+        _taskGraph: TaskGraph,
+        inputs: Record<string, ExecutorOptions>,
+        overrides: ExecutorOptions,
+        context: ExecutorContext
+    ): AsyncGenerator<BatchExecutorTaskResult, any, unknown> {
+        const tasks = Object.keys(inputs);
+
+        console.info(`Batched execution of ${tasks.length} tasks (single threaded)...`);
+        const start = performance.now();
+        for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+            const task = tasks[taskIndex];
+            const inputOptions = inputs[task];
+
+            let success = false;
+            let terminalOutput = '';
+            try {
+                await executor({ ...inputOptions, ...overrides }, context);
+                success = true;
+            } catch (e) {
+                terminalOutput += `${e}`;
+            }
+
+            yield { task, result: { success, terminalOutput } };
+        }
+
+        const duration = performance.now() - start;
+        console.info(`Batched execution of ${tasks.length} jobs complete in ${Math.floor(duration / 100) / 10}s`);
+
+        await completeCb?.();
+    };
+}
+
+// Heap ceiling (bytes) at which a pooled worker is recycled after finishing a task. Sized so the
+// 4 CI workers stay well within a 16GB runner even as per-task memory accumulates; overridable via
+// env for tuning without a code change.
+const WORKER_RECYCLE_HEAP_LIMIT_BYTES = Number(process.env.NX_WORKER_RECYCLE_HEAP_BYTES) || 1_024 * 1_024 * 1_024;
+
+export function batchWorkerExecutor<ExecutorOptions>(
+    workerModule: string,
+    extraMsgContent?: () => object,
+    timeout?: number // Optional timeout (includes queue time + execution time)
+) {
+    return async function* (
+        taskGraph: TaskGraph,
+        inputs: Record<string, ExecutorOptions>,
+        overrides: ExecutorOptions,
+        _context: ExecutorContext
+    ): AsyncGenerator<BatchExecutorTaskResult, any, unknown> {
+        const results: Map<string, Promise<BatchExecutorTaskResult>> = new Map();
+
+        let threadCount;
+        if (process.env.CI == null) {
+            threadCount = Math.round(os.cpus().length / 2);
+        } else {
+            // GitHub Actions ubuntu runners have 4 vCPUs
+            threadCount = Math.min(4, os.cpus().length);
+        }
+        const { Tinypool } = await import('tinypool');
+        const pool = new Tinypool({
+            runtime: 'child_process',
+            filename: workerModule,
+            maxThreads: threadCount,
+            env: process.env as Record<string, string>,
+            // Recycle a worker once its heap crosses this bound. Some render workloads (chart
+            // thumbnail generation) retain memory that GC cannot reclaim; without recycling, the
+            // pooled workers grow until a constrained CI runner exhausts memory and stalls.
+            maxMemoryLimitBeforeRecycle: WORKER_RECYCLE_HEAP_LIMIT_BYTES,
+        });
+        process.on('exit', () => {
+            pool.cancelPendingTasks();
+            pool.destroy().catch((e) => console.error(e));
+        });
+
+        const tasks = Object.keys(inputs);
+
+        const timeoutMsg = timeout != null ? ` (${timeout}ms timeout per task)` : '';
+        console.info(`Batched execution of ${tasks.length} tasks, using ${threadCount} threads${timeoutMsg}...`);
+        const inProgressTasks = new Set<string>(tasks.slice(0, threadCount));
+        const progressState = createProgressState(tasks.length);
+        const progressOptions = {
+            isTTY: process.stdout.isTTY,
+            maxInProgressToShow: threadCount,
+        };
+        let nextTaskIndex = threadCount;
+        const finished = (result: BatchExecutorTaskResult) => {
+            inProgressTasks.delete(result.task);
+            if (tasks[nextTaskIndex]) {
+                // FIFO queue, so next sequential task is always the next in the list
+                inProgressTasks.add(tasks[nextTaskIndex++]);
+            }
+            updateProgress(progressState, result.result.success, [...inProgressTasks]);
+            displayProgress(progressState, progressOptions, false, result.result.success);
+            return result;
+        };
+
+        const start = performance.now();
+        const contents = extraMsgContent?.() ?? {};
+        for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+            const taskName = tasks[taskIndex];
+            const task = taskGraph.tasks[taskName];
+            const inputOptions = inputs[taskName];
+
+            const opts = {
+                options: { ...inputOptions, ...overrides },
+                context: {
+                    projectName: task.target.project,
+                    targetName: task.target.target,
+                    configurationName: task.target.configuration,
+                },
+                taskName,
+                ...(timeout != null ? { timeout } : {}), // Only pass timeout to worker if defined
+                ...contents,
+            };
+
+            results.set(
+                taskName,
+                pool
+                    .run(opts)
+                    .then((r) => finished(r))
+                    .catch((e) => finished({ task: taskName, result: { success: false, terminalOutput: `${e}` } }))
+            );
+        }
+
+        // Initial progress display
+        setInProgressTasks(progressState, [...inProgressTasks]);
+        displayProgress(progressState, progressOptions, true, true);
+
+        for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+            const taskName = tasks[taskIndex];
+            yield results.get(taskName)!;
+        }
+
+        // Finish progress display
+        finishProgress(progressOptions);
+
+        await Promise.allSettled(results.values());
+
+        const duration = performance.now() - start;
+        console.info(`Batched execution of ${tasks.length} jobs complete in ${Math.floor(duration / 100) / 10}s`);
+
+        await pool.destroy();
+    };
+}
+
+export async function consolePrefix(prefix: string, cb: () => Promise<void>) {
+    const fns: any = {};
+    const fnNames = ['log', 'debug', 'info', 'warn', 'error'] as const;
+    const timesCalled: Record<(typeof fnNames)[number], number> = {
+        debug: 0,
+        error: 0,
+        info: 0,
+        log: 0,
+        warn: 0,
+    };
+    for (const fn of fnNames) {
+        fns[fn] = console[fn];
+
+        console[fn] = (arg: any, ...args: any[]) => {
+            // Filter license message.
+            if (typeof arg === 'string' && arg.startsWith('*')) return;
+
+            timesCalled[fn]++;
+            fns[fn].call(console, prefix, arg, ...args);
+        };
+    }
+    try {
+        await cb();
+        return timesCalled;
+    } finally {
+        Object.assign(console, fns);
+    }
+}

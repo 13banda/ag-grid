@@ -9,6 +9,7 @@ import { SortService } from './sortService';
 /**
  * @feature Rows -> Row Sorting
  * @colDef sortable, sort, sortIndex
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const SortModule: _ModuleWithApi<_SortGridApi> = {
     moduleName: 'Sort',
@@ -27,5 +28,9 @@ export const SortModule: _ModuleWithApi<_SortGridApi> = {
         sortDescending: 'desc',
         // show on column header when column has no sort, only when enabled with gridOptions.unSortIcon=true
         sortUnSort: 'none',
+        // show on column header when column is sorted absolute ascending
+        sortAbsoluteAscending: 'aasc',
+        // show on column header when column is sorted absolute descending
+        sortAbsoluteDescending: 'adesc',
     },
 };

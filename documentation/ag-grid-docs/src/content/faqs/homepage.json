@@ -1,0 +1,50 @@
+[
+    {
+        "question": "Can I build JavaScript Data Grids for free with AG Grid?",
+        "answer": "Yes, it's free to get started with AG Grid and you'll have access to core features like filtering, sorting, cell editing, pagination and much more."
+    },
+    {
+        "question": "How fast is AG Grid?",
+        "answer": "AG Grid has always been focused on performance and reliability with large data sets; We use virtualisation for both rows and columns to make sure your users have the smoothest experience possible, whatever the size of your data."
+    },
+    {
+        "question": "Is AG Grid compatible with AG Charts?",
+        "answer": "Yes, AG Grid is designed to be compatible with AG Charts, allowing seamless integration between your JavaScript Data Grids and [JavaScript Charts](https://www.ag-grid.com/charts/react/quick-start/)."
+    },
+    {
+        "question": "How can I build dashboards with AG Grid?",
+        "answer": "[AG Studio](https://www.ag-grid.com/studio/) is built specifically for embedded analytics, letting you add web dashboards directly into your application. For fully custom solutions, developers can also build with AG Grid and AG Charts."
+    },
+    {
+        "question": "Can I customise the style of my Data Grid?",
+        "answer": "Yes, you can customise AG Grid with our [Theming API](./themes/) or use our [Theme Builder](/theme-builder/) to build themes with our intuitive UI."
+    },
+    {
+        "question": "Is AG Grid compatible with my Framework?",
+        "answer": "Yes, AG Grid comes with support for [React](/react-data-grid/getting-started/), [Angular](/angular-data-grid/getting-started/) and [Vue](/vue-data-grid/getting-started/). If you're using another framework, such as Solid, Svelte or Python, you can leverage one of our [community built integrations.](/community/tools-extensions/)"
+    },
+    {
+        "question": "Can I use my own components with AG Grid?",
+        "answer": "Yes, you can add your own components to [cells](./component-cell-renderer/) and [headers](./column-headers-components/#custom-component), and replace things like [filters](./component-filter/), [overlays](./overlays-overview), and [tooltips](./tooltips/#custom-component) with your own functionality if you want to."
+    },
+    {
+        "question": "Can I add project planning and scheduling to my AG Grid app?",
+        "answer": "Yes, through our [partnership with Bryntum](/campaigns/bryntum-gantt/), you can pair AG Grid with [Bryntum Gantt](/campaigns/bryntum-gantt/) a fully featured JavaScript Gantt chart built for real-world project complexity, with support for dependencies, critical paths, baselines and more."
+    },
+    {
+        "question": "How is AG Grid different from Tanstacks' React Table",
+        "answer": "We like to say AG Grid 'comes with batteries included'. Tanstack Table is headless, meaning you need to build the UI from scratch, where-as AG Grid can be used out-of-the-box."
+    },
+    {
+        "question": "What is the difference between AG Grid Community and Enterprise?",
+        "answer": "[AG Grid Community](./getting-started/) is the free version with basic features, while [AG Grid Enterprise](/license-pricing/) offers additional advanced features and support."
+    },
+    {
+        "question": "What is an AG Grid licence?",
+        "answer": "An AG Grid licence is required to use [AG Grid Enterprise](/license-pricing/) in production. Try it for free, or request a trial licence at [info@ag-grid.com](mailto:info@ag-grid.com) to remove the watermark & console messages."
+    },
+    {
+        "question": "How much does AG Grid cost?",
+        "answer": "[AG Grid Community](./getting-started/) is free forever. [AG Grid Enterprise](/license-pricing/) costs $999 USD per licence. Visit the [Pricing page](/license-pricing/) for more information."
+    }
+]

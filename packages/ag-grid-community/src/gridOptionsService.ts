@@ -1,25 +1,37 @@
+import type {
+    AgPropertyChangeSet,
+    AgPropertyChangedEvent,
+    AgPropertyChangedSource,
+    AgPropertyValueChangedEvent,
+    AgPropertyValueChangedListener,
+    IPropertiesService,
+} from 'ag-stack';
+import { LocalEventService, _exists } from 'ag-stack';
+
 import type { GridApi } from './api/gridApi';
 import type { NamedBean } from './context/bean';
 import { BeanStub } from './context/beanStub';
 import type { BeanCollection } from './context/context';
+import type { ColDef, ColGroupDef } from './entities/colDef';
 import type { GridOptions } from './entities/gridOptions';
-import type { AgEventType } from './eventTypes';
-import type { AgEvent } from './events';
-import { ALWAYS_SYNC_GLOBAL_EVENTS } from './events';
-import type { GridOptionOrDefault } from './gridOptionsDefault';
+import type { AgEventType, AgPublicEventType } from './eventTypes';
+import { ALWAYS_SYNC_GLOBAL_EVENTS } from './eventTypes';
+import { GlobalGridOptions } from './globalGridOptions';
+import type { GridOptionOrDefault, GridOptionsWithDefaults } from './gridOptionsDefault';
 import { GRID_OPTION_DEFAULTS } from './gridOptionsDefault';
-import { _getCallbackForEvent } from './gridOptionsUtils';
 import type { AgGridCommon, WithoutGridCommon } from './interfaces/iCommon';
 import type { ModuleName, ValidationModuleName } from './interfaces/iModule';
 import type { RowModelType } from './interfaces/iRowModel';
-import { LocalEventService } from './localEventService';
-import { _areModulesGridScoped, _isModuleRegistered } from './modules/moduleRegistry';
+import { _areModulesGridScoped, _isModuleRegistered, _isUmd } from './modules/moduleRegistry';
 import type { AnyGridOptions } from './propertyKeys';
-import { _logIfDebug } from './utils/function';
-import { _exists } from './utils/generic';
+import { _PUBLIC_EVENT_HANDLERS_MAP } from './publicEventHandlersMap';
+import { _logIfDebug } from './utils/log';
 import type { MissingModuleErrors } from './validation/errorMessages/errorText';
-import { _error } from './validation/logging';
+import { _reportMissingModule } from './validation/logging';
+import { COLUMN_DEFINITION_MOD_VALIDATIONS } from './validation/rules/colDefValidations';
+import { GRID_OPTIONS_MODULES } from './validation/rules/gridOptionsValidations';
 import type { ValidationService } from './validation/validationService';
+import type { ModuleValidation } from './validation/validationTypes';
 
 type GetKeys<T, U> = {
     [K in keyof T]: T[K] extends U | undefined ? K : never;
@@ -29,9 +41,8 @@ type GetKeys<T, U> = {
  * Get all the GridOption properties that strictly contain the provided type.
  * Does not include `any` properties.
  */
-export type KeysOfType<U> = Exclude<GetKeys<GridOptions, U>, AnyGridOptions>;
+type KeysOfType<U> = Exclude<GetKeys<GridOptions, U>, AnyGridOptions>;
 
-type BooleanProps = Exclude<KeysOfType<boolean>, AnyGridOptions>;
 type NoArgFuncs = KeysOfType<() => any>;
 type AnyArgFuncs = KeysOfType<(arg: 'NO_MATCH') => any>;
 type CallbackProps = Exclude<KeysOfType<(params: AgGridCommon<any, any>) => any>, NoArgFuncs | AnyArgFuncs>;
@@ -45,43 +56,31 @@ type WrappedCallback<K extends CallbackProps, OriginalCallback extends GridOptio
     | ((
           params: WithoutGridCommon<ExtractParamsFromCallback<OriginalCallback>>
       ) => ExtractReturnTypeFromCallback<OriginalCallback>);
-export interface PropertyChangeSet {
-    /** Unique id which can be used to link changes of multiple properties that were updated together.
-     * i.e a user updated multiple properties at the same time.
-     */
-    id: number;
-    /** All the properties that have been updated in this change set */
-    properties: (keyof GridOptions)[];
-}
-export type PropertyChangedSource = 'api' | 'gridOptionsUpdated';
-export interface PropertyChangedEvent extends AgEvent {
-    type: 'gridPropertyChanged';
-    changeSet: PropertyChangeSet | undefined;
-    source: PropertyChangedSource;
-}
 
-/**
- * For boolean properties the changed value will have been coerced to a boolean, so we do not want the type to include the undefined value.
- */
-type GridOptionsOrBooleanCoercedValue<K extends keyof GridOptions> = K extends BooleanProps ? boolean : GridOptions[K];
-
-export interface PropertyValueChangedEvent<K extends keyof GridOptions> extends AgEvent {
-    type: K;
-    changeSet: PropertyChangeSet | undefined;
-    currentValue: GridOptionsOrBooleanCoercedValue<K>;
-    previousValue: GridOptionsOrBooleanCoercedValue<K>;
-    source: PropertyChangedSource;
-}
-
-export type PropertyChangedListener = (event: PropertyChangedEvent) => void;
-export type PropertyValueChangedListener<K extends keyof GridOptions> = (event: PropertyValueChangedEvent<K>) => void;
+export type PropertyChangedEvent = AgPropertyChangedEvent<GridOptionsWithDefaults>;
+export type PropertyValueChangedEvent<K extends keyof GridOptions> = AgPropertyValueChangedEvent<
+    GridOptionsWithDefaults,
+    K
+>;
+type PropertyValueChangedListener<K extends keyof GridOptions> = AgPropertyValueChangedListener<
+    GridOptionsWithDefaults,
+    K
+>;
 
 let changeSetId = 0;
 
 // this is added to the main DOM element
 let gridInstanceSequence = 0;
 
-export class GridOptionsService extends BeanStub implements NamedBean {
+// we put the instance id onto the main DOM element. this is used for events, when grids are inside grids,
+// so the grid can work out if the even came from this grid or a grid inside this one. see the ctrl+v logic
+// for where this is used.
+const GRID_DOM_KEY = '__ag_grid_instance';
+
+export class GridOptionsService
+    extends BeanStub
+    implements NamedBean, IPropertiesService<GridOptionsWithDefaults, AgGridCommon<any, any>>
+{
     beanName = 'gos' as const;
 
     private gridOptions: GridOptions;
@@ -93,21 +92,28 @@ export class GridOptionsService extends BeanStub implements NamedBean {
         this.gridOptions = beans.gridOptions;
         this.validation = beans.validation;
         this.api = beans.gridApi;
-        this.gridId = beans.context.getGridId();
+        this.gridId = beans.context.getId();
     }
-    private domDataKey = '__AG_' + Math.random().toString();
+    private readonly domDataKey = '__AG_' + Math.random().toString();
 
     /** This is only used for the main DOM element */
-    public readonly gridInstanceId = gridInstanceSequence++;
+    private readonly instanceId = gridInstanceSequence++;
+
+    // Used to hold user events until the grid is ready
+    // Required to support React 19 StrictMode. See IFrameworkOverrides.runWhenReadyAsync but also is likely a good idea that onGridReady is the first event fired.
+    private gridReadyFired = false;
+    private queueEvents: { eventName: AgPublicEventType; event: any }[] = [];
 
     // This is quicker then having code call gridOptionsService.get('context')
     private get gridOptionsContext() {
         return this.gridOptions['context'];
     }
 
-    private propEventSvc: LocalEventService<keyof GridOptions> = new LocalEventService();
+    private readonly propEventSvc: LocalEventService<keyof GridOptions> = new LocalEventService();
 
     public postConstruct(): void {
+        this.validateGridOptions(this.gridOptions);
+
         this.eventSvc.addGlobalListener(this.globalEventHandlerFactory().bind(this), true);
         this.eventSvc.addGlobalListener(this.globalEventHandlerFactory(true).bind(this), false);
 
@@ -116,9 +122,14 @@ export class GridOptionsService extends BeanStub implements NamedBean {
 
         this.addManagedEventListeners({
             gridOptionsChanged: ({ options }) => {
-                this.updateGridOptions({ options, force: true, source: 'gridOptionsUpdated' });
+                this.updateGridOptions({ options, force: true, source: 'optionsUpdated' });
             },
         });
+    }
+
+    public override destroy(): void {
+        super.destroy();
+        this.queueEvents = [];
     }
 
     /**
@@ -158,7 +169,7 @@ export class GridOptionsService extends BeanStub implements NamedBean {
     ): ((params: WithoutGridCommon<P>) => T) | undefined {
         if (callback) {
             const wrapped = (callbackParams: WithoutGridCommon<P>): T => {
-                return callback(this.addGridCommonParams(callbackParams));
+                return callback(this.addCommon(callbackParams));
             };
             return wrapped;
         }
@@ -172,22 +183,27 @@ export class GridOptionsService extends BeanStub implements NamedBean {
     }: {
         options: Partial<GridOptions>;
         force?: boolean;
-        source?: PropertyChangedSource;
+        source?: AgPropertyChangedSource;
     }): void {
-        const changeSet: PropertyChangeSet = { id: changeSetId++, properties: [] };
+        const changeSet: AgPropertyChangeSet<GridOptions> = { id: changeSetId++, properties: [] };
         // all events are fired after grid options has finished updating.
         const events: PropertyValueChangedEvent<keyof GridOptions>[] = [];
         const { gridOptions, validation } = this;
-        Object.entries(options).forEach(([key, value]) => {
+
+        for (const key of Object.keys(options) as (keyof GridOptions)[]) {
+            // apply global grid options if they exist for this key
+            // Will only apply if the merge strategy is 'deep' and both global and provided values are objects
+            const value = GlobalGridOptions.applyGlobalGridOption(key, options[key]);
+
             validation?.warnOnInitialPropertyUpdate(source, key);
 
             const shouldForce = force || (typeof value === 'object' && source === 'api'); // force objects as they could have been mutated.
 
-            const previousValue = gridOptions[key as keyof GridOptions];
+            const previousValue = gridOptions[key];
             if (shouldForce || previousValue !== value) {
-                gridOptions[key as keyof GridOptions] = value;
+                gridOptions[key] = value;
                 const event: PropertyValueChangedEvent<keyof GridOptions> = {
-                    type: key as keyof GridOptions,
+                    type: key,
                     currentValue: value,
                     previousValue,
                     changeSet,
@@ -195,31 +211,38 @@ export class GridOptionsService extends BeanStub implements NamedBean {
                 };
                 events.push(event);
             }
-        });
+        }
 
-        validation?.processGridOptions(this.gridOptions);
+        this.validateGridOptions(this.gridOptions);
 
         // changeSet should just include the properties that have changed.
         changeSet.properties = events.map((event) => event.type);
 
-        events.forEach((event) => {
+        for (const event of events) {
             _logIfDebug(this, `Updated property ${event.type} from`, event.previousValue, ` to `, event.currentValue);
             this.propEventSvc.dispatchEvent(event);
-        });
+        }
     }
 
-    addPropertyEventListener<K extends keyof GridOptions>(key: K, listener: PropertyValueChangedListener<K>): void {
-        this.propEventSvc.addEventListener(key, listener as any);
+    public addPropertyEventListener<K extends keyof GridOptions>(
+        key: K,
+        listener: PropertyValueChangedListener<K>
+    ): void {
+        this.propEventSvc.addEventListener(key, listener);
     }
-    removePropertyEventListener<K extends keyof GridOptions>(key: K, listener: PropertyValueChangedListener<K>): void {
-        this.propEventSvc.removeEventListener(key, listener as any);
+
+    public removePropertyEventListener<K extends keyof GridOptions>(
+        key: K,
+        listener: PropertyValueChangedListener<K>
+    ): void {
+        this.propEventSvc.removeEventListener(key, listener);
     }
 
     // responsible for calling the onXXX functions on gridOptions
     // It forces events defined in GridOptionsService.alwaysSyncGlobalEvents to be fired synchronously.
     // This is required for events such as GridPreDestroyed.
     // Other events can be fired asynchronously or synchronously depending on config.
-    globalEventHandlerFactory = (restrictToSyncOnly?: boolean) => {
+    private readonly globalEventHandlerFactory = (restrictToSyncOnly?: boolean) => {
         return (eventName: AgEventType, event?: any) => {
             // prevent events from being fired _after_ the grid has been destroyed
             if (!this.isAlive()) {
@@ -231,12 +254,29 @@ export class GridOptionsService extends BeanStub implements NamedBean {
                 return;
             }
 
-            const eventHandlerName = _getCallbackForEvent(eventName);
-            const eventHandler = (this.gridOptions as any)[eventHandlerName];
-            if (typeof eventHandler === 'function') {
-                this.beans.frameworkOverrides.wrapOutgoing(() => {
-                    eventHandler(event);
-                });
+            if (!isPublicEventHandler(eventName)) {
+                return;
+            }
+
+            const fireEvent = (name: AgPublicEventType, e: any) => {
+                const eventHandlerName = _PUBLIC_EVENT_HANDLERS_MAP[name];
+                const eventHandler = this.gridOptions[eventHandlerName];
+                if (typeof eventHandler === 'function') {
+                    this.beans.frameworkOverrides.wrapOutgoing(() => eventHandler(e));
+                }
+            };
+
+            if (this.gridReadyFired) {
+                fireEvent(eventName, event);
+            } else if (eventName === 'gridReady') {
+                fireEvent(eventName, event);
+                this.gridReadyFired = true;
+                for (const q of this.queueEvents) {
+                    fireEvent(q.eventName, q.event);
+                }
+                this.queueEvents = [];
+            } else {
+                this.queueEvents.push({ eventName, event });
             }
         };
     };
@@ -245,20 +285,44 @@ export class GridOptionsService extends BeanStub implements NamedBean {
         return this.domDataKey;
     }
 
-    public getGridCommonParams<TData = any, TContext = any>(): AgGridCommon<TData, TContext> {
-        return {
-            api: this.api,
-            context: this.gridOptionsContext,
-        };
-    }
-
-    public addGridCommonParams<T extends AgGridCommon<TData, TContext>, TData = any, TContext = any>(
+    /** Prefer _addGridCommonParams from gridOptionsUtils for bundle size savings */
+    public addCommon<T extends AgGridCommon<TData, TContext>, TData = any, TContext = any>(
         params: WithoutGridCommon<T>
     ): T {
-        const updatedParams = params as T;
-        updatedParams.api = this.api;
-        updatedParams.context = this.gridOptionsContext;
-        return updatedParams;
+        (params as T).api = this.api;
+        (params as T).context = this.gridOptionsContext;
+        return params as T;
+    }
+
+    /** `prefix` qualifies the error's option name (e.g. `colDef.`) so it is clear where the option lives. */
+    private validateOptions<T extends object>(options: T, modValidations: ModuleValidation<T>, prefix = ''): void {
+        for (const key of Object.keys(options)) {
+            const value = options[key as keyof T];
+            if (value == null || value === false) {
+                // false implies feature is disabled, don't validate.
+                continue;
+            }
+
+            let moduleToCheck: ModuleValidation<T>[keyof T] | null | undefined = modValidations[key as keyof T];
+            if (typeof moduleToCheck === 'function') {
+                moduleToCheck = moduleToCheck(options, this.gridOptions, this.beans);
+            }
+            if (moduleToCheck) {
+                this.assertModuleRegistered(moduleToCheck, `\`${prefix}${key}\``);
+            }
+        }
+    }
+
+    private validateGridOptions(gridOptions: GridOptions): void {
+        this.validateOptions(gridOptions, GRID_OPTIONS_MODULES);
+        this.validation?.processGridOptions(gridOptions);
+    }
+
+    public validateColDef(colDef: ColDef | ColGroupDef, colId: string, skipInferenceCheck?: boolean): void {
+        if (skipInferenceCheck || !this.beans.dataTypeSvc?.isColPendingInference(colId)) {
+            this.validateOptions(colDef, COLUMN_DEFINITION_MOD_VALIDATIONS, 'colDef.');
+            this.validation?.validateColDef(colDef);
+        }
     }
 
     public assertModuleRegistered<
@@ -270,7 +334,7 @@ export class GridOptionsService extends BeanStub implements NamedBean {
             ? moduleName.some((modName) => this.isModuleRegistered(modName))
             : this.isModuleRegistered(moduleName);
         if (!registered) {
-            _error(200, {
+            _reportMissingModule({
                 ...this.getModuleErrorParams(),
                 moduleName,
                 reasonOrId,
@@ -279,15 +343,44 @@ export class GridOptionsService extends BeanStub implements NamedBean {
         return registered;
     }
 
-    public getModuleErrorParams(): { gridScoped: boolean; gridId: string; rowModelType: RowModelType } {
+    public getModuleErrorParams(): {
+        gridScoped: boolean;
+        gridId: string;
+        rowModelType: RowModelType;
+        isUmd: boolean;
+        usesAgGridProvider: boolean;
+    } {
         return {
             gridId: this.gridId,
             gridScoped: _areModulesGridScoped(),
             rowModelType: this.get('rowModelType'),
+            isUmd: _isUmd(),
+            usesAgGridProvider: this.beans.frameworkOverrides.usesAgGridProvider ?? false,
         };
     }
 
     public isModuleRegistered(moduleName: ModuleName): boolean {
         return _isModuleRegistered(moduleName, this.gridId, this.get('rowModelType'));
     }
+
+    public setInstanceDomData(element: HTMLElement): void {
+        (element as any)[GRID_DOM_KEY] = this.instanceId;
+    }
+
+    public isElementInThisInstance(element: HTMLElement): boolean {
+        let pointer: HTMLElement | null = element;
+        while (pointer) {
+            const instanceId = (pointer as any)[GRID_DOM_KEY];
+            if (_exists(instanceId)) {
+                const eventFromThisGrid = instanceId === this.instanceId;
+                return eventFromThisGrid;
+            }
+            pointer = pointer.parentElement;
+        }
+        return false;
+    }
+}
+
+function isPublicEventHandler(eventName: AgEventType): eventName is AgPublicEventType {
+    return !!_PUBLIC_EVENT_HANDLERS_MAP[eventName as AgPublicEventType];
 }

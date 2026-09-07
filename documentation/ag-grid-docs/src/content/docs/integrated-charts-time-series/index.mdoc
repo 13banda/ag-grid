@@ -10,20 +10,21 @@ of a category or numeric axis.
 
 ## Time vs Category Axis
 
-A [Time Axis](https://ag-grid.com/charts/react/axes-types/#time) is used to plot continuous date / time values, whereas a
-[Category Axis](https://ag-grid.com/charts/react/axes-types/#category) is used to plot discrete values or categories.
+A [Time Axis](https://www.ag-grid.com/charts/react/axes-types/#time) is used to plot continuous date / time values, whereas a
+[Category Axis](https://www.ag-grid.com/charts/react/axes-types/#category) is used to plot discrete values or categories.
 
 The example below highlights the differences between time and category axes. Notice that the time axis contains all
 days for the range of values provided, whereas the category axis only shows axis labels for the discrete values
 provide.
 
-{% gridExampleRunner title="Time vs Category Axis" name="time-vs-category"  exampleHeight=740 /%}
+{% gridExampleRunner title="Time vs Category Axis" name="time-vs-category"  exampleHeight=790 /%}
 
 ## Time Axis Configuration
 
-A [Time Axis](https://ag-grid.com/charts/react/axes-types/#time) can be configured by setting `chartDataType = 'time'` on the column definition.
+A [Time Axis](https://www.ag-grid.com/charts/react/axes-types/#time) can be configured by setting `chartDataType = 'time'` on the column definition.
 
 For the time axis to work correctly, the column must contain values in one of the following formats:
+
 - `Date`
 - `string` in ISO 8601 format
 - `number` representing the numeric timestamp
@@ -62,7 +63,3 @@ A time axis can also be used in combination charts as shown in the following exa
 For more details on how to configure a combination chart, see the [Range Chart API example](./integrated-charts-api-range-chart/#combination-charts).
 
 {% gridExampleRunner title="Time Axis Combination Chart" name="time-combination-chart"  exampleHeight=790 /%}
-
-## Next Up
-
-Continue to the next section to learn about [Save / Restore Charts](./integrated-charts-api-save-restore-charts/).

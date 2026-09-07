@@ -1,5 +1,4 @@
 ---
-import { getBoilerPlateUrl } from '@utils/pages';
 import type { InternalFramework } from '@ag-grid-types';
 import JavascriptTemplate from '../framework-templates/JavascriptTemplate.astro';
 import TypescriptTemplate from '../framework-templates/TypescriptTemplate.astro';
@@ -25,14 +24,17 @@ interface Props {
      * Whether to add a script to post an `init` message to the parent
      */
     addInitMessageScript?: boolean;
-    /**
-     * Whether to not include system js code
-     */
-    ignoreSystemJs?: boolean;
+    ignoreModuleLoader?: boolean;
     /**
      * Extra styles to add to HTML
      */
     extraStyles?: string;
+    transpileInBrowser?: boolean;
+
+    /**
+     * Nonce value used for Content Security Policies
+     */
+    nonce?: string;
 }
 
 const {
@@ -43,27 +45,26 @@ const {
     generatedContents,
     relativePath,
     addInitMessageScript,
-    ignoreSystemJs,
+    ignoreModuleLoader,
     extraStyles,
+    transpileInBrowser,
+    nonce,
 } = Astro.props as Props;
 
 const isDev = getIsDev();
 
-const library = 'grid';
-
 const { entryFileName, files, scriptFiles, styleFiles, isEnterprise, isIntegratedCharts, isLocale, extras } =
     generatedContents || {};
-const indexFragment = files && files['index.html'];
+const indexFragment = files['index.html'] ?? '';
+const headFragment = files?.['head.html'] ?? '';
 const appLocation = relativePath ? '' : exampleUrl;
-const boilerPlateUrl = relativePath
-    ? ''
-    : getBoilerPlateUrl({
-          library,
-          internalFramework,
-      });
 
 const timeNow = Date.now();
 const title = `${toTitle(pageName)} - ${toTitle(exampleName)}`;
+
+const fileNames = Object.keys(files ?? {});
+
+const usesMathRandom = Object.values(generatedContents?.files).some((file) => file.includes('window.agRandom()'));
 
 const shouldShowTemplate = (framework: InternalFramework) => {
     return internalFramework === framework;
@@ -97,16 +98,22 @@ const shouldShowTemplate = (framework: InternalFramework) => {
             title={title}
             modifiedTimeMs={timeNow}
             isEnterprise={isEnterprise}
-            isIntegratedCharts={isIntegratedCharts}
-            isLocale={isLocale}
+            isIntegratedCharts={!!isIntegratedCharts}
+            isLocale={!!isLocale}
             scriptFiles={scriptFiles}
             styleFiles={styleFiles}
             indexFragment={indexFragment!}
             appLocation={appLocation}
             extraStyles={extraStyles}
             extras={extras}
+            headFragment={headFragment}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         >
-            {addInitMessageScript && <PostInitMessageScript pageName={pageName} exampleName={exampleName} />}
+            {addInitMessageScript && (
+                <PostInitMessageScript nonce={nonce} pageName={pageName} exampleName={exampleName} />
+            )}
         </JavascriptTemplate>
     )
 }
@@ -118,15 +125,22 @@ const shouldShowTemplate = (framework: InternalFramework) => {
             title={title}
             modifiedTimeMs={timeNow}
             entryFileName={entryFileName!}
+            fileNames={fileNames}
             styleFiles={styleFiles}
             indexFragment={indexFragment!}
             appLocation={appLocation}
-            boilerplatePath={boilerPlateUrl}
             extraStyles={extraStyles}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={!!isIntegratedCharts}
             extras={extras}
+            headFragment={headFragment}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         >
-            {addInitMessageScript && <PostInitMessageScript pageName={pageName} exampleName={exampleName} />}
+            {addInitMessageScript && (
+                <PostInitMessageScript nonce={nonce} pageName={pageName} exampleName={exampleName} />
+            )}
         </TypescriptTemplate>
     )
 }
@@ -138,17 +152,24 @@ const shouldShowTemplate = (framework: InternalFramework) => {
             title={title}
             modifiedTimeMs={timeNow}
             entryFileName={entryFileName!}
+            fileNames={fileNames}
             scriptFiles={scriptFiles}
             styleFiles={styleFiles}
             appLocation={appLocation}
-            boilerplatePath={boilerPlateUrl}
-            ignoreSystemJs={ignoreSystemJs}
+            ignoreModuleLoader={ignoreModuleLoader}
             extraStyles={extraStyles}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={!!isIntegratedCharts}
             internalFramework={internalFramework}
             extras={extras}
+            headFragment={headFragment}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         >
-            {addInitMessageScript && <PostInitMessageScript pageName={pageName} exampleName={exampleName} />}
+            {addInitMessageScript && (
+                <PostInitMessageScript nonce={nonce} pageName={pageName} exampleName={exampleName} />
+            )}
         </ReactTemplate>
     )
 }
@@ -159,16 +180,23 @@ const shouldShowTemplate = (framework: InternalFramework) => {
             isDev={isDev}
             title={title}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={!!isIntegratedCharts}
             modifiedTimeMs={timeNow}
             entryFileName={entryFileName!}
+            fileNames={fileNames}
             styleFiles={styleFiles}
             scriptFiles={scriptFiles}
             appLocation={appLocation}
-            boilerplatePath={boilerPlateUrl}
             extraStyles={extraStyles}
             extras={extras}
+            headFragment={headFragment}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         >
-            {addInitMessageScript && <PostInitMessageScript pageName={pageName} exampleName={exampleName} />}
+            {addInitMessageScript && (
+                <PostInitMessageScript nonce={nonce} pageName={pageName} exampleName={exampleName} />
+            )}
         </AngularTemplate>
     )
 }
@@ -179,16 +207,23 @@ const shouldShowTemplate = (framework: InternalFramework) => {
             isDev={isDev}
             title={title}
             isEnterprise={isEnterprise}
+            isIntegratedCharts={!!isIntegratedCharts}
             modifiedTimeMs={timeNow}
             entryFileName={entryFileName!}
+            fileNames={fileNames}
             scriptFiles={scriptFiles}
             styleFiles={styleFiles}
             appLocation={appLocation}
-            boilerplatePath={boilerPlateUrl}
             extraStyles={extraStyles}
             extras={extras}
+            headFragment={headFragment}
+            usesMathRandom={usesMathRandom}
+            transpileInBrowser={transpileInBrowser}
+            nonce={nonce}
         >
-            {addInitMessageScript && <PostInitMessageScript pageName={pageName} exampleName={exampleName} />}
+            {addInitMessageScript && (
+                <PostInitMessageScript nonce={nonce} pageName={pageName} exampleName={exampleName} />
+            )}
         </VueTemplate>
     )
 }

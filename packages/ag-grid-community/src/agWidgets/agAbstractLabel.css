@@ -1,0 +1,39 @@
+.ag-label {
+    white-space: nowrap;
+    margin-right: var(--ag-spacing);
+}
+
+:where(.ag-label-align-right) .ag-label {
+    order: 1;
+    margin-left: var(--ag-spacing);
+}
+
+:where(.ag-label-align-right) {
+    .ag-label,
+    .ag-wrapper {
+        flex: none;
+    }
+}
+
+.ag-label-align-top {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+:where(.ag-label-align-top) {
+    .ag-label,
+    .ag-wrapper {
+        align-self: stretch;
+    }
+}
+
+.ag-label-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+:where(.ag-label-align-top) .ag-label {
+    margin-bottom: calc(var(--ag-spacing) * 0.5);
+}

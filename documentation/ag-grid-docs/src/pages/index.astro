@@ -1,55 +1,120 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { getEntry } from 'astro:content';
+import { getEntry, type CollectionEntry } from 'astro:content';
 import styles from '@pages-styles/homepage.module.scss';
 import { Quotes } from '@components/quotes/Quotes';
 import { quotesData } from '@components/quotes/quotesData';
 import { LandingPageFWSelector } from '@ag-website-shared/components/landing-pages/LandingPageFWSelector';
-import InstallText from '@components/framework-landing-pages/InstallText';
+import { FrameworkCtaLink } from '@components/landing-pages/FrameworkCtaLink';
 import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 import { Version } from '@ag-website-shared/components/whats-new/components/Version';
 import { Icon } from '@ag-website-shared/components/icon/Icon';
-import Showcase from '../components/framework-landing-pages/react/sections/showcase/Showcase';
+import Showcase from '../components/showcase/Showcase';
 import { parseVersion } from '@ag-website-shared/utils/parseVersion';
 import whatsNewData from '@ag-website-shared/content/whats-new/data.json';
 import { LandingPageSection } from '@ag-website-shared/components/landing-pages/LandingPageSection';
 import { LandingPageFAQ } from '@ag-website-shared/components/landing-pages/LandingPageFAQ';
+import { renderFAQAnswers } from '@ag-website-shared/components/landing-pages/renderFAQAnswers';
 import { CustomerLogos } from '@components/customer-logos/CustomerLogos';
 import { Finance } from 'src/components/demos/examples/finance';
 import { ThemeBuilderHomepage } from '@components/theme-builder-homepage/ThemeBuilderHomepage';
 import { AutomatedRowGrouping } from '@ag-website-shared/components/automated-examples/AutomatedRowGrouping';
 import { AutomatedIntegratedCharts } from '@ag-website-shared/components/automated-examples/AutomatedIntegratedCharts';
-import { LandingPageAnimatedHeader } from '@ag-website-shared/components/landing-pages/LandingPageAnimatedHeader';
+import { FrameworkTextAnimation } from '@ag-website-shared/components/framework-text-animation/FrameworkTextAnimation';
 import LogoMark from '@components/logo/LogoMark';
+import { urlWithPrefix } from '@utils/urlWithPrefix';
+import { DEFAULT_FRAMEWORK, DISABLE_MARKDOWN_DOCS } from '@constants';
+import { buildFAQPage, buildSiteNavigationElement, siteRootUrl } from '@ag-website-shared/utils/structuredData';
 
-const { data: versionsData } = await getEntry('versions', 'ag-grid-versions');
-const { data: FAQData } = await getEntry('homepage', 'homepageFAQs');
+const { data: versionsData } = (await getEntry('versions', 'ag-grid-versions')) as CollectionEntry<'versions'>;
+const { data: faqData } = (await getEntry('faqs', 'homepage')) as CollectionEntry<'faqs'>;
+const { data: metadata } = (await getEntry('metadata', 'metadata')) as CollectionEntry<'metadata'>;
+const { data: headerData } = (await getEntry('siteHeader', 'header')) as CollectionEntry<'siteHeader'>;
+const { data: homepageData } = (await getEntry('homepage', 'homepage')) as CollectionEntry<'homepage'>;
 const { blogPrefix } = whatsNewData['grid'];
+
+const { hero } = homepageData;
+const sectionById = Object.fromEntries(homepageData.sections.map((section) => [section.id, section]));
+
+// Resolve a homepage section's stored copy into <LandingPageSection> props: framework CTAs
+// keep their raw './' path (resolved by the component), other CTAs get urlWithBaseUrl, and
+// sectionClass maps to the local CSS-module class.
+const sectionProps = (id: string) => {
+    const { ctaUrl, ctaUrlIsBaseUrl, sectionClass, ...rest } = sectionById[id];
+    return {
+        ...rest,
+        ctaUrl: ctaUrl == null ? undefined : ctaUrlIsBaseUrl ? urlWithBaseUrl(ctaUrl) : ctaUrl,
+        sectionClass: sectionClass ? styles[sectionClass] : undefined,
+    };
+};
+
+// Reduce the markdown FAQ answers to plain text so the structured data matches the visible answer and
+// stays valid for rich results. Covers the inline markdown used in these answers: images, links,
+// bold/italic emphasis, inline code, and line-leading heading/quote/list markers.
+const toPlainText = (markdown: string): string =>
+    markdown
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // images -> alt text
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // links -> link text
+        .replace(/(\*\*|__)(.*?)\1/g, '$2') // bold
+        .replace(/(\*|_)(.*?)\1/g, '$2') // italic
+        .replace(/`([^`]+)`/g, '$1') // inline code
+        .replace(/^\s{0,3}(?:#{1,6}|>|[-*+]|\d+\.)\s+/gm, ''); // heading / quote / list markers
+const siteRoot = siteRootUrl(metadata.canonicalUrlBase);
+const faqStructuredData = buildFAQPage({
+    pageUrl: siteRoot,
+    items: faqData.map(({ question, answer }) => ({ question, answer: toPlainText(answer) })),
+});
+
+// SiteNavigationElement built from the primary header nav, so it stays in sync with the
+// rendered navigation. GitHub is dropped (external repo, already in Organization.sameAs).
+// Paths are resolved exactly as the header does (urlWithPrefix): './' paths take the default
+// framework prefix, '/' paths sit at the site root. The result is made absolute for crawlers.
+const siteOrigin = new URL(siteRoot).origin;
+const toAbsoluteNavUrl = (item: { url?: string; path?: string }): string =>
+    item.url ?? `${siteOrigin}${urlWithPrefix({ url: item.path ?? '/', framework: DEFAULT_FRAMEWORK })}`;
+const siteNavigationStructuredData = buildSiteNavigationElement({
+    canonicalUrlBase: metadata.canonicalUrlBase,
+    items: (headerData.header?.items ?? [])
+        .filter((item) => item.title !== 'GitHub')
+        .map((item) => ({ name: item.title, url: toAbsoluteNavUrl(item) })),
+});
+
+// Render the markdown FAQ answers to HTML on the server so Markdoc stays out of the client bundle.
+const renderedFaqData = renderFAQAnswers(faqData, 'react');
 
 const frameworksData = [
     {
         name: 'react',
-        url: '/react-data-grid/',
+        url: urlWithPrefix({
+            framework: 'react',
+            url: './getting-started',
+        }),
     },
     {
         name: 'angular',
-        url: '/angular-data-grid/',
+        url: urlWithPrefix({
+            framework: 'angular',
+            url: './getting-started',
+        }),
     },
     {
         name: 'vue',
-        url: '/vue-data-grid/',
+        url: urlWithPrefix({
+            framework: 'vue',
+            url: './getting-started',
+        }),
     },
     {
         name: 'javascript',
-        url: '/javascript-data-grid/',
+        url: urlWithPrefix({
+            framework: 'javascript',
+            url: './getting-started',
+        }),
     },
 ];
----
 
-<!-- Grid font for Quartz theme -->
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+const markdownUrl = DISABLE_MARKDOWN_DOCS ? undefined : urlWithBaseUrl('/index.md');
+---
 
 <!-- Prefetch customer logos -->
 <link
@@ -65,30 +130,27 @@ const frameworksData = [
     description={'AG Grid is a feature-rich Data Grid for all major JavaScript frameworks, offering filtering, grouping, pivoting, and more. Free and open-source. Upgrade to Enterprise for advanced features.'}
     showSearchBar={false}
     showDocsNav={false}
+    pageStructuredData={[siteNavigationStructuredData, faqStructuredData]}
+    markdownUrl={markdownUrl}
 >
     <div class={styles.homepageHero}>
         <section class:list={[styles.heroInner, 'layout-max-width-small']}>
             <section class={styles.heroHeadings}>
-                <noscript>
-                    <h1>The Best JavaScript Grid in the World</h1>
-                </noscript>
-                <LandingPageAnimatedHeader client:load />
+                <h1 className="text-xl">
+                    <span className={styles.heroTopLine}>
+                        <span>{hero.headingPrefix}</span>&nbsp;<FrameworkTextAnimation client:load />
+                    </span>
+                    <span>{hero.headingSuffix}</span>
+                </h1>
 
-                <h2 class="text-base normal-weight-text">
-                    Add high-performance, feature rich, and fully customisable Data Grids to your application in minutes
-                    with our free, open source library.
-                </h2>
+                <h2 class="text-base normal-weight-text">{hero.subHeading}</h2>
                 <div class={styles.heroSectionbuttonContainer}>
-                    <a
-                        class:list={[
-                            'button-secondary',
-                            styles.heroSectioncta1,
-                            'plausible-event-name=react-table-get-started',
-                        ]}
-                        href={urlWithBaseUrl('./example')}>See demos <Icon name="chevronRight" /></a
-                    >
                     <div class={styles.heroSectioncta2}>
-                        <InstallText client:load />
+                        <div class={styles.homepageFrameworks}>
+                            <div class:list={[styles.frameworksInner, 'layout-max-width-small']}>
+                                <LandingPageFWSelector client:load data={frameworksData} isFullWidth />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -102,38 +164,48 @@ const frameworksData = [
             </div>
 
             <div class={styles.heroLinks}>
-                <a class="button-tertiary" href="https://github.com/ag-grid/ag-grid-demos/tree/main/finance">
+                <FrameworkCtaLink
+                    client:load
+                    id="hero-free-trial-cta"
+                    url={hero.freeTrialUrl}
+                    className={`button-tertiary ${styles.heroSectioncta1}`}
+                    withChevron
+                >
+                    {hero.freeTrialText}
+                </FrameworkCtaLink>
+
+                <a
+                    id="hero-buy-now-cta"
+                    class:list={['button-tertiary', styles.heroSectioncta1]}
+                    href={urlWithBaseUrl(hero.buyNowUrl)}>{hero.buyNowText} <Icon name="chevronRight" /></a
+                >
+
+                <a
+                    id="demos-cta"
+                    class:list={[
+                        'button-tertiary',
+                        styles.heroSectioncta1,
+                        'plausible-event-name=react-table-get-started',
+                    ]}
+                    href={urlWithBaseUrl(hero.seeDemosUrl)}>{hero.seeDemosText} <Icon name="chevronRight" /></a
+                >
+
+                <a id="github-cta" class="button-tertiary" href={hero.githubUrl}>
                     <Icon name="github" svgClasses={styles.githubIcon} />
-                    <span>View on Github</span>
+                    <span>{hero.githubText}</span>
                 </a>
             </div>
         </section>
     </div>
 
-    <div class={styles.homepageFrameworks}>
-        <div class:list={[styles.frameworksInner, 'layout-max-width-small']}>
-            <LandingPageFWSelector client:load data={frameworksData} isFullWidth />
-        </div>
-    </div>
-
     <div class={styles.homepageCustomers}>
-        <LandingPageSection client:load>
+        <LandingPageSection client:load id="customer-logos">
             <CustomerLogos client:load />
             <Quotes client:load data={quotesData} />
         </LandingPageSection>
     </div>
 
-    <LandingPageSection
-        client:load
-        tag="Unbeatable Speed & Performance"
-        heading="The Fastest Data Grid In The World"
-        subHeading="Handle millions of rows, and thousands of updates per second out of the box, without compromising on performance"
-        ctaTitle="Get Started For Free"
-        ctaUrl="./getting-started"
-        isFramework
-        showBackgroundGradient
-        client:load
-    >
+    <LandingPageSection client:load {...sectionProps('fastest-data-grid')}>
         <section className={styles.automatedRowGroupingOuter}>
             <div className={styles.automatedRowGrouping}>
                 <AutomatedRowGrouping client:visible visibilityThreshold={0.2} darkMode={true} />
@@ -141,28 +213,11 @@ const frameworksData = [
         </section>
     </LandingPageSection>
 
-    <LandingPageSection
-        client:load
-        tag="Fully Customisable & Extendable"
-        heading="Custom Themes and Components"
-        subHeading="Customise your Data Grid styles with our Theming API and extend functionality with your own custom components."
-        ctaTitle="Create a Custom Theme"
-        ctaUrl={urlWithBaseUrl('/theme-builder/')}
-    >
+    <LandingPageSection client:load {...sectionProps('custom-themes')}>
         <ThemeBuilderHomepage gridHeight={261} client:visible />
     </LandingPageSection>
 
-    <LandingPageSection
-        client:load
-        tag="Built-in Charting"
-        headingHtml="Integrated Charts, Powered by <a href='https://www.ag-grid.com/charts/' style='font-weight: 800'>AG Charts</a>"
-        subHeadingHtml="<p>Let your users visualise data with charts directly from the Grid. Powered by AG Charts: our <a href='https://www.ag-grid.com/charts/'> JavaScript Charting Library</a></p>"
-        ctaTitle="Explore Integrated Charts"
-        ctaUrl="./integrated-charts/"
-        isFramework
-        showBackgroundGradient
-        client:load
-    >
+    <LandingPageSection client:load {...sectionProps('integrated-charting')}>
         <section className={styles.automatedIntegratedChartsOuter}>
             <div className={styles.automatedIntegratedCharts}>
                 <AutomatedIntegratedCharts client:visible visibilityThreshold={0.8} />
@@ -170,26 +225,11 @@ const frameworksData = [
         </section>
     </LandingPageSection>
 
-    <LandingPageSection
-        client:load
-        tag="Unlimited Use-cases"
-        heading="Trusted By Developers Everywhere"
-        subHeading="AG Grid can be found in almost every industry, from Finance and AI, to Databases and Aerospace:"
-        ctaTitle="Browse Our Showcase"
-        ctaUrl={urlWithBaseUrl('/community/showcase/')}
-    >
+    <LandingPageSection client:load {...sectionProps('showcase-examples')}>
         <Showcase client:load />
     </LandingPageSection>
 
-    <LandingPageSection
-        client:load
-        tag="Regular Updates & Improvements"
-        headingHtml="Latest Features and Enhancements"
-        subHeading="With minor releases every 6 weeks, and major releases every 6 months, stay up to date with all of the newest features and improvements to AG Grid Data Grids."
-        ctaTitle="See Whats New"
-        ctaUrl={urlWithBaseUrl('/whats-new/')}
-        showBackgroundGradient
-    >
+    <LandingPageSection client:load {...sectionProps('whats-new')}>
         <div class={styles.latestNewsVersions}>
             {
                 versionsData
@@ -216,14 +256,8 @@ const frameworksData = [
         </div>
     </LandingPageSection>
 
-    <LandingPageSection
-        client:load
-        tag="JavaScript Data Grid FAQs"
-        heading="Frequently Asked Questions"
-        subHeading="How many rows can AG Grid handle? How fast is AG Grid? Is AG Grid free? Answers to these common questions and more."
-        sectionClass={styles.faqSection}
-    >
-        <LandingPageFAQ client:load FAQData={FAQData} framework={'react'} />
+    <LandingPageSection client:load {...sectionProps('faq-section')}>
+        <LandingPageFAQ client:load FAQData={renderedFaqData} />
     </LandingPageSection>
 </Layout>
 

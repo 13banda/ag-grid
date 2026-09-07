@@ -1,12 +1,12 @@
-import type { ComponentSelector } from 'ag-grid-community';
-import { Component, _setAriaRole } from 'ag-grid-community';
+import type { ComponentSelector, FocusableContainer } from 'ag-grid-community';
+import { Component, _createElement } from 'ag-grid-community';
 
 import { PivotDropZonePanel } from './pivotDropZonePanel';
 import { RowGroupDropZonePanel } from './rowGroupDropZonePanel';
 
-export class AgGridHeaderDropZones extends Component {
-    private rowGroupComp: Component;
-    private pivotComp: Component;
+class AgGridHeaderDropZones extends Component {
+    private rowGroupComp: Component & FocusableContainer;
+    private pivotComp: Component & FocusableContainer;
 
     constructor() {
         super();
@@ -26,10 +26,7 @@ export class AgGridHeaderDropZones extends Component {
     }
 
     private createNorthPanel(): HTMLElement {
-        const topPanelGui = document.createElement('div');
-
-        topPanelGui.classList.add('ag-column-drop-wrapper');
-        _setAriaRole(topPanelGui, 'presentation');
+        const topPanelGui = _createElement({ tag: 'div', cls: 'ag-column-drop-wrapper', role: 'presentation' });
 
         const rowGroupComp = new RowGroupDropZonePanel(true);
         this.rowGroupComp = this.createManagedBean(rowGroupComp);
@@ -57,8 +54,8 @@ export class AgGridHeaderDropZones extends Component {
         const { rowGroupComp, pivotComp } = this;
         const bothDisplayed = rowGroupComp.isDisplayed() && pivotComp.isDisplayed();
         const classStr = 'ag-column-drop-horizontal-half-width';
-        rowGroupComp.addOrRemoveCssClass(classStr, bothDisplayed);
-        pivotComp.addOrRemoveCssClass(classStr, bothDisplayed);
+        rowGroupComp.toggleCss(classStr, bothDisplayed);
+        pivotComp.toggleCss(classStr, bothDisplayed);
     }
 
     private onRowGroupChanged(): void {
@@ -95,6 +92,10 @@ export class AgGridHeaderDropZones extends Component {
         } else {
             pivotComp.setDisplayed(false);
         }
+    }
+
+    public getFocusableContainers(): FocusableContainer[] {
+        return [this.rowGroupComp, this.pivotComp].filter((comp) => !!comp);
     }
 }
 

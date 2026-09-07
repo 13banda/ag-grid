@@ -1,5 +1,6 @@
 module.exports = {
     extends: 'stylelint-config-standard',
+    plugins: ['./plugins/stylelint-plugin-ag/index.mjs'],
     rules: {
         'comment-empty-line-before': [
             'always',
@@ -45,22 +46,41 @@ module.exports = {
                     '.ag-layout-print',
                     '.ag-layout-normal',
                     '.ag-layout-auto-height',
+                    '.ag-tool-panel-animating',
                 ],
             },
         ],
-
-        // NOTE: In general we want to avoid targeting grid elements using
-        // [class^='ag-'] as customer applications can have elements with that
-        // prefix too. Sometimes it is unavoidable, e.g. for global style
-        // resets, in which case scope the selector so it is only applied within
-        // the grid root.
-        'selector-disallowed-list': [
-            ['/.*class\\^=.*/'],
-            {
-                message:
-                    'Avoid selectors that target partial classnames unless absolutely necessary - see note in .stylelintrc.js',
-                severity: 'error',
-            },
-        ],
     },
+    overrides: [
+        {
+            files: ['packages/**/*.css'],
+            rules: {
+                'ag/no-low-performance-key-selector': true,
+                'ag/no-unknown-theme-variable': [
+                    true,
+                    {
+                        paramSourceFiles: [
+                            'packages/ag-stack/src/theming/shared/shared-css.ts',
+                            'packages/ag-grid-community/src/theming/core/core-css.ts',
+                            'packages/ag-grid-community/src/theming/parts/button-style/button-styles.ts',
+                            'packages/ag-grid-community/src/theming/parts/checkbox-style/checkbox-styles.ts',
+                            'packages/ag-grid-community/src/theming/parts/input-style/input-styles.ts',
+                            'packages/ag-grid-community/src/theming/parts/tab-style/tab-styles.ts',
+                            'packages/ag-grid-community/src/theming/parts/theme/themes.ts',
+                        ],
+                        // Variables that are valid but not derived from a theme param.
+                        // Only add a variable here if it is intended to be used by
+                        // customers; any other non-param variable must instead be
+                        // prefixed --ag-internal-.
+                        publicOutputVariables: [
+                            '--ag-line-height',
+                            '--ag-indentation-level',
+                            '--ag-row-highlight-level',
+                            '--ag-horizontal-size',
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
 };

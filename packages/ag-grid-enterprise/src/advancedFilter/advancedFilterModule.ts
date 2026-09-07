@@ -1,9 +1,15 @@
 import type { _AdvancedFilterGridApi, _ModuleWithApi } from 'ag-grid-community';
-import { _FilterCoreModule, _FilterValueModule, _PopupModule, _SharedDragAndDropModule } from 'ag-grid-community';
+import {
+    TooltipModule,
+    _FilterCoreModule,
+    _FilterValueModule,
+    _PopupModule,
+    _SharedDragAndDropModule,
+} from 'ag-grid-community';
 
 import { EnterpriseCoreModule } from '../agGridEnterpriseModule';
 import { VERSION } from '../version';
-import { advancedFilterCSS } from './advanced-filter.css-GENERATED';
+import advancedFilterCSS from './advanced-filter.css';
 import {
     getAdvancedFilterModel,
     hideAdvancedFilterBuilder,
@@ -12,6 +18,7 @@ import {
 } from './advancedFilterApi';
 import { AdvancedFilterExpressionService } from './advancedFilterExpressionService';
 import { AdvancedFilterService } from './advancedFilterService';
+import { AdvancedFilterSetService } from './set/advancedFilterSetService';
 
 /**
  * @feature Filtering -> Advanced Filter
@@ -20,7 +27,7 @@ import { AdvancedFilterService } from './advancedFilterService';
 export const AdvancedFilterModule: _ModuleWithApi<_AdvancedFilterGridApi> = {
     moduleName: 'AdvancedFilter',
     version: VERSION,
-    beans: [AdvancedFilterService, AdvancedFilterExpressionService],
+    beans: [AdvancedFilterService, AdvancedFilterExpressionService, AdvancedFilterSetService],
     icons: {
         // Builder button in Advanced Filter
         advancedFilterBuilder: 'group',
@@ -40,6 +47,8 @@ export const AdvancedFilterModule: _ModuleWithApi<_AdvancedFilterGridApi> = {
         advancedFilterBuilderSelectOpen: 'small-down',
         // remove for rich select editor pills
         richSelectRemove: 'cancel',
+        // loading async values
+        richSelectLoading: 'loading',
     },
     apiFunctions: {
         getAdvancedFilterModel,
@@ -47,6 +56,13 @@ export const AdvancedFilterModule: _ModuleWithApi<_AdvancedFilterGridApi> = {
         showAdvancedFilterBuilder,
         hideAdvancedFilterBuilder,
     },
-    dependsOn: [EnterpriseCoreModule, _FilterCoreModule, _SharedDragAndDropModule, _PopupModule, _FilterValueModule],
+    dependsOn: [
+        EnterpriseCoreModule,
+        _FilterCoreModule,
+        _SharedDragAndDropModule,
+        _PopupModule,
+        _FilterValueModule,
+        TooltipModule,
+    ],
     css: [advancedFilterCSS],
 };

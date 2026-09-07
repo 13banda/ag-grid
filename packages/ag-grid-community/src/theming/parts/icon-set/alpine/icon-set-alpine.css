@@ -14,6 +14,10 @@
     mask-image: url('./alpine-svg-icons/asc.svg');
 }
 
+.ag-icon-aasc::before {
+    mask-image: url('./alpine-svg-icons/aasc.svg');
+}
+
 .ag-icon-cancel::before {
     mask-image: url('./alpine-svg-icons/cancel.svg');
 }
@@ -54,12 +58,24 @@
     mask-image: url('./alpine-svg-icons/desc.svg');
 }
 
+.ag-icon-adesc::before {
+    mask-image: url('./alpine-svg-icons/adesc.svg');
+}
+
+.ag-icon-document::before {
+    mask-image: url('./alpine-svg-icons/document.svg');
+}
+
 .ag-icon-down::before {
     mask-image: url('./alpine-svg-icons/down.svg');
 }
 
 .ag-icon-excel::before {
     mask-image: url('./alpine-svg-icons/excel.svg');
+}
+
+.ag-icon-pdf::before {
+    mask-image: url('./alpine-svg-icons/pdf.svg');
 }
 
 .ag-icon-expanded::before {
@@ -80,6 +96,10 @@
 
 .ag-icon-first::before {
     mask-image: url('./alpine-svg-icons/first.svg');
+}
+
+.ag-icon-fx::before {
+    mask-image: url('./alpine-svg-icons/fx.svg');
 }
 
 .ag-icon-group::before {
@@ -136,6 +156,10 @@
 
 .ag-icon-paste::before {
     mask-image: url('./alpine-svg-icons/paste.svg');
+}
+
+.ag-icon-values-as::before {
+    mask-image: url('./alpine-svg-icons/values-as.svg');
 }
 
 .ag-icon-pin::before {
@@ -208,4 +232,48 @@
 
 .ag-icon-settings::before {
     mask-image: url('./alpine-svg-icons/settings.svg');
+}
+
+.ag-icon-column-arrow::before {
+    mask-image: url('./alpine-svg-icons/column-arrow.svg');
+}
+
+.ag-icon-un-pin::before {
+    mask-image: url('./alpine-svg-icons/un-pin.svg');
+}
+
+.ag-icon-pinned-top::before {
+    mask-image: url('./alpine-svg-icons/pinned-top.svg');
+}
+
+.ag-icon-pinned-bottom::before {
+    mask-image: url('./alpine-svg-icons/pinned-bottom.svg');
+}
+
+.ag-icon-chevron-up::before {
+    mask-image: url('./alpine-svg-icons/chevron-up.svg');
+}
+
+.ag-icon-chevron-down::before {
+    mask-image: url('./alpine-svg-icons/chevron-down.svg');
+}
+
+.ag-icon-chevron-left::before {
+    mask-image: url('./alpine-svg-icons/chevron-left.svg');
+}
+
+.ag-icon-chevron-right::before {
+    mask-image: url('./alpine-svg-icons/chevron-right.svg');
+}
+
+.ag-icon-filter-add::before {
+    mask-image: url('./alpine-svg-icons/filter-add.svg');
+}
+
+.ag-icon-edit::before {
+    mask-image: url('./alpine-svg-icons/edit.svg');
+}
+
+.ag-icon-search::before {
+    mask-image: url('./alpine-svg-icons/search.svg');
 }

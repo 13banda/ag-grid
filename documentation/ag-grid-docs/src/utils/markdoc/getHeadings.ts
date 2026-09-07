@@ -10,9 +10,16 @@ import path from 'node:path';
 
 import { transformMarkdoc } from './transformMarkdoc';
 
+interface HeadingData {
+    id: string;
+    text: string;
+}
+
 const TABS_TAG_NAME = 'tabs';
 const TAB_ITEM_TAG_NAME = 'tabItem';
 const API_DOC_HEADINGS_ATTR_NAME = '__apiDocumentationHeadings';
+const HEADING_ATTR_NAME = '__heading';
+const NUMBER_HEADING_ATTR_NAME = '__numberHeading';
 
 function isTabsTag({ tag, type }: Node) {
     return type === 'tag' && tag === TABS_TAG_NAME;
@@ -39,13 +46,26 @@ function isHeadingTag(node: Node) {
     );
 }
 
-// Only show ApiDocumentation headings if it's not showing a section
+// Only show ApiDocumentation headings if it's not showing a section and the header isn't hidden
+// (a hidden header renders no id, so a heading would point at a non-existent anchor)
 function isApiDocsHeadingNode(node: Node) {
-    return node.tag === 'apiDocumentation' && !node.attributes.section;
+    return node.tag === 'apiDocumentation' && !node.attributes.section && !node.attributes.config?.hideHeader;
 }
 
-function hasApiDocsHeadingAttribute(node: Node) {
-    return node.attributes[API_DOC_HEADINGS_ATTR_NAME];
+function isIfNode(node: Node) {
+    return node.tag === 'if';
+}
+
+function hasApiDocsHeadingAttribute(node?: Node) {
+    return node?.attributes?.[API_DOC_HEADINGS_ATTR_NAME];
+}
+
+function hasHeadingAttribute(node?: Node) {
+    return node?.attributes?.[HEADING_ATTR_NAME];
+}
+
+function hasNumberHeadingAttribute(node: Node) {
+    return node?.attributes?.[NUMBER_HEADING_ATTR_NAME];
 }
 
 function addAttributeToNode({ node, name, value }: { node: Node; name: string; value: any }) {
@@ -121,7 +141,9 @@ function addTabsToHeadings({
     for (const tab of tabHeadings) {
         const tabHeadingIndex = headingsClone.findIndex(({ slug }) => slug === tab.heading.slug);
 
-        if (tabHeadingIndex === -1) continue;
+        if (tabHeadingIndex === -1) {
+            continue;
+        }
 
         const tabItemsHeading: MarkdownHeading[] = tab.tabItems.map(({ id, label }) => ({
             slug: getTabItemSlug(id),
@@ -135,8 +157,24 @@ function addTabsToHeadings({
     return headingsClone;
 }
 
-async function transformRenderTreeWithReferenceHeadings(renderTree: RenderableTreeNode) {
-    const childrenPromises = renderTree!.children.map(async (node) => {
+async function transformRenderTreeWithReferenceHeadings({
+    renderTree,
+    skipHeading,
+}: {
+    renderTree: RenderableTreeNode;
+    skipHeading?: (node: HeadingData) => boolean;
+}) {
+    const slugger = new Slugger();
+    const renderTreeChildren = skipHeading
+        ? renderTree!.children.filter((node) => {
+              if (hasHeadingAttribute(node)) {
+                  return !skipHeading(node.attributes[HEADING_ATTR_NAME]);
+              } else {
+                  return true;
+              }
+          })
+        : renderTree!.children;
+    const childrenPromises = renderTreeChildren.map(async (node) => {
         if (hasApiDocsHeadingAttribute(node)) {
             const { source, sources, config = {} } = node.attributes;
 
@@ -154,6 +192,14 @@ async function transformRenderTreeWithReferenceHeadings(renderTree: RenderableTr
             });
 
             return headingNodes;
+        } else if (hasHeadingAttribute(node)) {
+            const { level, id, text } = node.attributes[HEADING_ATTR_NAME];
+            return createHeadingRenderableNode({ level, id, text });
+        } else if (hasNumberHeadingAttribute(node)) {
+            const { title, level: headingLevel } = node.attributes;
+            const id = slugger.slug(title);
+            const level = parseInt(headingLevel.replace(/\D/g, ''), 10);
+            return createHeadingRenderableNode({ level, id, text: title });
         } else {
             return node;
         }
@@ -202,30 +248,54 @@ export function getTopHeading(title: string) {
     return { slug: 'top', depth: 1, text: title };
 }
 
+function updateWithApiDocsHeadings(node: Node): Node {
+    if (isIfNode(node)) {
+        node.children = node.children.map(updateWithApiDocsHeadings);
+        return node;
+    } else if (isApiDocsHeadingNode(node)) {
+        addAttributeToNode({ node, name: API_DOC_HEADINGS_ATTR_NAME, value: true });
+    }
+    return node;
+}
+
 /**
  * Get headings within markdoc content, resolving headings shown based on framework and adding
  * tab headings
  */
 export async function getHeadings({
+    pageHeadings,
     title,
     pageName,
     markdocContent,
     framework,
     getTabItemSlug,
+    skipHeading,
 }: {
+    pageHeadings: MarkdownHeading[];
     title: string;
     pageName: string;
     markdocContent: string;
     framework: Framework;
     getTabItemSlug: (id: string) => string;
+    skipHeading?: (heading: HeadingData) => boolean;
 }): Promise<MarkdownHeading[]> {
-    const transformAst = (ast: Node) => {
-        ast.children = ast.children.map((node) => {
-            if (isApiDocsHeadingNode(node)) {
-                addAttributeToNode({ node, name: API_DOC_HEADINGS_ATTR_NAME, value: true });
+    if (pageHeadings) {
+        return pageHeadings.filter(({ frameworks }) => {
+            if (frameworks) {
+                const isFramework = frameworks.includes(framework);
+                if (!isFramework) {
+                    return false;
+                }
+
+                return true;
             }
-            return node;
+
+            return true;
         });
+    }
+
+    const transformAst = (ast: Node) => {
+        ast.children = ast.children.map(updateWithApiDocsHeadings);
 
         resolvePartials({ pageName, ast, framework });
     };
@@ -234,7 +304,7 @@ export async function getHeadings({
         return [];
     }
 
-    await transformRenderTreeWithReferenceHeadings(renderTree);
+    await transformRenderTreeWithReferenceHeadings({ renderTree, skipHeading });
 
     const renderTreeHeadings = renderTree['children']?.filter(isHeadingTag).map((node) => {
         const { id: slug, level: depth } = node.attributes;

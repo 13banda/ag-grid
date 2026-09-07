@@ -4,18 +4,18 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { NumberFloatingFilterComponent } from './numberFloatingFilterComponent_typescript';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, NumberFilterModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', filter: false },
@@ -71,7 +71,7 @@ const gridOptions: GridOptions<IOlympicData> = {
         floatingFilter: true,
     },
     columnDefs: columnDefs,
-    rowData: null,
+    enableFilterHandlers: true,
 };
 
 // setup the grid after the page has finished loading

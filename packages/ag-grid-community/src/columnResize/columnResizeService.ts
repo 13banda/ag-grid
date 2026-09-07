@@ -1,14 +1,13 @@
 import { dispatchColumnResizedEvent } from '../columns/columnEventUtils';
-import type { ColKey } from '../columns/columnModel';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { AgColumnGroup } from '../entities/agColumnGroup';
+import type { ColKey } from '../entities/colDef';
 import type { ColumnEventType } from '../events';
 import type { HeaderCellCtrl, IHeaderCellComp } from '../headerRendering/cells/column/headerCellCtrl';
 import type { IHeaderGroupCellComp } from '../headerRendering/cells/columnGroup/headerGroupCellCtrl';
-import type { ColumnPinnedType } from '../interfaces/iColumn';
-import { _error } from '../validation/logging';
+import { _clamp } from '../utils/number';
 import { GroupResizeFeature } from './groupResizeFeature';
 import { ResizeFeature } from './resizeFeature';
 
@@ -34,11 +33,11 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
 
         const { colModel, gos, visibleCols } = this.beans;
 
-        columnWidths.forEach((columnWidth) => {
-            const col = colModel.getColDefCol(columnWidth.key) || colModel.getCol(columnWidth.key);
+        for (const columnWidth of columnWidths) {
+            const col = colModel.getCol(columnWidth.key);
 
             if (!col) {
-                return;
+                continue;
             }
 
             sets.push({
@@ -57,7 +56,7 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
             if (shiftKey) {
                 const otherCol = visibleCols.getColAfter(col);
                 if (!otherCol) {
-                    return;
+                    continue;
                 }
 
                 const widthDiff = col.getActualWidth() - columnWidth.newWidth;
@@ -69,7 +68,7 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
                     columns: [otherCol],
                 });
             }
-        });
+        }
 
         if (sets.length === 0) {
             return;
@@ -108,15 +107,17 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
         const changedCols: AgColumn[] = [];
         const allResizedCols: AgColumn[] = [];
 
-        resizeSets.forEach((set) => {
+        for (const set of resizeSets) {
             const { width, columns, ratios } = set;
 
             // keep track of pixels used, and last column gets the remaining,
             // to cater for rounding errors, and min width adjustments
-            const newWidths: { [colId: string]: number } = {};
-            const finishedCols: { [colId: string]: boolean } = {};
+            const newWidths: { [colId: string]: number } = Object.create(null);
+            const finishedCols: { [colId: string]: boolean } = Object.create(null);
 
-            columns.forEach((col) => allResizedCols.push(col));
+            for (const col of columns) {
+                allResizedCols.push(col);
+            }
 
             // the loop below goes through each col. if a col exceeds it's min/max width,
             // it then gets set to its min/max width and the column is removed marked as 'finished'
@@ -136,7 +137,7 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
                 if (loopCount > 1000) {
                     // this should never happen, but in the future, someone might introduce a bug here,
                     // so we stop the browser from hanging and report bug properly
-                    _error(31);
+                    this.error(31);
                     break;
                 }
 
@@ -190,7 +191,7 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
                 });
             }
 
-            columns.forEach((col) => {
+            for (const col of columns) {
                 const newWidth = newWidths[col.getId()];
                 const actualWidth = col.getActualWidth();
 
@@ -198,8 +199,8 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
                     col.setActualWidth(newWidth, source);
                     changedCols.push(col);
                 }
-            });
-        });
+            }
+        }
 
         // if no cols changed, then no need to update more or send event.
         const atLeastOneColChanged = changedCols.length > 0;
@@ -213,8 +214,7 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
                     resizingCols: allResizedCols,
                     skipSetLeft: true,
                 }) ?? [];
-            visibleCols.setLeftValues(source);
-            visibleCols.updateBodyWidths();
+            visibleCols.updateBodyWidths(visibleCols.setLeftValues(source));
             colViewport.checkViewportColumns();
         }
 
@@ -239,28 +239,26 @@ export class ColumnResizeService extends BeanStub implements NamedBean {
         const minWidth = column.getMinWidth();
         const maxWidth = column.getMaxWidth();
 
-        const newWidth = Math.min(Math.max(actualWidth + delta, minWidth), maxWidth);
+        const newWidth = _clamp(actualWidth + delta, minWidth, maxWidth);
 
         this.setColumnWidths([{ key: column, newWidth }], shiftKey, true, 'uiColumnResized');
     }
 
     public createResizeFeature(
-        pinned: ColumnPinnedType,
         column: AgColumn,
         eResize: HTMLElement,
         comp: IHeaderCellComp,
         ctrl: HeaderCellCtrl
     ): ResizeFeature {
-        return new ResizeFeature(pinned, column, eResize, comp, ctrl);
+        return new ResizeFeature(column, eResize, comp, ctrl);
     }
 
     public createGroupResizeFeature(
         comp: IHeaderGroupCellComp,
         eResize: HTMLElement,
-        pinned: ColumnPinnedType,
         columnGroup: AgColumnGroup
     ): GroupResizeFeature {
-        return new GroupResizeFeature(comp, eResize, pinned, columnGroup);
+        return new GroupResizeFeature(comp, eResize, columnGroup);
     }
 }
 
@@ -273,7 +271,7 @@ function checkMinAndMaxWidthsForSet(columnResizeSet: ColumnResizeSet): boolean {
     let maxWidthAccumulated = 0;
     let maxWidthActive = true;
 
-    columns.forEach((col) => {
+    for (const col of columns) {
         const minWidth = col.getMinWidth();
         minWidthAccumulated += minWidth || 0;
 
@@ -285,7 +283,7 @@ function checkMinAndMaxWidthsForSet(columnResizeSet: ColumnResizeSet): boolean {
             // then has no max width, as at least one column can take as much width as possible
             maxWidthActive = false;
         }
-    });
+    }
 
     const minWidthPasses = width >= minWidthAccumulated;
     const maxWidthPasses = !maxWidthActive || width <= maxWidthAccumulated;

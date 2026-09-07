@@ -1,107 +1,107 @@
-import { createPart } from '../../Part';
-import type { WithParamTypes } from '../../theme-types';
-import { accentColor, foregroundMix } from '../../theme-utils';
-import { tabStyleBaseCSS } from './tab-style-base.css-GENERATED';
-import { tabStyleRolodexCSS } from './tab-style-rolodex.css-GENERATED';
+import type { BorderValue, ColorValue, DurationValue, LengthValue, Part } from 'ag-stack';
+import { accentColor, backgroundColor, createPart, foregroundMix } from 'ag-stack';
+
+import tabStyleBaseCSS from './tab-style-base.css';
+import tabStyleRolodexCSS from './tab-style-rolodex.css';
 
 export type TabStyleParams = {
     /**
      * Background color of tabs
      */
-    tabBackgroundColor: 'infer';
+    tabBackgroundColor: ColorValue;
 
     /**
      * Background color of the container for tabs
      */
-    tabBarBackgroundColor: 'infer';
+    tabBarBackgroundColor: ColorValue;
 
     /**
      * Border below the container for tabs
      */
-    tabBarBorder: 'infer';
+    tabBarBorder: BorderValue;
 
     /**
      * Padding at the left and right of the container for tabs
      */
-    tabBarHorizontalPadding: 'infer';
+    tabBarHorizontalPadding: LengthValue;
 
     /**
      * Padding at the top of the container for tabs
      */
-    tabBarTopPadding: 'infer';
+    tabBarTopPadding: LengthValue;
 
     /**
      * Padding at the bottom of the container for tabs
      */
-    tabBottomPadding: 'infer';
+    tabBottomPadding: LengthValue;
 
     /**
      * Padding inside the top and bottom sides of the container for tabs
      */
-    tabHorizontalPadding: 'infer';
+    tabHorizontalPadding: LengthValue;
 
     /**
      * Background color of tabs when hovered over
      */
-    tabHoverBackgroundColor: 'infer';
+    tabHoverBackgroundColor: ColorValue;
 
     /**
      * Color of text within tabs when hovered over
      */
-    tabHoverTextColor: 'infer';
+    tabHoverTextColor: ColorValue;
 
     /**
      * Background color of selected tabs
      */
-    tabSelectedBackgroundColor: 'infer';
+    tabSelectedBackgroundColor: ColorValue;
 
     /**
      * Color of the border around selected tabs
      */
-    tabSelectedBorderColor: 'infer';
+    tabSelectedBorderColor: ColorValue;
 
     /**
      * Width of the border around selected tabs
      */
-    tabSelectedBorderWidth: 'infer';
+    tabSelectedBorderWidth: LengthValue;
 
     /**
      * Color of text within the selected tabs
      */
-    tabSelectedTextColor: 'infer';
+    tabSelectedTextColor: ColorValue;
 
     /**
      * Color of line drawn under selected tabs
      */
-    tabSelectedUnderlineColor: 'infer';
+    tabSelectedUnderlineColor: ColorValue;
 
     /**
      * Duration in seconds of the fade in/out transition for the line drawn under selected tabs
      */
-    tabSelectedUnderlineTransitionDuration: 'infer';
+    tabSelectedUnderlineTransitionDuration: DurationValue;
 
     /**
      * Width of line drawn under selected tabs
      */
-    tabSelectedUnderlineWidth: 'infer';
+    tabSelectedUnderlineWidth: LengthValue;
 
     /**
      * Spacing between tabs
      */
-    tabSpacing: 'infer';
+    tabSpacing: LengthValue;
 
     /**
      * Color of text within tabs
      */
-    tabTextColor: 'infer';
+    tabTextColor: ColorValue;
 
     /**
      * Padding at the top of the container for tabs
      */
-    tabTopPadding: 'infer';
+    tabTopPadding: LengthValue;
 };
 
-const baseParams: WithParamTypes<TabStyleParams> = {
+const baseParams: TabStyleParams = {
     tabBarBackgroundColor: 'transparent',
     tabBarHorizontalPadding: 0,
     tabBarTopPadding: 0,
@@ -134,7 +134,7 @@ const baseParams: WithParamTypes<TabStyleParams> = {
     tabSelectedTextColor: {
         ref: 'tabTextColor',
     },
-    tabSelectedBorderWidth: 1,
+    tabSelectedBorderWidth: { ref: 'borderWidth' },
     tabSelectedBorderColor: 'transparent',
     tabSelectedUnderlineColor: 'transparent',
     tabSelectedUnderlineWidth: 0,
@@ -142,122 +142,129 @@ const baseParams: WithParamTypes<TabStyleParams> = {
     tabBarBorder: false,
 };
 
+const makeTabStyleBaseTreeShakeable = () =>
+    createPart<TabStyleParams>({
+        feature: 'tabStyle',
+        params: baseParams,
+        css: tabStyleBaseCSS,
+    });
+
 /**
  * This base tab style adds no visual styling, it provides a base upon which a
  * tab style can be built by setting the tab-related params
  */
-export const tabStyleBase = createPart<TabStyleParams>({
-    feature: 'tabStyle',
-    params: baseParams,
-    css: tabStyleBaseCSS,
-});
+export const tabStyleBase: Part<TabStyleParams> = /*#__PURE__*/ makeTabStyleBaseTreeShakeable();
+
+const makeTabStyleQuartzTreeShakeable = () =>
+    createPart<TabStyleParams>({
+        feature: 'tabStyle',
+        params: {
+            ...baseParams,
+            tabBarBorder: true,
+            tabBarBackgroundColor: foregroundMix(0.05),
+            tabTextColor: {
+                ref: 'textColor',
+                mix: 0.7,
+            },
+            tabSelectedTextColor: {
+                ref: 'textColor',
+            },
+            tabHoverTextColor: {
+                ref: 'textColor',
+            },
+            tabSelectedBorderColor: {
+                ref: 'borderColor',
+            },
+            tabSelectedBackgroundColor: backgroundColor,
+        },
+        css: tabStyleBaseCSS,
+    });
 
 /**
  * Tabs styled for the Quartz theme
  */
-export const tabStyleQuartz = /*#__PURE__*/ createPart({
-    feature: 'tabStyle',
-    params: {
-        ...baseParams,
+export const tabStyleQuartz: Part<TabStyleParams> = /*#__PURE__*/ makeTabStyleQuartzTreeShakeable();
 
-        tabBarBorder: true,
-        tabBarBackgroundColor: foregroundMix(0.05),
-        tabTextColor: {
-            ref: 'textColor',
-            mix: 0.7,
+const makeTabStyleMaterialTreeShakeable = () =>
+    createPart<TabStyleParams>({
+        feature: 'tabStyle',
+        params: {
+            ...baseParams,
+            tabBarBackgroundColor: {
+                ref: 'chromeBackgroundColor',
+            },
+            tabSelectedUnderlineColor: {
+                ref: 'primaryColor',
+            },
+            tabSelectedUnderlineWidth: 2,
+            tabSelectedUnderlineTransitionDuration: 0,
         },
-        tabSelectedTextColor: {
-            ref: 'textColor',
-        },
-        tabHoverTextColor: {
-            ref: 'textColor',
-        },
-        tabSelectedBorderColor: {
-            ref: 'borderColor',
-        },
-        tabSelectedBackgroundColor: {
-            ref: 'backgroundColor',
-        },
-    },
-    css: tabStyleBaseCSS,
-});
+        css: tabStyleBaseCSS,
+    });
 
 /**
  * Tabs styled for the Material theme
  */
-export const tabStyleMaterial = /*#__PURE__*/ createPart({
-    feature: 'tabStyle',
-    params: {
-        ...baseParams,
+export const tabStyleMaterial: Part<TabStyleParams> = /*#__PURE__*/ makeTabStyleMaterialTreeShakeable();
 
-        tabBarBackgroundColor: {
-            ref: 'chromeBackgroundColor',
+const makeTabStyleAlpineTreeShakeable = () =>
+    createPart<TabStyleParams>({
+        feature: 'tabStyle',
+        params: {
+            ...baseParams,
+            tabBarBorder: true,
+            tabBarBackgroundColor: {
+                ref: 'chromeBackgroundColor',
+            },
+            tabHoverTextColor: accentColor,
+            tabSelectedTextColor: accentColor,
+            tabSelectedUnderlineColor: accentColor,
+            tabSelectedUnderlineWidth: 2,
+            tabSelectedUnderlineTransitionDuration: '0.3s',
         },
-        tabSelectedUnderlineColor: {
-            ref: 'primaryColor',
-        },
-        tabSelectedUnderlineWidth: 2,
-        tabSelectedUnderlineTransitionDuration: 0,
-    },
-    css: tabStyleBaseCSS,
-});
+        css: tabStyleBaseCSS,
+    });
 
 /**
  * Tabs styled for the Alpine theme
  */
-export const tabStyleAlpine = /*#__PURE__*/ createPart({
-    feature: 'tabStyle',
-    params: {
-        ...baseParams,
+export const tabStyleAlpine: Part<TabStyleParams> = /*#__PURE__*/ makeTabStyleAlpineTreeShakeable();
 
-        tabBarBorder: true,
-        tabBarBackgroundColor: {
-            ref: 'chromeBackgroundColor',
+const makeTabStyleRolodexTreeShakeable = () =>
+    createPart<TabStyleParams>({
+        feature: 'tabStyle',
+        params: {
+            ...baseParams,
+            tabBarBackgroundColor: {
+                ref: 'chromeBackgroundColor',
+            },
+            tabBarHorizontalPadding: {
+                ref: 'spacing',
+            },
+            tabBarTopPadding: {
+                ref: 'spacing',
+            },
+            tabBarBorder: true,
+            tabHorizontalPadding: { calc: 'spacing * 2' },
+            tabTopPadding: {
+                ref: 'spacing',
+            },
+            tabBottomPadding: {
+                ref: 'spacing',
+            },
+            tabSpacing: {
+                ref: 'spacing',
+            },
+            tabSelectedBorderColor: {
+                ref: 'borderColor',
+            },
+            tabSelectedBackgroundColor: backgroundColor,
         },
-        tabHoverTextColor: accentColor,
-        tabSelectedTextColor: accentColor,
-        tabSelectedUnderlineColor: accentColor,
-        tabSelectedUnderlineWidth: 2,
-        tabSelectedUnderlineTransitionDuration: '0.3s',
-    },
-    css: tabStyleBaseCSS,
-});
+        css: () => tabStyleBaseCSS + tabStyleRolodexCSS,
+    });
 
 /**
  * Tabs where the selected tab appears raised and attached the the active
  * content, like a rolodex or operating system tabs.
  */
-export const tabStyleRolodex = /*#__PURE__*/ createPart({
-    feature: 'tabStyle',
-    params: {
-        ...baseParams,
-
-        tabBarBackgroundColor: {
-            ref: 'chromeBackgroundColor',
-        },
-        tabBarHorizontalPadding: {
-            ref: 'spacing',
-        },
-        tabBarTopPadding: {
-            ref: 'spacing',
-        },
-        tabBarBorder: true,
-        tabHorizontalPadding: { calc: 'spacing * 2' },
-        tabTopPadding: {
-            ref: 'spacing',
-        },
-        tabBottomPadding: {
-            ref: 'spacing',
-        },
-        tabSpacing: {
-            ref: 'spacing',
-        },
-        tabSelectedBorderColor: {
-            ref: 'borderColor',
-        },
-        tabSelectedBackgroundColor: {
-            ref: 'backgroundColor',
-        },
-    },
-    css: () => tabStyleBaseCSS + tabStyleRolodexCSS,
-});
+export const tabStyleRolodex: Part<TabStyleParams> = /*#__PURE__*/ makeTabStyleRolodexTreeShakeable();

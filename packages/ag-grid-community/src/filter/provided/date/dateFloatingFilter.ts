@@ -1,73 +1,68 @@
-import type { FilterChangedEvent } from '../../../events';
+import { RefPlaceholder, _debounce, _parseDateTimeFromString, _serialiseDate, _setDisplayed } from 'ag-stack';
+
+import { AgInputTextFieldSelector } from '../../../agWidgets/agInputTextField';
+import type { AgColumn } from '../../../entities/agColumn';
+import { _addGridCommonParams } from '../../../gridOptionsUtils';
 import type { IDateParams } from '../../../interfaces/dateComponent';
-import type { WithoutGridCommon } from '../../../interfaces/iCommon';
-import { _parseDateTimeFromString, _serialiseDate } from '../../../utils/date';
-import { _setDisplayed } from '../../../utils/dom';
-import { _debounce } from '../../../utils/function';
-import type { AgInputTextField } from '../../../widgets/agInputTextField';
-import { AgInputTextFieldSelector } from '../../../widgets/agInputTextField';
-import { RefPlaceholder } from '../../../widgets/component';
-import type { IFloatingFilterParams } from '../../floating/floatingFilter';
-import { getDebounceMs } from '../../floating/provided/providedFilterUtils';
+import type { Column } from '../../../interfaces/iColumn';
+import type { ElementParams } from '../../../utils/element';
+import type { GridInputTextField } from '../../../widgets/gridWidgetTypes';
+import type { FloatingFilterDisplayParams, IFloatingFilterParams } from '../../floating/floatingFilter';
 import { SimpleFloatingFilter } from '../../floating/provided/simpleFloatingFilter';
 import type { ISimpleFilterModel } from '../iSimpleFilter';
+import type { OptionsFactory } from '../optionsFactory';
+import { _isUseApplyButton, getDebounceMs } from '../providedFilterUtils';
 import { DateCompWrapper } from './dateCompWrapper';
 import type { DateFilter } from './dateFilter';
 import { DEFAULT_DATE_FILTER_OPTIONS } from './dateFilterConstants';
 import { DateFilterModelFormatter } from './dateFilterModelFormatter';
-import type { DateFilterModel, DateFilterParams } from './iDateFilter';
+import type { DateFilterModel, DateFilterParams, IDateFilterParams } from './iDateFilter';
 
-export class DateFloatingFilter extends SimpleFloatingFilter {
-    private readonly eReadOnlyText: AgInputTextField = RefPlaceholder;
+const DateFloatingFilterElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-floating-filter-input',
+    role: 'presentation',
+    children: [
+        {
+            tag: 'ag-input-text-field',
+            ref: 'eReadOnlyText',
+        },
+        { tag: 'div', ref: 'eDateWrapper', cls: 'ag-date-floating-filter-wrapper' },
+    ],
+};
+
+export class DateFloatingFilter extends SimpleFloatingFilter<IFloatingFilterParams<DateFilter>> {
+    private readonly eReadOnlyText: GridInputTextField = RefPlaceholder;
     private readonly eDateWrapper: HTMLInputElement = RefPlaceholder;
 
     private dateComp: DateCompWrapper;
-    private params: IFloatingFilterParams<DateFilter>;
-    private filterParams: DateFilterParams;
-    protected filterModelFormatter: DateFilterModelFormatter;
+    protected readonly filterType = 'date';
+    protected readonly defaultOptions = DEFAULT_DATE_FILTER_OPTIONS;
 
     constructor() {
-        super(
-            /* html */ `
-            <div class="ag-floating-filter-input" role="presentation">
-                <ag-input-text-field data-ref="eReadOnlyText"></ag-input-text-field>
-                <div data-ref="eDateWrapper" style="display: flex;"></div>
-            </div>`,
-            [AgInputTextFieldSelector]
-        );
+        super(DateFloatingFilterElement, [AgInputTextFieldSelector]);
     }
 
-    protected getDefaultOptions(): string[] {
-        return DEFAULT_DATE_FILTER_OPTIONS;
+    protected createModelFormatter(
+        optionsFactory: OptionsFactory,
+        filterParams: IDateFilterParams,
+        column: Column
+    ): DateFilterModelFormatter {
+        return new DateFilterModelFormatter(optionsFactory, filterParams, column);
     }
 
-    public override init(params: IFloatingFilterParams<DateFilter>): void {
-        super.init(params);
-        this.params = params;
-        this.filterParams = params.filterParams;
+    protected override setParams(params: IFloatingFilterParams<DateFilter>): void {
+        super.setParams(params);
 
         this.createDateComponent();
-        this.filterModelFormatter = new DateFilterModelFormatter(
-            this.filterParams,
-            this.getLocaleTextFunc.bind(this),
-            this.optionsFactory
-        );
         const translate = this.getLocaleTextFunc();
         this.eReadOnlyText.setDisabled(true).setInputAriaLabel(translate('ariaDateFilterInput', 'Date Filter Input'));
     }
 
-    public override refresh(params: IFloatingFilterParams<DateFilter>): void {
-        super.refresh(params);
-        this.params = params;
-        this.filterParams = params.filterParams;
+    protected override updateParams(params: IFloatingFilterParams<DateFilter, any, any>): void {
+        super.updateParams(params);
+        this.dateComp.updateParams(this.getDateComponentParams());
 
-        const dateParams = this.gos.addGridCommonParams(this.getDateComponentParams());
-        this.dateComp.updateParams(dateParams);
-
-        this.filterModelFormatter.updateParams({
-            optionsFactory: this.optionsFactory,
-            dateFilterParams: this.filterParams,
-        });
         this.updateCompOnModelChange(params.currentParentModel());
     }
 
@@ -92,53 +87,72 @@ export class DateFloatingFilter extends SimpleFloatingFilter {
         _setDisplayed(this.eReadOnlyText.getGui(), !editable);
     }
 
-    public onParentModelChanged(model: ISimpleFilterModel, event: FilterChangedEvent): void {
-        // We don't want to update the floating filter if the floating filter caused the change,
-        // because the UI is already in sync. if we didn't do this, the UI would behave strangely
-        // as it would be updating as the user is typing.
-        // This is similar for data changes, which don't affect provided date floating filters
-        if (event?.afterFloatingFilter || event?.afterDataChange) {
-            return;
-        }
-
+    protected onModelUpdated(model: ISimpleFilterModel): void {
         super.setLastTypeFromModel(model);
         this.updateCompOnModelChange(model);
     }
 
     private onDateChanged(): void {
         const filterValueDate = this.dateComp.getDate();
-        const filterValueText = _serialiseDate(filterValueDate);
 
-        this.params.parentFilterInstance((filterInstance) => {
-            if (filterInstance) {
-                const date = _parseDateTimeFromString(filterValueText);
-                filterInstance.onFloatingFilterChanged(this.lastType || null, date);
-            }
-        });
+        if (this.reactive) {
+            const reactiveParams = this.params as unknown as FloatingFilterDisplayParams<any, any, DateFilterModel>;
+            reactiveParams.onUiChange();
+
+            const model = reactiveParams.model;
+            const filterValueText = _serialiseDate(filterValueDate);
+            const newModel =
+                filterValueText == null
+                    ? null
+                    : ({
+                          ...(model ?? {
+                              filterType: this.filterType,
+                              type: this.lastType ?? this.optionsFactory.defaultOption,
+                          }),
+                          dateFrom: filterValueText,
+                      } as DateFilterModel);
+            reactiveParams.onModelChange(newModel, { afterFloatingFilter: true });
+        } else {
+            this.params.parentFilterInstance((filterInstance) => {
+                filterInstance?.onFloatingFilterChanged(this.lastType || null, filterValueDate);
+            });
+        }
     }
 
-    private getDateComponentParams(): WithoutGridCommon<IDateParams> {
-        const { filterParams, column } = this.params;
-        const debounceMs = getDebounceMs(filterParams, this.defaultDebounceMs);
-        return {
-            onDateChanged: _debounce(this, this.onDateChanged.bind(this), debounceMs),
-            filterParams: column.getColDef().filterParams,
+    private getDateComponentParams(): IDateParams {
+        const { filterParams } = this.params;
+        const debounceMs = getDebounceMs(this.beans.log, filterParams as DateFilterParams, this.defaultDebounceMs);
+        const debouncedDateChanged = _debounce(this, this.onDateChanged.bind(this), debounceMs);
+        let debounceTimeout: number | undefined;
+        return _addGridCommonParams(this.gos, {
+            onDateChanged: () => {
+                debounceTimeout = debouncedDateChanged();
+            },
+            onDateCleared: _isUseApplyButton(filterParams as DateFilterParams)
+                ? undefined
+                : () => {
+                      clearTimeout(debounceTimeout);
+                      this.onDateChanged();
+                  },
+            filterParams,
             location: 'floatingFilter',
-        };
+        });
     }
 
     private createDateComponent(): void {
         const {
             beans: { context, userCompFactory },
             eDateWrapper,
+            params: { column },
         } = this;
         this.dateComp = new DateCompWrapper(
             context,
             userCompFactory,
+            column.getColDef(),
             this.getDateComponentParams(),
             eDateWrapper,
             (dateComp) => {
-                dateComp.setInputAriaLabel(this.getAriaLabel(this.params));
+                dateComp.setInputAriaLabel(this.getAriaLabel(column as AgColumn));
             }
         );
 

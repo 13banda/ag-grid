@@ -2,10 +2,11 @@
     position: relative;
     display: flex;
     align-items: center;
-    padding-left: var(--ag-cell-horizontal-padding);
-    padding-right: var(--ag-cell-horizontal-padding);
     background-color: var(--ag-header-background-color);
     border-bottom: var(--ag-header-row-border);
+
+    /* keep advanced-filter row above sticky data rows in the shared pinned-top container. */
+    z-index: 1;
 }
 
 .ag-advanced-filter {
@@ -14,14 +15,21 @@
     width: 100%;
 }
 
+.ag-advanced-filter-buttons {
+    display: contents;
+}
+
+.ag-advanced-filter-header-cell {
+    height: 100%;
+    padding-left: var(--ag-cell-horizontal-padding);
+    padding-right: var(--ag-cell-horizontal-padding);
+}
+
 .ag-advanced-filter-apply-button,
 .ag-advanced-filter-builder-button {
     line-height: normal;
     margin-left: calc(var(--ag-spacing) * 2);
     white-space: nowrap;
-}
-
-.ag-advanced-filter-builder-button {
     display: flex;
     align-items: center;
     border: 0;
@@ -30,13 +38,17 @@
     font-weight: 600;
     padding: var(--ag-spacing);
 
-    &:where(:not(:disabled)) {
+    &:where(.ag-standard-button):where(:not(:disabled)) {
         cursor: pointer;
 
-        &:hover {
+        &:where(.ag-standard-button):hover {
             background-color: var(--ag-row-hover-color);
         }
     }
+}
+
+:where(.ag-advanced-filter-builder-button:disabled) .ag-advanced-filter-builder-button-label {
+    color: var(--ag-button-disabled-text-color);
 }
 
 .ag-advanced-filter-builder-button-label {
@@ -79,21 +91,22 @@
     padding-right: var(--ag-icon-size);
 }
 
-:where(.ag-virtual-list-viewport .ag-advanced-filter-builder-item-wrapper) .ag-tab-guard {
+/* stylelint-disable-next-line selector-max-specificity */
+:where(.ag-virtual-list-viewport) .ag-advanced-filter-builder-item-wrapper .ag-tab-guard {
     position: absolute;
 }
 
-.ag-advanced-filter-builder-item-tree-lines > * {
+.ag-advanced-filter-builder-item-tree-line {
     width: var(--ag-advanced-filter-builder-indent-size);
 }
 
 .ag-advanced-filter-builder-item-tree-line-root {
     width: var(--ag-icon-size);
+}
 
-    &::before {
-        top: 50%;
-        height: 50%;
-    }
+.ag-advanced-filter-builder-item-tree-line-root::before {
+    top: 50%;
+    height: 50%;
 }
 
 .ag-advanced-filter-builder-item-tree-line-horizontal,
@@ -104,13 +117,19 @@
     height: 100%;
     display: flex;
     align-items: center;
+}
 
-    &::before,
-    &::after {
-        content: '';
-        position: absolute;
-        height: 100%;
-    }
+.ag-advanced-filter-builder-item-tree-line-horizontal::before,
+.ag-advanced-filter-builder-item-tree-line-horizontal::after,
+.ag-advanced-filter-builder-item-tree-line-vertical::before,
+.ag-advanced-filter-builder-item-tree-line-vertical::after,
+.ag-advanced-filter-builder-item-tree-line-vertical-top::before,
+.ag-advanced-filter-builder-item-tree-line-vertical-top::after,
+.ag-advanced-filter-builder-item-tree-line-vertical-bottom::before,
+.ag-advanced-filter-builder-item-tree-line-vertical-bottom::after {
+    content: '';
+    position: absolute;
+    height: 100%;
 }
 
 .ag-advanced-filter-builder-item-tree-line-horizontal::after {
@@ -118,14 +137,14 @@
     width: calc(var(--ag-advanced-filter-builder-indent-size) - var(--ag-icon-size));
     top: 0;
     left: calc(var(--ag-icon-size) / 2);
-    border-bottom: 1px solid var(--ag-border-color);
+    border-bottom: var(--ag-border-width) solid var(--ag-border-color);
 }
 
 .ag-advanced-filter-builder-item-tree-line-vertical::before {
     width: calc(var(--ag-advanced-filter-builder-indent-size) - var(--ag-icon-size) / 2);
     top: 0;
     left: calc(var(--ag-icon-size) / 2);
-    border-left: 1px solid var(--ag-border-color);
+    border-left: var(--ag-border-width) solid var(--ag-border-color);
 }
 
 .ag-advanced-filter-builder-item-tree-line-vertical-top::before {
@@ -133,7 +152,7 @@
     width: calc(var(--ag-advanced-filter-builder-indent-size) - var(--ag-icon-size) / 2);
     top: 0;
     left: calc(var(--ag-icon-size) / 2);
-    border-left: 1px solid var(--ag-border-color);
+    border-left: var(--ag-border-width) solid var(--ag-border-color);
 }
 
 .ag-advanced-filter-builder-item-tree-line-vertical-bottom::before {
@@ -141,7 +160,7 @@
     width: calc(var(--ag-icon-size) / 2);
     top: calc((100% + 1.5 * var(--ag-icon-size)) / 2);
     left: calc(var(--ag-icon-size) / 2);
-    border-left: 1px solid var(--ag-border-color);
+    border-left: var(--ag-border-width) solid var(--ag-border-color);
 }
 
 .ag-advanced-filter-builder-item-condition {
@@ -219,8 +238,10 @@
     }
 }
 
-.ag-advanced-filter-builder-item-buttons > * {
-    margin: 0 calc(var(--ag-spacing) * 0.5);
+.ag-advanced-filter-builder-item-buttons {
+    display: flex;
+    gap: var(--ag-spacing);
+    padding: 0 calc(var(--ag-spacing) * 0.5);
 }
 
 .ag-advanced-filter-builder-item-button {
@@ -241,7 +262,13 @@
     cursor: default;
 }
 
+.ag-advanced-filter-builder-virtual-list-viewport {
+    scrollbar-width: thin;
+}
+
 .ag-advanced-filter-builder-virtual-list-container {
+    --ag-internal-virtual-list-overflow: visible;
+
     top: var(--ag-spacing);
 }
 
@@ -249,23 +276,39 @@
     display: flex;
     cursor: default;
     height: var(--ag-list-item-height);
+    min-width: max-content;
+}
 
-    &:hover {
-        background-color: var(--ag-row-hover-color);
+.ag-advanced-filter-builder-virtual-list-item:hover {
+    background-color: var(--ag-row-hover-color);
 
-        :where(.ag-advanced-filter-builder-item-button) {
-            opacity: 1;
-        }
+    :where(.ag-advanced-filter-builder-item-button) {
+        opacity: 1;
     }
 }
 
 .ag-advanced-filter-builder-invalid {
     margin: 0 var(--ag-spacing);
-    color: var(--ag-invalid-color);
+    color: var(--ag-subtle-text-color);
     cursor: default;
 }
 
-:where(.ag-advanced-filter-builder-virtual-list-item-highlight) .ag-advanced-filter-builder-item-button:focus-visible,
 :where(.ag-advanced-filter-builder-validation) .ag-advanced-filter-builder-invalid {
+    color: var(--ag-invalid-color);
+}
+
+:where(.ag-advanced-filter-builder-virtual-list-item-highlight) .ag-advanced-filter-builder-item-button:focus-visible {
     opacity: 1;
+}
+
+.ag-advanced-filter-builder-set-picker {
+    /* The popup service positions popups with inline top/left, which only apply once the child is taken
+       out of flow: unpositioned, this lands at the foot of the popup parent at its full width. */
+    position: absolute;
+
+    /* A popup has no size of its own, and the Set Filter list inside it would otherwise take the viewport. */
+    width: 240px;
+    background-color: var(--ag-menu-background-color);
+    border: var(--ag-border-width) solid var(--ag-border-color);
+    border-radius: var(--ag-border-radius);
 }

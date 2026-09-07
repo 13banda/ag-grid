@@ -1,11 +1,9 @@
+import { GridColumns, GridRows, TestGridsManager, assertSelectedCellRanges } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule } from 'ag-grid-community';
+import { ClientSideRowModelModule, enableDevValidations } from 'ag-grid-community';
 import { CellSelectionModule } from 'ag-grid-enterprise';
-
-import { TestGridsManager } from '../test-utils';
-import { assertSelectedCellRanges } from './utils';
 
 describe('Cell Selection Grid API', () => {
     let consoleErrorSpy: MockInstance;
@@ -20,6 +18,9 @@ describe('Cell Selection Grid API', () => {
     }
 
     beforeEach(() => {
+        // This file exercises deprecated cell-selection APIs on purpose; the global throw-on-validation must be off here.
+        enableDevValidations({ throwOn: [] });
+
         gridMgr.reset();
 
         consoleErrorSpy = vitest.spyOn(console, 'error').mockImplementation(() => {});
@@ -45,12 +46,27 @@ describe('Cell Selection Grid API', () => {
     ];
 
     describe('addCellRange', () => {
-        test('add multiple cell ranges', () => {
+        test('add multiple cell ranges', async () => {
             const api = createGrid({
                 columnDefs,
                 rowData,
                 enableRangeSelection: true,
             });
+            await new GridColumns(api, `add multiple cell ranges setup`).checkColumns(`
+                CENTER
+                ├── sport "Sport" width:200
+                └── year "Year" width:200
+            `);
+            await new GridRows(api, `add multiple cell ranges setup`).check(`
+                ROOT id:ROOT_NODE_ID
+                ├── LEAF id:0 sport:"football" year:2021
+                ├── LEAF id:1 sport:"rugby" year:2020
+                ├── LEAF id:2 sport:"tennis" year:2018
+                ├── LEAF id:3 sport:"cricket" year:2003
+                ├── LEAF id:4 sport:"golf" year:2021
+                ├── LEAF id:5 sport:"swimming" year:2020
+                └── LEAF id:6 sport:"rowing" year:2019
+            `);
 
             api.addCellRange({
                 rowStartIndex: 2,
@@ -75,9 +91,19 @@ describe('Cell Selection Grid API', () => {
                 ],
                 api
             );
+            await new GridRows(api, `add multiple cell ranges final state`).check(`
+                ROOT id:ROOT_NODE_ID
+                ├── LEAF id:0 sport:"football" year:2021
+                ├── LEAF id:1 sport:"rugby" year:2020
+                ├── LEAF id:2 sport:"tennis" year:2018
+                ├── LEAF id:3 sport:"cricket" year:2003
+                ├── LEAF id:4 sport:"golf" year:2021
+                ├── LEAF id:5 sport:"swimming" year:2020
+                └── LEAF id:6 sport:"rowing" year:2019
+            `);
         });
 
-        test('can still add multiple cell ranges when suppressMultiRanges = true', () => {
+        test('can still add multiple cell ranges when suppressMultiRanges = true', async () => {
             const api = createGrid({
                 columnDefs,
                 rowData,
@@ -108,6 +134,17 @@ describe('Cell Selection Grid API', () => {
                 ],
                 api
             );
+            await new GridRows(api, `can still add multiple cell ranges when suppressMultiRanges = true final state`)
+                .check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football" year:2021
+                    ├── LEAF id:1 sport:"rugby" year:2020
+                    ├── LEAF id:2 sport:"tennis" year:2018
+                    ├── LEAF id:3 sport:"cricket" year:2003
+                    ├── LEAF id:4 sport:"golf" year:2021
+                    ├── LEAF id:5 sport:"swimming" year:2020
+                    └── LEAF id:6 sport:"rowing" year:2019
+                `);
         });
     });
 });

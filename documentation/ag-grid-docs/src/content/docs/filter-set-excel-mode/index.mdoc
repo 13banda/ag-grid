@@ -28,9 +28,9 @@ Excel's AutoFilter behaves differently depending on whether you are using the Wi
 
 The example below demonstrates the differences between the different modes:
 
-* The **Default** column demonstrates the default behaviour of the Set Filter in the grid.
-* The **Excel (Windows)** column demonstrates the behaviour of the Set Filter in Windows Excel Mode.
-* The **Excel (Mac)** column demonstrates the behaviour of the Set Filter in Mac Excel Mode.
+- The **Default** column demonstrates the default behaviour of the Set Filter in the grid.
+- The **Excel (Windows)** column demonstrates the behaviour of the Set Filter in Windows Excel Mode.
+- The **Excel (Mac)** column demonstrates the behaviour of the Set Filter in Mac Excel Mode.
 
 {% gridExampleRunner title="Excel Mode" name="excel-mode"  exampleHeight=640 /%}
 
@@ -51,6 +51,8 @@ The table below shows the differences in behaviour alongside the default behavio
         "macExcel": "tickCross"
     } /%}
 
-## Next Up
+{% note %}
+The "Discard the selected state of values that are not visible when the filter is applied" row describes how each mode treats values hidden in the filter UI. The default grid behaviour keeps those selections, so it is marked with a cross.
 
-Continue to the next section to learn about the [Set Filter API](./filter-set-api/).
+This is separate from how a model is reconciled when set programmatically. When values are taken from the grid (the default), setting a model via [`setColumnFilterModel`](./filter-set-api/#set-filter-model) drops any selected values that are not currently in the data. See [Refreshing Values](./filter-set-filter-list/#refreshing-values) for details.
+{% /note %}

@@ -23,7 +23,9 @@ export function FakeServer(allData) {
             };
         },
         getCountries: function (sportFilter) {
-            const textFilter = sportFilter ? ' WHERE ' + textFilterMapper('sport', sportFilter.filterModels[0]) : '';
+            const textFilter = sportFilter?.filterModels[0]
+                ? ' WHERE ' + textFilterMapper('sport', sportFilter.filterModels[0])
+                : '';
             const sql = 'SELECT DISTINCT countryCode, countryName FROM ? ' + textFilter + ' ORDER BY countryName ASC';
 
             return alasql(sql, [allData]).map((row) => ({
@@ -36,7 +38,9 @@ export function FakeServer(allData) {
 
             const where = countries ? " WHERE countryCode IN ('" + countries.join("', '") + "')" : '';
             const operator = countries ? ' AND ' : ' WHERE ';
-            const textFilter = sportFilter ? operator + textFilterMapper('sport', sportFilter.filterModels[0]) : '';
+            const textFilter = sportFilter?.filterModels[0]
+                ? operator + textFilterMapper('sport', sportFilter.filterModels[0])
+                : '';
             const sql = 'SELECT DISTINCT sport FROM ? ' + where + textFilter + ' ORDER BY sport ASC';
 
             return alasql(sql, [allData]).map(function (x) {
@@ -82,10 +86,9 @@ export function FakeServer(allData) {
 
     function createFilterSql(mapper, key, item) {
         if (item.operator) {
-            const condition1 = mapper(key, item.condition1);
-            const condition2 = mapper(key, item.condition2);
+            const conditions = item.conditions.map((condition) => mapper(key, condition));
 
-            return '(' + condition1 + ' ' + item.operator + ' ' + condition2 + ')';
+            return '(' + conditions.join(' ' + item.operator + ' ') + ')';
         }
 
         return mapper(key, item);

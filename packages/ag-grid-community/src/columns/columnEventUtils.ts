@@ -1,7 +1,8 @@
 import type { AgColumn } from '../entities/agColumn';
-import type { EventService } from '../eventService';
 import type { ColumnEvent, ColumnEventType } from '../events';
+import type { ColumnChangedEventType } from '../interfaces/iColsService';
 import type { WithoutGridCommon } from '../interfaces/iCommon';
+import type { IEventService } from '../interfaces/iEventService';
 
 function getCommonValue<T>(cols: AgColumn[], valueGetter: (col: AgColumn) => T): T | undefined {
     if (!cols || cols.length == 0) {
@@ -21,7 +22,7 @@ function getCommonValue<T>(cols: AgColumn[], valueGetter: (col: AgColumn) => T):
 }
 
 export function dispatchColumnPinnedEvent(
-    eventSvc: EventService,
+    eventSvc: IEventService,
     changedColumns: AgColumn[],
     source: ColumnEventType
 ): void {
@@ -45,8 +46,9 @@ export function dispatchColumnPinnedEvent(
     });
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export function dispatchColumnVisibleEvent(
-    eventSvc: EventService,
+    eventSvc: IEventService,
     changedColumns: AgColumn[],
     source: ColumnEventType
 ): void {
@@ -69,19 +71,23 @@ export function dispatchColumnVisibleEvent(
     });
 }
 
-export function dispatchColumnChangedEvent<
-    T extends 'columnValueChanged' | 'columnPivotChanged' | 'columnRowGroupChanged',
->(eventSvc: EventService, type: T, columns: AgColumn[], source: ColumnEventType): void {
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _dispatchColumnChangedEvent<T extends ColumnChangedEventType>(
+    eventSvc: IEventService,
+    type: T,
+    columns: AgColumn[],
+    source: ColumnEventType
+): void {
     eventSvc.dispatchEvent({
         type,
         columns,
-        column: columns && columns.length == 1 ? columns[0] : null,
+        column: columns?.length == 1 ? columns[0] : null,
         source,
     } as WithoutGridCommon<ColumnEvent>);
 }
 
 export function dispatchColumnResizedEvent(
-    eventSvc: EventService,
+    eventSvc: IEventService,
     columns: AgColumn[] | null,
     finished: boolean,
     source: ColumnEventType,

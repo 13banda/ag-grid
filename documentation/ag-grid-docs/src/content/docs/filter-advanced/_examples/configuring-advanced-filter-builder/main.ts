@@ -12,10 +12,15 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { AdvancedFilterModule, ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextFilterModule,
@@ -25,7 +30,6 @@ ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const initialAdvancedFilterModel: AdvancedFilterModel = {
@@ -61,6 +65,8 @@ const initialAdvancedFilterModel: AdvancedFilterModel = {
 
 const advancedFilterBuilderParams: IAdvancedFilterBuilderParams = {
     showMoveButtons: true,
+    suppressFullScreenButton: true,
+    buttons: ['clear', 'apply', 'cancel'],
 };
 
 let gridApi: GridApi<IOlympicData>;

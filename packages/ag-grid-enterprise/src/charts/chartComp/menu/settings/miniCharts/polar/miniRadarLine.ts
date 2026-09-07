@@ -1,18 +1,16 @@
-import type { Circle, Path } from 'ag-charts-types/scene';
-
-import type { ChartType } from 'ag-grid-community';
+import type { Marker, Path } from 'ag-charts-types/scene';
 
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { createPolarPaths } from '../miniChartHelpers';
 import { MiniChartWithPolarAxes } from '../miniChartWithPolarAxes';
 
-export class MiniRadarLine extends MiniChartWithPolarAxes {
-    static chartType: ChartType = 'radarLine';
+export class MiniRadarLineClass extends MiniChartWithPolarAxes {
     private readonly lines: Path[];
-    private readonly markers: Circle[];
+    private readonly markers: Marker[];
     private readonly markerSize: number = 4;
 
-    private data = [
+    private readonly data = [
         [8, 7, 8, 7, 8, 8, 7, 8],
         [6, 8, 5, 10, 6, 7, 4, 6],
         [0, 3, 3, 5, 4, 4, 2, 0],
@@ -51,10 +49,14 @@ export class MiniRadarLine extends MiniChartWithPolarAxes {
             const startIdx = i * n;
             const endIdx = startIdx + n;
             const markers = this.markers.slice(startIdx, endIdx);
-            markers.forEach((marker) => {
+            for (const marker of markers) {
                 marker.stroke = strokes[i];
                 marker.fill = fills[i];
-            });
+            }
         });
     }
 }
+export const MiniRadarLine: MiniChartSelector = {
+    chartType: 'radarLine',
+    miniChart: MiniRadarLineClass,
+};

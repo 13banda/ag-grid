@@ -1,0 +1,109 @@
+---
+title: "BigInt Filter"
+---
+
+BigInt Filters allow you to filter `bigint` data without precision loss.
+
+{% gridExampleRunner title="BigInt Filter" name="bigint-filter" /%}
+
+## Enabling BigInt Filters
+
+The BigInt Filter is the default filter used for columns with `cellDataType: 'bigint'` when the [Set Filter is Disabled by Default](./filter-set/#suppress-set-filter-by-default). It can also be configured explicitly as shown below:
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    columnDefs: [
+        {
+            field: 'totalBigInt',
+            cellDataType: 'bigint',
+            // BigInt Filter is used by default in Community version for bigInt columns
+            filter: true,
+        },
+        {
+            field: 'ledgerId',
+            // Explicitly configure column to use the BigInt Filter
+            filter: 'agBigIntColumnFilter',
+        },
+    ],
+};
+```
+
+## BigInt Filter Parameters
+
+BigInt Filters are configured through the `filterParams` attribute of the column definition (`IBigIntFilterParams` interface):
+
+{% interfaceDocumentation interfaceName="IBigIntFilterParams" config={"description":"", "sortAlphabetically":true} /%}
+
+## Input Parsing and Validation
+
+The BigInt Filter accepts decimal integer syntax only:
+
+- `500` and `500n` are both accepted and parse to `500n`.
+- Hex, binary, decimals and scientific notation are rejected.
+- Invalid input is handled via standard validation and does not crash the grid.
+
+## Custom Parsing
+
+To accept other formats, such as hexadecimal, provide a `bigintParser` that converts the entered text to a `bigint` (return `null` for values it cannot parse). Pair it with `allowedCharPattern` so the extra characters can be typed into the filter input. The parsed value is what gets applied to filtering, and the same parser is used by the [Advanced Filter](./filter-advanced/) for `bigint` operands. Unless you also provide a `bigintFormatter`, have it accept a plain decimal too: without one, every input shows the stored value as a plain decimal and reads it back through this parser once edited.
+
+The filter model always stores the parsed value as a canonical decimal string, so provide a `bigintFormatter` — the inverse of the parser — to display stored values back in your own format. It is used by the filter inputs, by the [Floating Filter](./floating-filters/) and by the [Advanced Filter](./filter-advanced/) when displaying an operand, which means an entered value is echoed back in the formatter's format rather than exactly as typed.
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    columnDefs: [
+        {
+            field: 'ledgerId',
+            cellDataType: 'bigint',
+            filter: 'agBigIntColumnFilter',
+            filterParams: {
+                allowedCharPattern: '\\dxXa-fA-F',
+                bigintParser: (text) => {
+                    if (text == null || text.trim() === '') {
+                        return null;
+                    }
+                    try {
+                        return BigInt(text);
+                    } catch {
+                        // incomplete or invalid input (e.g. '0x') while typing
+                        return null;
+                    }
+                },
+            },
+        },
+    ],
+};
+```
+
+The `bigintParser` and `bigintFormatter` are also passed the grid `api` and `context` as a second argument, along with the `column` and `colDef` they are working on. One callback set on `defaultColDef.filterParams` can therefore serve every column it applies to.
+
+## BigInt Filter Model
+
+The Filter Model describes the current state of the applied BigInt Filter:
+
+{% interfaceDocumentation interfaceName="BigIntFilterModel" config={"description":""} /%}
+
+## BigInt Filter Options
+
+The BigInt Filter presents the same list of [Filter Options](./filter-conditions/#filter-options) as the Number Filter:
+
+| Option Name              | Option Key           | Included by Default |
+| ------------------------ | -------------------- | ------------------- |
+| Equals                   | `equals`             | Yes                 |
+| Does not equal           | `notEqual`           | Yes                 |
+| Greater than             | `greaterThan`        | Yes                 |
+| Greater than or equal to | `greaterThanOrEqual` | Yes                 |
+| Less than                | `lessThan`           | Yes                 |
+| Less than or equal to    | `lessThanOrEqual`    | Yes                 |
+| Between                  | `inRange`            | Yes                 |
+| Blank                    | `blank`              | Yes                 |
+| Not blank                | `notBlank`           | Yes                 |
+| Choose one               | `empty`              | No                  |
+
+The default option for the BigInt Filter is `equals`.
+
+## Applying the BigInt Filter
+
+Applying the BigInt Filter is described in more detail in the following sections:
+
+- [Apply, Clear, Reset and Cancel Buttons](./filter-applying/#apply-clear-reset-and-cancel-buttons)
+- [Applying the UI Model](./filter-applying/#applying-the-ui-model)

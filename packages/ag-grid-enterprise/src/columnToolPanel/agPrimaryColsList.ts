@@ -1,3 +1,5 @@
+import { _exists, _setAriaLabel, _setAriaLevel } from 'ag-stack';
+
 import type {
     AbstractColDef,
     AgColumn,
@@ -6,21 +8,31 @@ import type {
     ColGroupDef,
     ColumnEventType,
     ColumnModel,
+    ColumnPanelItemDragEndEvent,
+    ColumnPanelItemDragStartEvent,
+    ColumnSelectionPanelSource,
     ColumnToolPanelState,
     ComponentSelector,
 } from 'ag-grid-community';
-import { Component, _exists, _setAriaLabel, _setAriaLevel, _warn, isProvidedColumnGroup } from 'ag-grid-community';
+import { Component, DragSourceType, _clamp, isProvidedColumnGroup } from 'ag-grid-community';
 
-import { syncLayoutWithGrid, toolPanelCreateColumnTree } from '../sideBar/common/toolPanelColDefService';
-import type { VirtualListModel } from '../widgets/iVirtualList';
+import type { VirtualListModel } from '../agStack/iVirtualList';
+import type { VirtualListDragItem } from '../agStack/iVirtualListDragFeature';
+import { VirtualListDragFeature } from '../features/virtualListDragFeature';
+import {
+    syncLayoutWithColumns,
+    syncLayoutWithGrid,
+    toolPanelCreateColumnTree,
+} from '../sideBar/common/toolPanelColDefService';
 import { VirtualList } from '../widgets/virtualList';
 import { ExpandState } from './agPrimaryColsHeader';
 import { ColumnModelItem } from './columnModelItem';
+import { getCurrentColumnsBeingMoved, getCurrentDragValue, isMoveBlocked, moveItem } from './columnMoveUtils';
 import type { ToolPanelColumnCompParams } from './columnToolPanel';
 import { selectAllChildren } from './modelItemUtils';
-import { PrimaryColsListPanelItemDragFeature } from './primaryColsListPanelItemDragFeature';
 import { ToolPanelColumnComp } from './toolPanelColumnComp';
 import { ToolPanelColumnGroupComp } from './toolPanelColumnGroupComp';
+import { isDeferredMode } from './toolPanelDeferredUiUtils';
 
 class UIColumnModel implements VirtualListModel {
     constructor(private readonly items: ColumnModelItem[]) {}
@@ -36,7 +48,7 @@ class UIColumnModel implements VirtualListModel {
 
 const PRIMARY_COLS_LIST_PANEL_CLASS = 'ag-column-select-list';
 
-export type AgPrimaryColsListEvent = 'groupExpanded' | 'selectionChanged';
+type AgPrimaryColsListEvent = 'groupExpanded' | 'selectionChanged';
 export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     private colModel: ColumnModel;
 
@@ -49,6 +61,7 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     private expandGroupsByDefault: boolean;
     private params: ToolPanelColumnCompParams;
     private eventType: ColumnEventType;
+    private source: ColumnSelectionPanelSource;
 
     private groupsExist: boolean;
 
@@ -59,9 +72,11 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     private destroyColumnItemFuncs: (() => void)[] = [];
     private hasLoadedInitialState: boolean = false;
     private isInitialState: boolean = false;
+    private skipRefocus: boolean = false;
+    private customColumnLayout: AbstractColDef[] | null = null;
 
     constructor() {
-        super(/* html */ `<div class="${PRIMARY_COLS_LIST_PANEL_CLASS}" role="presentation"></div>`);
+        super({ tag: 'div', cls: PRIMARY_COLS_LIST_PANEL_CLASS, role: 'presentation' });
     }
 
     public override destroy(): void {
@@ -71,16 +86,27 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
 
     private destroyColumnTree(): void {
         this.allColsTree = [];
-        this.destroyColumnItemFuncs.forEach((f) => f());
+        for (const f of this.destroyColumnItemFuncs) {
+            f();
+        }
         this.destroyColumnItemFuncs = [];
     }
 
-    public init(params: ToolPanelColumnCompParams, allowDragging: boolean, eventType: ColumnEventType): void {
+    public init(
+        params: ToolPanelColumnCompParams,
+        allowDragging: boolean,
+        eventType: ColumnEventType,
+        source: ColumnSelectionPanelSource
+    ): void {
         this.params = params;
-        this.allowDragging = allowDragging;
+        const { suppressSyncLayoutWithGrid, contractColumnSelection, suppressColumnMove } = params;
+        // Drag drives drag-to-zone/hide only (in-panel reorder is blocked via `isPreventMove`), so
+        // `suppressColumnMove` must not disable it; only deferred mode's decoupled layout suppresses it.
+        this.allowDragging = allowDragging && !(suppressSyncLayoutWithGrid && isDeferredMode(params));
         this.eventType = eventType;
+        this.source = source;
 
-        if (!params.suppressSyncLayoutWithGrid) {
+        if (!suppressSyncLayoutWithGrid) {
             this.addManagedEventListeners({ columnMoved: this.onColumnsChanged.bind(this) });
         }
 
@@ -98,12 +124,21 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             newColumnsLoaded: listener,
         });
 
-        this.expandGroupsByDefault = !params.contractColumnSelection;
+        this.expandGroupsByDefault = !contractColumnSelection;
+
+        const isPreventMove = suppressColumnMove || suppressSyncLayoutWithGrid;
 
         const virtualList = this.createManagedBean(
-            new VirtualList({
+            new VirtualList<ToolPanelColumnGroupComp | ToolPanelColumnComp, ColumnModelItem>({
                 cssIdentifier: 'column-select',
                 ariaRole: 'tree',
+                moveItemCallback: (item, isUp) => {
+                    if (isPreventMove) {
+                        return;
+                    }
+
+                    this.moveItems(item, isUp);
+                },
             })
         );
         this.virtualList = virtualList;
@@ -119,23 +154,121 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             this.onColumnsChanged();
         }
 
-        if (params.suppressColumnMove) {
+        if (isPreventMove) {
             return;
         }
 
-        this.createManagedBean(new PrimaryColsListPanelItemDragFeature(this, virtualList));
+        this.createItemDragFeature();
     }
 
-    private createComponentFromItem(item: ColumnModelItem, listItemElement: HTMLElement): Component {
-        const allowDragging = this.allowDragging;
+    private createItemDragFeature(): void {
+        const { gos, beans, virtualList } = this;
+        this.createManagedBean(
+            new VirtualListDragFeature<
+                AgPrimaryColsList,
+                ToolPanelColumnGroupComp | ToolPanelColumnComp,
+                AgColumn | AgProvidedColumnGroup,
+                ColumnPanelItemDragStartEvent,
+                ColumnPanelItemDragEndEvent
+            >(this, virtualList, {
+                dragSourceType: DragSourceType.ToolPanel,
+                addListeners: (parent, listItemDragStart, listItemDragEnd) => {
+                    parent.addManagedEventListeners({
+                        columnPanelItemDragStart: listItemDragStart,
+                        columnPanelItemDragEnd: listItemDragEnd,
+                    });
+                },
+                getCurrentDragValue: (listItemDragStartEvent: ColumnPanelItemDragStartEvent) =>
+                    getCurrentDragValue(listItemDragStartEvent),
+                isMoveBlocked: (currentDragValue: AgColumn | AgProvidedColumnGroup | null) =>
+                    isMoveBlocked(gos, beans, getCurrentColumnsBeingMoved(currentDragValue), this.params),
+                getNumRows: (comp: AgPrimaryColsList) => comp.getDisplayedColsList().length,
+                moveItem: (
+                    currentDragValue: AgColumn | AgProvidedColumnGroup | null,
+                    lastHoveredListItem: VirtualListDragItem<ToolPanelColumnGroupComp | ToolPanelColumnComp> | null
+                ) =>
+                    moveItem(
+                        beans,
+                        getCurrentColumnsBeingMoved(currentDragValue),
+                        lastHoveredListItem,
+                        this.params,
+                        this.eventType
+                    ),
+            })
+        );
+    }
+
+    private moveItems(item: ToolPanelColumnComp | ToolPanelColumnGroupComp, isUp: boolean): void {
+        const { gos, beans } = this;
+        const { modelItem } = item;
+        const { group, columnGroup, column, expanded } = modelItem;
+        const currentColumns = getCurrentColumnsBeingMoved(group ? columnGroup : column);
+
+        if (isMoveBlocked(gos, beans, currentColumns, this.params)) {
+            return;
+        }
+
+        const currentIndex = this.displayedColsList.indexOf(modelItem);
+        const diff = isUp ? -1 : 1;
+        let movePadding = 0;
+
+        if (isUp) {
+            const children = item.columnDepth > 0 ? column.parent?.children : null;
+            if (children?.length && column === children[0]) {
+                movePadding = -1;
+            }
+        } else if (group) {
+            movePadding = expanded ? modelItem.children.length : 0;
+        }
+
+        const nextItem = _clamp(currentIndex + movePadding + diff, 0, this.displayedColsList.length - 1);
+
+        this.skipRefocus = true;
+        moveItem(
+            beans,
+            currentColumns,
+            {
+                rowIndex: nextItem,
+                position: isUp ? 'top' : 'bottom',
+                component: this.virtualList.getComponentAt(nextItem) as ToolPanelColumnComp | ToolPanelColumnGroupComp,
+            },
+            this.params,
+            this.eventType
+        );
+
+        this.focusRowIfAlive(nextItem - movePadding).then(() => {
+            this.skipRefocus = false;
+        });
+    }
+
+    private createComponentFromItem(
+        item: ColumnModelItem,
+        listItemElement: HTMLElement
+    ): ToolPanelColumnGroupComp | ToolPanelColumnComp {
+        const { allowDragging, eventType, params, source, groupsExist } = this;
         if (item.group) {
-            const renderedGroup = new ToolPanelColumnGroupComp(item, allowDragging, this.eventType, listItemElement);
+            const renderedGroup = new ToolPanelColumnGroupComp(
+                item,
+                allowDragging,
+                eventType,
+                listItemElement,
+                params,
+                source
+            );
             this.createBean(renderedGroup);
 
             return renderedGroup;
         }
 
-        const columnComp = new ToolPanelColumnComp(item, allowDragging, this.groupsExist, listItemElement);
+        const columnComp = new ToolPanelColumnComp(
+            item,
+            allowDragging,
+            groupsExist,
+            listItemElement,
+            params,
+            eventType,
+            source
+        );
         this.createBean(columnComp);
 
         return columnComp;
@@ -150,11 +283,20 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
 
         const expandedStates = this.getExpandedStates();
 
-        const pivotModeActive = this.colModel.isPivotMode();
-        const shouldSyncColumnLayoutWithGrid = !params.suppressSyncLayoutWithGrid && !pivotModeActive;
+        const pivotModeActive = this.colModel.pivotMode;
+        const deferApply = isDeferredMode(params);
+        const hasDeferredColumnOrder =
+            deferApply && this.beans.columnStateUpdateStrategy.hasDeferredColumnOrder(deferApply);
+        const shouldSyncColumnLayoutWithGrid =
+            ((!params.suppressSyncLayoutWithGrid || deferApply) && !pivotModeActive) || hasDeferredColumnOrder;
 
         if (shouldSyncColumnLayoutWithGrid) {
             this.buildTreeFromWhatGridIsDisplaying();
+        } else if (this.customColumnLayout && !pivotModeActive) {
+            // A custom layout set via setColumnLayout owns the panel: grid column changes leave it untouched
+            // until the app calls setColumnLayout again to pick up added/removed columns.
+            this.isInitialState = false;
+            return;
         } else {
             this.buildTreeFromProvidedColumnDefs();
         }
@@ -176,9 +318,9 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
 
         if (this.isInitialState) {
             const { expandedGroupIds } = this.params.initialState as ColumnToolPanelState;
-            expandedGroupIds.forEach((id) => {
+            for (const id of expandedGroupIds) {
                 res[id] = true;
-            });
+            }
             return res;
         }
 
@@ -193,7 +335,7 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             const colGroup = item.columnGroup;
             if (colGroup) {
                 // group should always exist, this is defensive
-                res[colGroup.getId()] = item.expanded;
+                res[colGroup.groupId] = item.expanded;
             }
         });
 
@@ -213,7 +355,7 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             const colGroup = item.columnGroup;
             if (colGroup) {
                 // group should always exist, this is defensive
-                const expanded = states[colGroup.getId()];
+                const expanded = states[colGroup.groupId];
                 const groupExistedLastTime = expanded != null;
                 if (groupExistedLastTime || isInitialState) {
                     item.expanded = !!expanded;
@@ -223,11 +365,29 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     }
 
     private buildTreeFromWhatGridIsDisplaying(): void {
-        syncLayoutWithGrid(this.colModel, this.setColumnLayout.bind(this));
+        const deferApply = isDeferredMode(this.params);
+        if (deferApply && this.beans.columnStateUpdateStrategy.hasDeferredColumnOrder(deferApply)) {
+            const columnOrder = this.beans.columnStateUpdateStrategy.getPrimaryColumns(deferApply);
+            if (columnOrder.length > 0) {
+                syncLayoutWithColumns(columnOrder, this.applyColumnLayout.bind(this));
+                return;
+            }
+        }
+        if (this.params.suppressSyncLayoutWithGrid) {
+            this.buildTreeFromProvidedColumnDefs();
+            return;
+        }
+        syncLayoutWithGrid(this.colModel, this.applyColumnLayout.bind(this));
     }
 
     public setColumnLayout(colDefs: AbstractColDef[]): void {
-        const columnTree = toolPanelCreateColumnTree(this.colModel, colDefs);
+        // Marks the panel as owned by a custom layout so later grid column changes leave it frozen.
+        this.customColumnLayout = colDefs;
+        this.applyColumnLayout(colDefs);
+    }
+
+    private applyColumnLayout(colDefs: AbstractColDef[]): void {
+        const columnTree = toolPanelCreateColumnTree(this.beans, colDefs);
         this.buildListModel(columnTree);
 
         // using col defs to check if groups exist as it could be a custom layout
@@ -242,8 +402,8 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     private buildTreeFromProvidedColumnDefs(): void {
         const colModel = this.colModel;
         // add column / group comps to tool panel
-        this.buildListModel(colModel.getColDefColTree());
-        this.groupsExist = !!colModel.colDefCols?.treeDepth;
+        this.buildListModel(colModel.colDefTree);
+        this.groupsExist = !!colModel.colDefTreeDepth;
     }
 
     private buildListModel(columnTree: (AgColumn | AgProvidedColumnGroup)[]): void {
@@ -253,43 +413,42 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             const removeFunc = item.removeEventListener.bind(item, 'expandedChanged', columnExpandedListener);
             this.destroyColumnItemFuncs.push(removeFunc);
         };
-        const colNames = this.beans.colNames;
+        const beans = this.beans;
 
         const recursivelyBuild = (
             tree: (AgColumn | AgProvidedColumnGroup)[],
-            dept: number,
+            depth: number,
             parentList: ColumnModelItem[]
         ): void => {
-            tree.forEach((child) => {
+            for (const child of tree) {
                 if (isProvidedColumnGroup(child)) {
-                    createGroupItem(child, dept, parentList);
+                    createGroupItem(child, depth, parentList);
                 } else {
-                    createColumnItem(child, dept, parentList);
+                    createColumnItem(child, depth, parentList);
                 }
-            });
+            }
         };
 
         const createGroupItem = (
             columnGroup: AgProvidedColumnGroup,
-            dept: number,
+            depth: number,
             parentList: ColumnModelItem[]
         ): void => {
             const columnGroupDef = columnGroup.getColGroupDef();
-            const skipThisGroup = columnGroupDef && columnGroupDef.suppressColumnsToolPanel;
+            const skipThisGroup = columnGroupDef?.suppressColumnsToolPanel;
             if (skipThisGroup) {
                 return;
             }
 
-            if (columnGroup.isPadding()) {
-                recursivelyBuild(columnGroup.getChildren(), dept, parentList);
+            if (columnGroup.padding) {
+                recursivelyBuild(columnGroup.children, depth, parentList);
                 return;
             }
 
-            const displayName = colNames.getDisplayNameForProvidedColumnGroup(null, columnGroup, 'columnToolPanel');
             const item: ColumnModelItem = new ColumnModelItem(
-                displayName,
+                beans,
                 columnGroup,
-                dept,
+                depth,
                 true,
                 this.expandGroupsByDefault
             );
@@ -297,19 +456,17 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             parentList.push(item);
             addListeners(item);
 
-            recursivelyBuild(columnGroup.getChildren(), dept + 1, item.children);
+            recursivelyBuild(columnGroup.children, depth + 1, item.children);
         };
 
-        const createColumnItem = (column: AgColumn, dept: number, parentList: ColumnModelItem[]): void => {
-            const skipThisColumn = column.getColDef() && column.getColDef().suppressColumnsToolPanel;
+        const createColumnItem = (column: AgColumn, depth: number, parentList: ColumnModelItem[]): void => {
+            const skipThisColumn = column.colDef?.suppressColumnsToolPanel;
 
             if (skipThisColumn) {
                 return;
             }
 
-            const displayName = colNames.getDisplayNameForColumn(column, 'columnToolPanel');
-
-            parentList.push(new ColumnModelItem(displayName, column, dept));
+            parentList.push(new ColumnModelItem(beans, column, depth));
         };
 
         this.destroyColumnTree();
@@ -329,15 +486,24 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             }
             this.displayedColsList.push(item);
             if (item.group && item.expanded) {
-                item.children.forEach(recursiveFunc);
+                const children = item.children;
+                for (let i = 0, len = children.length; i < len; ++i) {
+                    recursiveFunc(children[i]);
+                }
             }
         };
 
         const virtualList = this.virtualList;
-        this.allColsTree.forEach(recursiveFunc);
+        const allColsTree = this.allColsTree;
+        for (let i = 0, len = allColsTree.length; i < len; ++i) {
+            recursiveFunc(allColsTree[i]);
+        }
         virtualList.setModel(new UIColumnModel(this.displayedColsList));
+        let focusedRow: number | null = null;
 
-        const focusedRow = virtualList.getLastFocusedRow();
+        if (!this.skipRefocus) {
+            focusedRow = virtualList.getLastFocusedRow();
+        }
         virtualList.refresh();
 
         if (focusedRow != null) {
@@ -345,7 +511,6 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
         }
 
         this.notifyListeners();
-
         this.refreshAriaLabel();
     }
 
@@ -358,22 +523,29 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
         _setAriaLabel(this.virtualList.getAriaElement(), `${columnListName} ${items} ${localeColumns}`);
     }
 
-    private focusRowIfAlive(rowIndex: number): void {
-        window.setTimeout(() => {
-            if (this.isAlive()) {
-                this.virtualList.focusRow(rowIndex);
-            }
-        }, 0);
+    private focusRowIfAlive(rowIndex: number): Promise<void> {
+        if (rowIndex === -1) {
+            return Promise.resolve();
+        }
+
+        return new Promise((res) => {
+            window.setTimeout(() => {
+                if (this.isAlive()) {
+                    this.virtualList.focusRow(rowIndex);
+                }
+                res();
+            }, 0);
+        });
     }
 
     private forEachItem(callback: (item: ColumnModelItem) => void): void {
         const recursiveFunc = (items: ColumnModelItem[]) => {
-            items.forEach((item) => {
+            for (const item of items) {
                 callback(item);
                 if (item.group) {
                     recursiveFunc(item.children);
                 }
-            });
+            }
         };
 
         const allColsTree = this.allColsTree;
@@ -398,23 +570,24 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             return;
         }
 
-        const expandedGroupIds: string[] = [];
+        const targetGroupIds = new Set(groupIds);
+        const expandedGroupIds = new Set<string>();
 
         this.forEachItem((item) => {
             if (!item.group) {
                 return;
             }
 
-            const groupId = item.columnGroup.getId();
-            if (groupIds.indexOf(groupId) >= 0) {
+            const groupId = item.columnGroup.groupId;
+            if (targetGroupIds.has(groupId)) {
                 item.expanded = expand;
-                expandedGroupIds.push(groupId);
+                expandedGroupIds.add(groupId);
             }
         });
 
-        const unrecognisedGroupIds = groupIds.filter((groupId) => !expandedGroupIds.includes(groupId));
+        const unrecognisedGroupIds = groupIds.filter((groupId) => !expandedGroupIds.has(groupId));
         if (unrecognisedGroupIds.length > 0) {
-            _warn(157, { unrecognisedGroupIds });
+            this.beans.log.warn(157, { unrecognisedGroupIds });
         }
     }
 
@@ -445,14 +618,24 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
     }
 
     public doSetSelectedAll(selectAllChecked: boolean): void {
-        selectAllChildren(this.beans, this.allColsTree, selectAllChecked, this.eventType);
+        selectAllChildren(this.beans, this.allColsTree, selectAllChecked, this.eventType, this.params);
+        this.syncVisibleSelectionState();
+        this.fireSelectionChangedEvent();
+    }
+
+    private syncVisibleSelectionState(): void {
+        for (let i = 0; i < this.displayedColsList.length; i++) {
+            const comp = this.virtualList.getComponentAt(i) as any;
+            comp?.onColumnStateChanged?.();
+        }
     }
 
     private getSelectionState(): boolean | undefined {
         let checkedCount = 0;
         let uncheckedCount = 0;
 
-        const pivotMode = this.colModel.isPivotMode();
+        const updateStrategy = this.beans.columnStateUpdateStrategy;
+        const pivotMode = updateStrategy.getPivotMode(isDeferredMode(this.params));
 
         this.forEachItem((item) => {
             if (item.group) {
@@ -463,7 +646,7 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             }
 
             const column = item.column;
-            const colDef = column.getColDef();
+            const colDef = column.colDef;
 
             let checked: boolean;
 
@@ -473,16 +656,21 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
                 if (noPivotModeOptionsAllowed) {
                     return;
                 }
-                checked = column.isValueActive() || column.isPivotActive() || column.isRowGroupActive();
+                checked =
+                    updateStrategy.isColumnSelectedInPivotModeToolPanel(isDeferredMode(this.params), column) ?? false;
             } else {
                 if (colDef.lockVisible) {
                     return;
                 }
 
-                checked = column.isVisible();
+                checked = updateStrategy.isColumnVisibleInToolPanel(isDeferredMode(this.params), column) ?? false;
             }
 
-            checked ? checkedCount++ : uncheckedCount++;
+            if (checked) {
+                checkedCount++;
+            } else {
+                uncheckedCount++;
+            }
         });
 
         if (checkedCount > 0 && uncheckedCount > 0) {
@@ -506,19 +694,19 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
 
             const displayName = item.displayName;
 
-            return displayName == null || displayName.toLowerCase().indexOf(this.filterText) !== -1;
+            return displayName?.toLowerCase().indexOf(this.filterText) !== -1;
         };
 
         const recursivelyCheckFilter = (item: ColumnModelItem, parentPasses: boolean): boolean => {
             let atLeastOneChildPassed = false;
             if (item.group) {
                 const groupPasses = passesFilter(item);
-                item.children.forEach((child) => {
+                for (const child of item.children) {
                     const childPasses = recursivelyCheckFilter(child, groupPasses || parentPasses);
                     if (childPasses) {
                         atLeastOneChildPassed = childPasses;
                     }
-                });
+                }
             }
 
             const filterPasses = parentPasses || atLeastOneChildPassed ? true : passesFilter(item);
@@ -526,7 +714,9 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
             return filterPasses;
         };
 
-        this.allColsTree.forEach((item) => recursivelyCheckFilter(item, false));
+        for (const item of this.allColsTree) {
+            recursivelyCheckFilter(item, false);
+        }
     }
 
     private notifyListeners(): void {
@@ -556,7 +746,7 @@ export class AgPrimaryColsList extends Component<AgPrimaryColsListEvent> {
 
         this.forEachItem((item) => {
             if (item.group && item.expanded) {
-                expandedGroupIds.push(item.columnGroup.getId());
+                expandedGroupIds.push(item.columnGroup.groupId);
             }
         });
 

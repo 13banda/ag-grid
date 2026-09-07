@@ -1,17 +1,25 @@
+import { _isEventFromThisInstance, _isEventSupported, _isIOSUserAgent } from 'ag-stack';
+
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
+import type { AgProvidedColumnGroup } from '../entities/agProvidedColumnGroup';
 import type { GridBodyCtrl } from '../gridBodyComp/gridBodyCtrl';
 import type { RowContainerEventsFeature } from '../gridBodyComp/rowContainer/rowContainerEventsFeature';
-import type { HeaderComp } from '../headerRendering/cells/column/headerComp';
-import type { HeaderGroupComp } from '../headerRendering/cells/columnGroup/headerGroupComp';
+import { _isLegacyMenuEnabled } from '../gridOptionsUtils';
+import type { AgColumnHeader } from '../headerRendering/cells/column/agColumnHeader';
+import type { AgColumnGroupHeader } from '../headerRendering/cells/columnGroup/agColumnGroupHeader';
 import type { GridHeaderCtrl } from '../headerRendering/gridHeaderCtrl';
-import type { CellMouseListenerFeature } from '../rendering/cell/cellMouseListenerFeature';
-import { _isIOSUserAgent } from '../utils/browser';
-import { _isEventSupported } from '../utils/event';
-import { _exists } from '../utils/generic';
-import type { LongTapEvent, TapEvent, TouchListenerEvent } from '../widgets/touchListener';
+import type { CellCtrl } from '../rendering/cell/cellCtrl';
+import { _onCellDoubleClicked } from '../rendering/cell/cellMouseListenerFeature';
+import type { LongTapEvent, TapEvent } from '../widgets/touchListener';
 import { TouchListener } from '../widgets/touchListener';
+
+const _shouldOpenHeaderMenuOnLongTap = (
+    enableMenu: boolean,
+    isHeaderContextMenuEnabled: boolean,
+    isLegacyMenuEnabled: boolean
+): boolean => isHeaderContextMenuEnabled || (enableMenu && isLegacyMenuEnabled);
 
 export class TouchService extends BeanStub implements NamedBean {
     beanName = 'touchSvc' as const;
@@ -20,7 +28,7 @@ export class TouchService extends BeanStub implements NamedBean {
         ctrl: GridBodyCtrl,
         listener: (mouseListener?: MouseEvent, touch?: Touch, touchEvent?: TouchEvent) => void
     ): void {
-        this.mockContextMenu(ctrl, ctrl.eBodyViewport, listener);
+        this.mockContextMenu(ctrl, ctrl.eGridViewport, listener);
     }
 
     public mockHeaderContextMenu(
@@ -38,25 +46,28 @@ export class TouchService extends BeanStub implements NamedBean {
 
         const listener = (mouseListener?: MouseEvent, touch?: Touch, touchEvent?: TouchEvent) => {
             const { rowCtrl, cellCtrl } = ctrl.getControlsForEventTarget(touchEvent?.target ?? null);
-            this.beans.contextMenuSvc?.handleContextMenuMouseEvent(undefined, touchEvent, rowCtrl, cellCtrl!);
+            if (cellCtrl?.column) {
+                cellCtrl.dispatchCellContextMenuEvent(touchEvent ?? null);
+            }
+            this.beans.contextMenuSvc?.handleContextMenuMouseEvent(undefined, touchEvent, rowCtrl, cellCtrl);
         };
         this.mockContextMenu(ctrl, ctrl.element, listener);
     }
 
-    public handleCellDoubleClick(ctrl: CellMouseListenerFeature, mouseEvent: MouseEvent): boolean {
+    public handleCellDoubleClick(ctrl: CellCtrl, mouseEvent: MouseEvent): boolean {
         const isDoubleClickOnIPad = () => {
             if (!_isIOSUserAgent() || _isEventSupported('dblclick')) {
                 return false;
             }
 
-            const nowMillis = new Date().getTime();
+            const nowMillis = Date.now();
             const res = nowMillis - ctrl.lastIPadMouseClickEvent < 200;
             ctrl.lastIPadMouseClickEvent = nowMillis;
 
             return res;
         };
         if (isDoubleClickOnIPad()) {
-            ctrl.onCellDoubleClicked(mouseEvent);
+            _onCellDoubleClicked(this.beans, ctrl, mouseEvent);
             mouseEvent.preventDefault(); // if we don't do this, then iPad zooms in
 
             return true;
@@ -64,8 +75,8 @@ export class TouchService extends BeanStub implements NamedBean {
         return false;
     }
 
-    public setupForHeader(comp: HeaderComp): void {
-        const { gos, sortSvc } = this.beans;
+    public setupForHeader(comp: AgColumnHeader): void {
+        const { gos, sortSvc, menuSvc } = this.beans;
 
         if (gos.get('suppressTouch')) {
             return;
@@ -73,15 +84,20 @@ export class TouchService extends BeanStub implements NamedBean {
         const { params, eMenu, eFilterButton } = comp;
 
         const touchListener = new TouchListener(comp.getGui(), true);
-        const suppressMenuHide = comp.shouldSuppressMenuHide();
-        const tapMenuButton = suppressMenuHide && _exists(eMenu);
-        const menuTouchListener = tapMenuButton ? new TouchListener(eMenu, true) : touchListener;
+        comp.addDestroyFunc(() => touchListener.destroy());
 
-        if (params.enableMenu) {
-            const eventType: TouchListenerEvent = tapMenuButton ? 'tap' : 'longTap';
-            const showMenuFn = (event: TapEvent | LongTapEvent) =>
-                params.showColumnMenuAfterMouseClick(event.touchStart);
-            comp.addManagedListeners(menuTouchListener, { [eventType]: showMenuFn });
+        const suppressMenuHide = comp.shouldSuppressMenuHide();
+        const isHeaderContextMenuEnabled = !!menuSvc?.isHeaderContextMenuEnabled(params.column as AgColumn);
+        const shouldOpenMenuOnLongTap = _shouldOpenHeaderMenuOnLongTap(
+            params.enableMenu,
+            isHeaderContextMenuEnabled,
+            _isLegacyMenuEnabled(gos)
+        );
+
+        const showMenuFn = (event: TapEvent | LongTapEvent) => params.showColumnMenuAfterMouseClick(event.touchStart);
+
+        if (shouldOpenMenuOnLongTap) {
+            comp.addManagedListeners(touchListener, { longTap: showMenuFn });
         }
 
         if (params.enableSorting) {
@@ -98,26 +114,24 @@ export class TouchService extends BeanStub implements NamedBean {
 
             comp.addManagedListeners(touchListener, { tap: tapListener });
         }
+    }
 
-        if (params.enableFilterButton && eFilterButton) {
-            const filterButtonTouchListener = new TouchListener(eFilterButton, true);
-            comp.addManagedListeners(filterButtonTouchListener, {
-                tap: () => params.showFilter(eFilterButton),
-            });
-            comp.addDestroyFunc(() => filterButtonTouchListener.destroy());
-        }
-
-        // if tapMenuButton is true `touchListener` and `menuTouchListener` are different
-        // so we need to make sure to destroy both listeners here
-        comp.addDestroyFunc(() => touchListener.destroy());
-
-        if (tapMenuButton) {
-            comp.addDestroyFunc(() => menuTouchListener.destroy());
+    public setupForHeaderGroup(comp: AgColumnGroupHeader): void {
+        const params = comp.params;
+        if (
+            this.beans.menuSvc?.isHeaderContextMenuEnabled(
+                params.columnGroup.getProvidedColumnGroup() as AgProvidedColumnGroup
+            )
+        ) {
+            const touchListener = new TouchListener(params.eGridHeader, true);
+            const showMenuFn = (event: LongTapEvent) => params.showColumnMenuAfterMouseClick(event.touchStart);
+            comp.addManagedListeners(touchListener, { longTap: showMenuFn });
+            comp.addDestroyFunc(() => touchListener.destroy());
         }
     }
 
-    public setupForHeaderGroup(
-        comp: HeaderGroupComp,
+    public setupForHeaderGroupElement(
+        comp: AgColumnGroupHeader,
         eElement: HTMLElement,
         action: (event: MouseEvent) => void
     ): void {
@@ -139,6 +153,9 @@ export class TouchService extends BeanStub implements NamedBean {
 
         const touchListener = new TouchListener(element);
         const longTapListener = (event: LongTapEvent) => {
+            if (!_isEventFromThisInstance(this.beans, event.touchEvent)) {
+                return;
+            }
             listener(undefined, event.touchStart, event.touchEvent);
         };
 

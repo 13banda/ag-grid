@@ -1,0 +1,204 @@
+{
+    "prose": {
+        "intro": {
+            "headingLine1": "Open source heart,",
+            "headingLine2": "enterprise muscle.",
+            "paragraphHtml": "<b>Built by developers for developers</b>, AG Grid is a self-funded, bootstrapped company with thousands of customers globally. Our data grid and charting products are now trusted by developers worldwide when building their applications."
+        },
+        "customerLogosFootnote": "Our community versions remain true to our roots, offering free, open-source grids and charts delivering world-class performance. Our enterprise products deliver powerful features and direct developer technical support.",
+        "memoriam": {
+            "heading": "In memory of our amazing founder Niall Crosby",
+            "paragraph": "AG Grid's success has a lot to do with Niall's ingenuity, craft and commitment to building",
+            "linkText": "Read Niall's story",
+            "linkUrl": "/niall/"
+        },
+        "history": {
+            "heading": "Our history",
+            "paragraph": "Born from a gap in the market, now providing world-class data-grids and charts to millions of users."
+        },
+        "principles": {
+            "heading": "Our principles",
+            "subheading": "Empowering developers to build world-class applications for their users"
+        },
+        "leadership": {
+            "heading": "Leadership",
+            "subheading": "Decades of experience, that you can count on"
+        },
+        "lifeAt": {
+            "heading": "Life at AG Grid",
+            "paragraph": "We are headquartered in London, with a team of 60 professionals obsessed about building our products, bringing them to market, and ensuring our customers are successful with them."
+        },
+        "resources": {
+            "heading": "Resources",
+            "subheading": "How to find us online, common resources",
+            "items": [
+                {
+                    "icon": "blog",
+                    "title": "Blog",
+                    "description": "See our latest articles",
+                    "url": "https://www.ag-grid.com/blog/",
+                    "external": true
+                },
+                {
+                    "icon": "conference",
+                    "title": "Community",
+                    "description": "View our upcoming and past events",
+                    "url": "/community/"
+                }
+            ]
+        },
+        "contact": {
+            "heading": "Get in touch",
+            "subheading": "We are here to help with licenses, developer support and any other queries."
+        },
+        "office": {
+            "heading": "Where to find us",
+            "addressLines": ["AG Grid Ltd", "70 Wilson Street", "London", "EC2A 2DB"],
+            "mapUrl": "https://maps.app.goo.gl/LhvkucDnWtZ9z7rB8",
+            "mapCta": "Visit our office"
+        },
+        "socials": [
+            { "icon": "github", "label": "GitHub", "ariaLabel": "GitHub", "url": "https://github.com/ag-grid/ag-grid" },
+            { "icon": "xLogo", "label": "X", "ariaLabel": "X (Twitter)", "url": "https://x.com/ag_grid" },
+            { "icon": "youtube", "label": "YouTube", "ariaLabel": "YouTube", "url": "https://youtube.com/c/aggrid" },
+            {
+                "icon": "linkedin",
+                "label": "LinkedIn",
+                "ariaLabel": "LinkedIn",
+                "url": "https://linkedin.com/company/ag-grid"
+            }
+        ]
+    },
+    "timeline": [
+        {
+            "year": "2015",
+            "icon": "born",
+            "title": "First commit",
+            "description": "<a href=\"/niall/\">Niall Crosby</a> makes his <a href=\"https://github.com/ag-grid/ag-grid/blob/3a276fa22a328aed53e1b3bebe45c83f78bf9d98/src/angularGrid.js\">first commit for AG Grid</a>, creating an open-source data grid solution to address a gap in the market"
+        },
+        {
+            "year": "2016",
+            "icon": "rocket",
+            "title": "Commercial launch",
+            "description": "<a href=\"/data-grid/community-vs-enterprise/\">AG Grid Enterprise</a> is launched to widespread adoption within the developer community."
+        },
+        {
+            "year": "2017",
+            "icon": "barChart",
+            "title": "Enterprise momentum",
+            "description": "AG Grid signs its 1,000th enterprise customer, proving the commercial model's success."
+        },
+        {
+            "year": "2018",
+            "icon": "conference",
+            "title": "AG Grid Conf",
+            "description": "Dedicated <a href=\"community/events/\">AG Grid conferences</a> delivered in London & New York, engaging us with our growing developer community."
+        },
+        {
+            "year": "2019",
+            "icon": "barChart",
+            "title": "Integrated Charting",
+            "description": "<a href=\"/data-grid/integrated-charts/\">Integrated Charts</a> is launched within AG Grid. The first JS data-grid to contain built-in charting."
+        },
+        {
+            "year": "2020",
+            "icon": "chart",
+            "title": "AG Charts",
+            "description": "<a href=\"https://www.ag-grid.com/charts/\">AG Charts Community</a> is released as a standalone library"
+        },
+        {
+            "year": "2021",
+            "icon": "license",
+            "title": "Self-service licensing",
+            "description": "<a href=\"/license-pricing/\">eCommerce platform</a> is launched to allow customers to self-service."
+        },
+        {
+            "year": "2022",
+            "icon": "conference",
+            "title": "Mass adoption",
+            "description": "<a href=\"https://www.npmjs.com/package/ag-grid-community\">AG Grid Community</a> breaks one million downloads per month on NPM."
+        },
+        {
+            "year": "2023",
+            "icon": "donutAccelerating",
+            "title": "AG Chart Enterprise",
+            "description": "<a href=\"/data-grid/community-vs-enterprise/\">AG Chart Enterprise</a> is launched in response to strong user demand."
+        },
+        {
+            "year": "2024",
+            "icon": "conference",
+            "title": "Leadership updates",
+            "description": "<a href=\"#leadership-section\">John Masterson</a> appointed CEO, a new board is formed."
+        },
+        {
+            "year": "Now",
+            "icon": "rocket",
+            "title": "What's next",
+            "description": "We're always on the lookout for the next exciting product, stay tuned"
+        }
+    ],
+    "principles": [
+        {
+            "icon": "code",
+            "title": "Developer-first",
+            "description": "Our approach to create innovative, market-leading products"
+        },
+        {
+            "icon": "star",
+            "title": "Technical excellence",
+            "description": "Deliver consistent quality and exceptional end-user experiences"
+        },
+        {
+            "icon": "brain",
+            "title": "Deep understanding",
+            "description": "Forging a deep understanding of our customers' problems"
+        },
+        {
+            "icon": "barChart",
+            "title": "Measurable value",
+            "description": "Testable solutions that compare favourably to any industry benchmarks"
+        },
+        {
+            "icon": "conference",
+            "title": "Exceptional talent",
+            "description": "We attract and develop world-class developer and operations talent."
+        },
+        {
+            "icon": "rocket",
+            "title": "Culture of innovation",
+            "description": "Cultivate a culture of innovation, excellence, and success"
+        }
+    ],
+    "leadershipTeam": [
+        {
+            "name": "John Masterson",
+            "role": "CEO",
+            "bio": "One of the original AG Grid team in 2016, John has over 20 years' of experience across software development, product management, commercial strategy, and executive management. He has a strong track record of scaling developer-focused businesses and leading high-performing teams in fast-growing SaaS and enterprise software environments. As CEO of AG Grid, John is responsible for defining the company's strategic direction, driving innovation, and supporting long-term, sustainable growth. He works closely with customers and the leadership team to ensure AG Grid remains the trusted standard for enterprise-grade JavaScript development products.",
+            "imageSrc": "images/about/john-masterson.webp"
+        },
+        {
+            "name": "Rob Clarke",
+            "role": "CTO",
+            "bio": "Rob is a technology leader with more than 20 years' experience transforming engineering teams and driving product innovation. He has led initiatives in telecommunications, financial services, and enterprise software, joining AG Grid in 2017 after serving as a technical lead and architect at RBS. Rob has since scaled the engineering team and broadened the product portfolio. As CTO, he shapes technical strategy and product development across all products, most recently spearheading the launch of AG Charts Enterprise for enterprise-grade data visualisation.",
+            "imageSrc": "images/about/rob-clarke.webp"
+        },
+        {
+            "name": "Jon Williams",
+            "role": "CRO",
+            "bio": "Jon has over 25 years' experience leading commercial teams from start-ups to global organisations. Honing his skills at companies such as Aprimo, Boxever, and Sitecore. Jon now brings a wealth of experience delivering go-to-market strategies, business integration, and delivering B2B sales success to AG Grid.",
+            "imageSrc": "images/about/jon-williams.webp"
+        },
+        {
+            "name": "Jason Forget",
+            "role": "Chair of the Board",
+            "bio": "Jason is a technology executive with deep experience scaling developer-first software companies into global enterprise platforms. He has built and led high-growth go-to-market organizations, transforming product-led adoption into large-scale enterprise revenue engines and helping developer-focused products achieve broad adoption across many of the world’s leading enterprises. Jason will partner closely with the leadership team to accelerate enterprise growth, preserving the developer trust and community momentum while driving long-term success. At AG Grid, he will work with the team to expand enterprise adoption, strengthen strategic customer relationships, and help scale the company’s next phase of growth.",
+            "imageSrc": "images/about/jason-forget.webp"
+        },
+        {
+            "name": "Jason Osmond",
+            "role": "Non Executive Director",
+            "bio": "Jason is a seasoned technology executive with over 25 years' of experience driving growth, scaling operations, and building high-performing, commercially focused organisations. He brings a strong track record of value creation through strategic leadership, operational discipline, and a focus on sustainable, recurring revenue models. As Non Executive Director, Jason works closely with AG Grid's leadership team to support long-term growth and market expansion.",
+            "imageSrc": "images/about/jason-osmond.webp"
+        }
+    ]
+}

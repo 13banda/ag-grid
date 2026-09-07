@@ -1,10 +1,10 @@
 import type { _EditGridApi, _UndoRedoGridApi } from '../api/gridApi';
-import type { DefaultProvidedCellEditorParams } from '../interfaces/iCellEditor';
 import type { _ModuleWithApi, _ModuleWithoutApi } from '../interfaces/iModule';
+import { TooltipModule } from '../tooltip/tooltipModule';
 import { UndoRedoService } from '../undoRedo/undoRedoService';
 import { VERSION } from '../version';
 import { PopupModule } from '../widgets/popupModule';
-import { cellEditingCSS } from './cell-editing.css-GENERATED';
+import cellEditingCSS from './cell-editing.css';
 import { CheckboxCellEditor } from './cellEditors/checkboxCellEditor';
 import { DateCellEditor } from './cellEditors/dateCellEditor';
 import { DateStringCellEditor } from './cellEditors/dateStringCellEditor';
@@ -13,32 +13,46 @@ import { NumberCellEditor } from './cellEditors/numberCellEditor';
 import { SelectCellEditor } from './cellEditors/selectCellEditor';
 import { TextCellEditor } from './cellEditors/textCellEditor';
 import {
-    getCellEditorInstances,
     getCurrentRedoSize,
     getCurrentUndoSize,
+    getEditRowValues,
+    getEditValidationErrors,
     getEditingCells,
+    isEditing,
     redoCellEditing,
     startEditingCell,
     stopEditing,
     undoCellEditing,
+    validateEdit,
 } from './editApi';
+import { EditModelService } from './editModelService';
 import { EditService } from './editService';
-import { RowEditService } from './rowEditService';
+import { FullRowEditStrategy } from './strategy/fullRowEditStrategy';
+import { SingleCellEditStrategy } from './strategy/singleCellEditStrategy';
+import { getCellEditorInstances } from './utils/editors';
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const EditCoreModule: _ModuleWithApi<_EditGridApi<any>> = {
     moduleName: 'EditCore',
     version: VERSION,
-    beans: [EditService, RowEditService],
+    beans: [EditModelService, EditService],
     apiFunctions: {
-        getCellEditorInstances,
         getEditingCells,
-        stopEditing,
+        getEditRowValues,
+        getCellEditorInstances,
         startEditingCell,
+        stopEditing,
+        isEditing,
+        validateEdit,
+        getEditValidationErrors,
     },
-    dependsOn: [PopupModule],
+    dynamicBeans: {
+        singleCell: SingleCellEditStrategy,
+        fullRow: FullRowEditStrategy,
+    },
+    dependsOn: [PopupModule, TooltipModule],
     css: [cellEditingCSS],
 };
 
@@ -77,9 +91,6 @@ export const NumberEditorModule: _ModuleWithoutApi = {
     userComponents: {
         agNumberCellEditor: {
             classImp: NumberCellEditor,
-            params: {
-                suppressPreventDefault: true,
-            } as DefaultProvidedCellEditorParams,
         },
     },
     dependsOn: [EditCoreModule],
@@ -131,7 +142,7 @@ export const LargeTextEditorModule: _ModuleWithoutApi = {
 };
 
 /**
- * @feature Editing
+ * @feature Editing -> Custom Editor
  */
 export const CustomEditorModule: _ModuleWithoutApi = {
     moduleName: 'CustomEditor',

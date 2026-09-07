@@ -1,68 +1,36 @@
-import type { ColDef, GridApi, GridOptions, INumberFilterParams, ValueFormatterParams } from 'ag-grid-community';
+import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberFilterModule,
-    TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
-const numberValueFormatter = function (params: ValueFormatterParams) {
-    return params.value.toFixed(2);
-};
-
-const saleFilterParams: INumberFilterParams = {
-    allowedCharPattern: '\\d\\-\\,\\$',
-    numberParser: (text: string | null) => {
-        return text == null ? null : parseFloat(text.replace(',', '.').replace('$', ''));
-    },
-    numberFormatter: (value: number | null) => {
-        return value == null ? null : value.toString().replace('.', ',');
-    },
-};
-
-const saleValueFormatter = function (params: ValueFormatterParams) {
-    const formatted = params.value.toFixed(2).replace('.', ',');
-
-    if (formatted.indexOf('-') === 0) {
-        return '-$' + formatted.slice(1);
-    }
-
-    return '$' + formatted;
-};
+ModuleRegistry.registerModules([ClientSideRowModelModule, NumberFilterModule]);
 
 const columnDefs: ColDef[] = [
     {
-        field: 'sale',
-        headerName: 'Sale ($)',
-        filter: 'agNumberColumnFilter',
-        floatingFilter: true,
-        valueFormatter: numberValueFormatter,
+        field: 'price',
+        filter: true,
     },
     {
-        field: 'sale',
-        headerName: 'Sale',
+        field: 'quantity',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
-        filterParams: saleFilterParams,
-        valueFormatter: saleValueFormatter,
     },
 ];
 
 let gridApi: GridApi;
 
 const gridOptions: GridOptions = {
-    columnDefs: columnDefs,
+    columnDefs,
     defaultColDef: {
         flex: 1,
         minWidth: 150,

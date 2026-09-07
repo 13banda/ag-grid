@@ -1,25 +1,23 @@
 import type { Group } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChartWithPolarAxes } from '../miniChartWithPolarAxes';
 
-export class MiniSunburst extends MiniChartWithPolarAxes {
-    static chartType: ChartType = 'sunburst';
+export class MiniSunburstClass extends MiniChartWithPolarAxes {
     private readonly series: Group[];
 
     // Hierarchical data using multidimensional array
-    private data = [
+    private readonly data = [
         [[], []],
         [[], []],
         [[], []],
     ];
 
     // Rotate the chart by the given angle (-90 degrees)
-    private angleOffset = -Math.PI / 2;
+    private readonly angleOffset = -Math.PI / 2;
 
-    private innerRadiusRatio = 0;
+    private readonly innerRadiusRatio = 0;
 
     constructor(container: HTMLElement, agChartsExports: AgChartsExports, fills: string[], strokes: string[]) {
         super(container, agChartsExports, 'sunburstTooltip');
@@ -46,11 +44,11 @@ export class MiniSunburst extends MiniChartWithPolarAxes {
 
         let maxDepth = 0;
         const findMaxDepth = (data: any[], parentDepth: number) => {
-            data.forEach((child) => {
+            for (const child of data) {
                 const depth = parentDepth + 1;
                 maxDepth = Math.max(maxDepth, depth);
                 findMaxDepth(child, depth);
-            });
+            }
         };
 
         findMaxDepth(data, 0);
@@ -121,3 +119,8 @@ export class MiniSunburst extends MiniChartWithPolarAxes {
         });
     }
 }
+
+export const MiniSunburst: MiniChartSelector = {
+    chartType: 'sunburst',
+    miniChart: MiniSunburstClass,
+};

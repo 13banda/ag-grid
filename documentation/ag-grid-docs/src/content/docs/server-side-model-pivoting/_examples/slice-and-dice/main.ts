@@ -1,12 +1,5 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import {
-    CustomFilterModule,
-    IServerSideDatasource,
-    ModuleRegistry,
-    NumberFilterModule,
-    ValidationModule,
-    createGrid,
-} from 'ag-grid-community';
+import { ModuleRegistry, NumberFilterModule, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -19,8 +12,12 @@ import {
 } from 'ag-grid-enterprise';
 
 import { getCountries } from './countries';
-import { CustomAgeFilter } from './customAgeFilter';
 import { createFakeServer, createServerSideDatasource } from './server';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberFilterModule,
@@ -28,12 +25,10 @@ ModuleRegistry.registerModules([
     FiltersToolPanelModule,
     ColumnMenuModule,
     ContextMenuModule,
-    CustomFilterModule,
     RowGroupingModule,
     ServerSideRowModelModule,
     SetFilterModule,
     RowGroupingPanelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const countries = getCountries();
@@ -44,7 +39,11 @@ const columnDefs: ColDef[] = [
         field: 'age',
         enableRowGroup: true,
         enablePivot: true,
-        filter: CustomAgeFilter,
+        filter: 'agNumberColumnFilter',
+        filterParams: {
+            filterOptions: ['equals', 'lessThan', 'greaterThan'],
+            maxNumConditions: 1,
+        },
     },
     {
         field: 'country',

@@ -11,7 +11,7 @@ export function setGridAriaProperty(beans: BeanCollection, property: string, val
     if (!property) {
         return;
     }
-    const eGrid = beans.ctrlsSvc.getGridBodyCtrl().eGridBody;
+    const eGrid = beans.ctrlsSvc.getGridBodyCtrl().eGridViewport;
     const ariaProperty = `aria-${property}`;
 
     if (value === null) {
@@ -26,9 +26,9 @@ export function refreshCells<TData = any>(beans: BeanCollection, params: Refresh
 }
 
 export function refreshHeader(beans: BeanCollection) {
-    beans.frameworkOverrides.wrapIncoming(() =>
-        beans.ctrlsSvc.getHeaderRowContainerCtrls().forEach((c) => c.refresh())
-    );
+    beans.frameworkOverrides.wrapIncoming(() => {
+        beans.ctrlsSvc.getHeaderRowContainerCtrl()?.refresh();
+    });
 }
 
 export function isAnimationFrameQueueEmpty(beans: BeanCollection): boolean {
@@ -51,12 +51,12 @@ export function getCellRendererInstances<TData = any>(
     params: GetCellRendererInstancesParams<TData> = {}
 ): ICellRenderer[] {
     const cellRenderers: ICellRenderer[] = [];
-    beans.rowRenderer.getCellCtrls(params.rowNodes, params.columns as AgColumn[]).forEach((cellCtrl) => {
+    for (const cellCtrl of beans.rowRenderer.getCellCtrls(params.rowNodes, params.columns as AgColumn[])) {
         const cellRenderer = cellCtrl.getCellRenderer();
         if (cellRenderer != null) {
             cellRenderers.push(_unwrapUserComp(cellRenderer));
         }
-    });
+    }
     if (params.columns?.length) {
         return cellRenderers;
     }
@@ -64,23 +64,21 @@ export function getCellRendererInstances<TData = any>(
     const fullWidthRenderers: ICellRenderer[] = [];
     const rowIdMap = mapRowNodes(params.rowNodes);
 
-    beans.rowRenderer.getAllRowCtrls().forEach((rowCtrl) => {
+    for (const rowCtrl of beans.rowRenderer.getAllRowCtrls()) {
         if (rowIdMap && !isRowInMap(rowCtrl.rowNode, rowIdMap)) {
-            return;
+            continue;
         }
 
         if (!rowCtrl.isFullWidth()) {
-            return;
+            continue;
         }
 
-        const renderers = rowCtrl.getFullWidthCellRenderers();
-        for (let i = 0; i < renderers.length; i++) {
-            const renderer = renderers[i];
+        for (const renderer of rowCtrl.getModeCellRenderers()) {
             if (renderer != null) {
                 fullWidthRenderers.push(_unwrapUserComp(renderer));
             }
         }
-    });
+    }
 
     return [...fullWidthRenderers, ...cellRenderers];
 }

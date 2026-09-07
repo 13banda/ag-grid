@@ -1,5 +1,6 @@
 ---
 title: "Theming: Customising Selections"
+description: "$framework Data Grid row and cell selection styling: customise the appearance of selected rows and cells."
 ---
 
 Control how selected rows and cells appear.
@@ -10,8 +11,12 @@ When [row selection](./row-selection/) is enabled, you can set the color of sele
 
 ```js
 const myTheme = themeQuartz.withParams({
-    /* bright green, 10% opacity */
+    // bright green, 10% opacity
     selectedRowBackgroundColor: 'rgba(0, 255, 0, 0.1)',
+
+    // alternating row colours will be visible through the semi-transparent
+    // selection background colour
+    oddRowBackgroundColor: '#8881',
 });
 ```
 
@@ -19,18 +24,22 @@ const myTheme = themeQuartz.withParams({
 
 ## Cell Selections
 
-[Cell selections](./cell-selection/) can be created by clicking and dragging on the grid. Copying from a selection will briefly highlight the range of cells ({% kbd "Ctrl + C" /%}). There are several parameters to control the selection and highlight style:
+[Cell selections](./cell-selection/) can be created by clicking and dragging on the grid. Copying from a selection will briefly highlight the range of cells ({% kbd "^ Ctrl" /%}+{% kbd "C" /%}). There are several parameters to control the selection and highlight style:
 
 ```js
 const myTheme = themeQuartz.withParams({
-    // color and style of border around selection
+    // colour and style of border around selection
     rangeSelectionBorderColor: 'rgb(193, 0, 97)',
     rangeSelectionBorderStyle: 'dashed',
-    // background color of selection - you can use a semi-transparent color
+    // background colour of selection - you can use a semi-transparent colour
     // and it wil overlay on top of the existing cells
     rangeSelectionBackgroundColor: 'rgb(255, 0, 128, 0.1)',
-    // color used to indicate that data has been copied form the cell range
+    // colour used to indicate that data has been copied from the cell range
     rangeSelectionHighlightColor: 'rgb(60, 188, 0, 0.3)',
+
+    // alternating row colours will be visible through the semi-transparent
+    // selection background colour
+    oddRowBackgroundColor: '#8881',
 });
 ```
 
@@ -40,6 +49,5 @@ const myTheme = themeQuartz.withParams({
 
 When using [integrated charts](./integrated-charts/) with cell selections, the grid uses different colors to indicate the purpose of the cell ranges:
 
-* `rangeSelectionChartBackgroundColor` - background color for cells used as chart data
-* `rangeSelectionChartCategoryBackgroundColor` - background color for cells used as categories / axis labels
-    
+- `rangeSelectionChartBackgroundColor` - background color for cells used as chart data
+- `rangeSelectionChartCategoryBackgroundColor` - background color for cells used as categories / axis labels

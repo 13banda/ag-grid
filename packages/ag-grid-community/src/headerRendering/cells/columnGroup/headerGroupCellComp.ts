@@ -1,24 +1,31 @@
+import { RefPlaceholder, _addStylesToElement, _setDisplayed } from 'ag-stack';
+
+import type { HeaderStyle } from '../../../entities/colDef';
 import type { UserCompDetails } from '../../../interfaces/iUserCompDetails';
-import { _setDisplayed } from '../../../utils/dom';
-import { RefPlaceholder } from '../../../widgets/component';
+import type { ElementParams } from '../../../utils/element';
 import { AbstractHeaderCellComp } from '../abstractCell/abstractHeaderCellComp';
+import type { IHeaderGroupComp } from './agColumnGroupHeader';
 import type { HeaderGroupCellCtrl, IHeaderGroupCellComp } from './headerGroupCellCtrl';
-import type { IHeaderGroupComp } from './headerGroupComp';
+import { applyHeaderWrapperHidden, applyHeaderWrapperMaxHeight } from './headerGroupCellCtrl';
+
+const HeaderGroupCellCompElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-header-group-cell',
+    role: 'columnheader',
+    children: [
+        { tag: 'div', ref: 'eHeaderCompWrapper', cls: 'ag-header-cell-comp-wrapper', role: 'presentation' },
+        { tag: 'div', ref: 'eResize', cls: 'ag-header-cell-resize', role: 'presentation' },
+    ],
+};
 
 export class HeaderGroupCellComp extends AbstractHeaderCellComp<HeaderGroupCellCtrl> {
-    private eResize: HTMLElement = RefPlaceholder;
+    private readonly eResize: HTMLElement = RefPlaceholder;
     private readonly eHeaderCompWrapper: HTMLElement = RefPlaceholder;
 
     private headerGroupComp: IHeaderGroupComp | undefined;
 
     constructor(ctrl: HeaderGroupCellCtrl) {
-        super(
-            /* html */ `<div class="ag-header-group-cell" role="columnheader">
-            <div data-ref="eHeaderCompWrapper" class="ag-header-cell-comp-wrapper" role="presentation"></div>
-            <div data-ref="eResize" class="ag-header-cell-resize" role="presentation"></div>
-        </div>`,
-            ctrl
-        );
+        super(HeaderGroupCellCompElement, ctrl);
     }
 
     public postConstruct(): void {
@@ -27,25 +34,11 @@ export class HeaderGroupCellComp extends AbstractHeaderCellComp<HeaderGroupCellC
         const setAttribute = (key: string, value: string | undefined) =>
             value != undefined ? eGui.setAttribute(key, value) : eGui.removeAttribute(key);
 
-        eGui.setAttribute('col-id', this.ctrl.column.getUniqueId());
-
         const compProxy: IHeaderGroupCellComp = {
-            addOrRemoveCssClass: (cssClassName, on) => this.addOrRemoveCssClass(cssClassName, on),
-            setHeaderWrapperHidden: (hidden) => {
-                if (hidden) {
-                    this.eHeaderCompWrapper.style.setProperty('display', 'none');
-                } else {
-                    this.eHeaderCompWrapper.style.removeProperty('display');
-                }
-            },
-            setHeaderWrapperMaxHeight: (value) => {
-                if (value != null) {
-                    this.eHeaderCompWrapper.style.setProperty('max-height', `${value}px`);
-                } else {
-                    this.eHeaderCompWrapper.style.removeProperty('max-height');
-                }
-                this.eHeaderCompWrapper.classList.toggle('ag-header-cell-comp-wrapper-limited-height', value != null);
-            },
+            toggleCss: (cssClassName, on) => this.toggleCss(cssClassName, on),
+            setUserStyles: (styles: HeaderStyle) => _addStylesToElement(eGui, styles),
+            setHeaderWrapperHidden: (hidden) => applyHeaderWrapperHidden(this.eHeaderCompWrapper, hidden),
+            setHeaderWrapperMaxHeight: (value) => applyHeaderWrapperMaxHeight(this.eHeaderCompWrapper, value),
             setResizableDisplayed: (displayed) => _setDisplayed(this.eResize, displayed),
             setWidth: (width) => (eGui.style.width = width),
             setAriaExpanded: (expanded: 'true' | 'false' | undefined) => setAttribute('aria-expanded', expanded),
@@ -71,20 +64,18 @@ export class HeaderGroupCellComp extends AbstractHeaderCellComp<HeaderGroupCellC
         const eGui = this.getGui();
         const eHeaderGroupGui = headerGroupComp.getGui();
 
+        // Replace any previously-rendered component (e.g. when the header name is edited) rather than
+        // appending a second one alongside it.
+        const previousComp = this.headerGroupComp;
+        if (previousComp) {
+            previousComp.getGui().remove();
+            this.destroyBean(previousComp);
+        }
+
         this.eHeaderCompWrapper.appendChild(eHeaderGroupGui);
         this.addDestroyFunc(destroyFunc);
 
         this.headerGroupComp = headerGroupComp;
         this.ctrl.setDragSource(eGui);
-    }
-
-    private addOrRemoveHeaderWrapperStyle(style: string, value: string | null): void {
-        const { eHeaderCompWrapper } = this;
-
-        if (value) {
-            eHeaderCompWrapper.style.setProperty(style, value);
-        } else {
-            eHeaderCompWrapper.style.removeProperty(style);
-        }
     }
 }

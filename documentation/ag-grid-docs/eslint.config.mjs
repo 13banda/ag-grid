@@ -1,6 +1,7 @@
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 
 import rootESLint from '../../eslint.config.mjs';
+import { noRawHistoryWrites } from '../../external/ag-website-shared/eslint.history-rules.mjs';
 
 export default [
     ...rootESLint,
@@ -11,7 +12,16 @@ export default [
         rules: reactHooksPlugin.configs.recommended.rules,
     },
     {
-        ignores: ['.astro/', '**/_examples/', 'scripts/showcase-github/tmp/', '**/.angular'],
+        ignores: [
+            '.astro/',
+            'packages/', // gitignored copy of built grid packages, served to local examples
+            '**/_examples/',
+            'scripts/showcase-github/tmp/',
+            '**/.angular',
+            '.playwright-network-cache/',
+            '**/*.ics',
+            'public/**/*.css',
+        ],
     },
     {
         rules: {
@@ -39,19 +49,6 @@ export default [
             },
         },
     },
-    // Example runner boilerplate files
-    {
-        files: ['public/example-runner/**/*[.js|.ts]'],
-        languageOptions: {
-            globals: {
-                System: 'readonly',
-                systemJsPaths: 'readonly',
-                boilerplatePath: 'readonly',
-                appLocation: 'readonly',
-                systemJsMap: 'readonly',
-            },
-        },
-    },
     // Public files
     {
         files: ['public/**/*[.js|.ts]'],
@@ -73,6 +70,11 @@ export default [
         rules: {
             'no-console': 'off',
             '@typescript-eslint/no-var-requires': 'off',
+        },
+    },
+    {
+        rules: {
+            'no-restricted-syntax': ['error', ...noRawHistoryWrites],
         },
     },
 ];

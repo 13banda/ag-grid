@@ -1,53 +1,40 @@
 import type { GridApi, GridOptions, GridPreDestroyedEvent, StateUpdatedEvent } from 'ag-grid-community';
-import {
-    ClientSideRowModelModule,
-    GridStateModule,
-    ModuleRegistry,
-    NumberFilterModule,
-    PaginationModule,
-    RowSelectionModule,
-    ValidationModule,
-    createGrid,
-} from 'ag-grid-community';
-import {
-    CellSelectionModule,
-    ColumnsToolPanelModule,
-    FiltersToolPanelModule,
-    PivotModule,
-    SetFilterModule,
-} from 'ag-grid-enterprise';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
+import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    NumberFilterModule,
-    GridStateModule,
-    PaginationModule,
-    ClientSideRowModelModule,
-    ColumnsToolPanelModule,
-    FiltersToolPanelModule,
-    RowSelectionModule,
-    CellSelectionModule,
-    SetFilterModule,
-    PivotModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
+    gridId: 'gridState',
     columnDefs: [
         {
             field: 'athlete',
             minWidth: 150,
         },
-        { field: 'age', maxWidth: 90 },
+        { field: 'age' },
         { field: 'country', minWidth: 150 },
-        { field: 'year', maxWidth: 90 },
-        { field: 'date', minWidth: 150 },
-        { field: 'sport', minWidth: 150 },
-        { field: 'gold' },
-        { field: 'silver' },
-        { field: 'bronze' },
-        { field: 'total' },
+        {
+            headerName: 'Competition',
+            groupId: 'competition',
+            children: [{ field: 'year' }, { field: 'date', minWidth: 150 }, { field: 'sport', minWidth: 150 }],
+        },
+        {
+            headerName: 'Medals',
+            groupId: 'medals',
+            children: [
+                { field: 'gold' },
+                { field: 'silver', columnGroupShow: 'open' },
+                { field: 'bronze', columnGroupShow: 'open' },
+                { field: 'total', columnGroupShow: 'closed' },
+            ],
+        },
     ],
     defaultColDef: {
         flex: 1,
@@ -56,11 +43,22 @@ const gridOptions: GridOptions<IOlympicData> = {
         enableRowGroup: true,
         enablePivot: true,
         enableValue: true,
+        headerNameEditable: true,
+    },
+    defaultColGroupDef: {
+        headerNameEditable: true,
+    },
+    autoGroupColumnDef: {
+        minWidth: 200,
     },
     sideBar: true,
     pagination: true,
     rowSelection: { mode: 'multiRow' },
+    cellSelection: true,
+    calculatedColumns: true,
+    enableRowPinning: true,
     suppressColumnMoveAnimation: true,
+    ensureDomOrder: true,
     onGridPreDestroyed: onGridPreDestroyed,
     onStateUpdated: onStateUpdated,
 };

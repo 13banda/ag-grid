@@ -4,13 +4,19 @@ import {
     ClientSideRowModelModule,
     HighlightChangesModule,
     ModuleRegistry,
+    NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextEditorModule,
@@ -20,7 +26,7 @@ ModuleRegistry.registerModules([
     RowGroupingModule,
     HighlightChangesModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
+    NumberEditorModule,
 ]);
 
 let gridApi: GridApi;
@@ -35,7 +41,6 @@ const gridOptions: GridOptions = {
         {
             headerName: 'Total',
             type: 'totalColumn',
-            // we use getValue() instead of data.a so that it gets the aggregated values at the group level
             valueGetter: 'getValue("a") + getValue("b") + getValue("c") + getValue("d")',
         },
     ],
@@ -50,7 +55,6 @@ const gridOptions: GridOptions = {
             minWidth: 90,
             editable: true,
             aggFunc: 'sum',
-            valueParser: 'Number(newValue)',
             cellClass: 'number-cell',
             cellRenderer: 'agAnimateShowChangeCellRenderer',
             filter: 'agNumberColumnFilter',

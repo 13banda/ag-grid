@@ -6,10 +6,15 @@ import {
     ScrollApiModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ScrollApiModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     ClientSideRowModelModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -33,7 +37,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: columnDefs,
-    rowData: null,
     animateRows: false,
     groupDisplayType: 'groupRows',
     onRowGroupOpened: onRowGroupOpened,

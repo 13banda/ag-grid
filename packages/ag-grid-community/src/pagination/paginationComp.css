@@ -1,11 +1,20 @@
 .ag-paging-panel {
-    align-items: center;
     display: flex;
+    align-items: center;
+    height: var(--ag-pagination-panel-height);
+    border-top: var(--ag-footer-row-border);
+    overflow: auto hidden;
+    scrollbar-width: thin;
+}
+
+.ag-paging-panel-content {
+    display: flex;
+    flex: 0 0 auto;
+    min-width: 100%;
+    align-items: center;
     justify-content: flex-end;
     gap: calc(var(--ag-spacing) * 4);
     padding: 0 var(--ag-cell-horizontal-padding);
-    height: max(var(--ag-row-height), 22px);
-    border-top: var(--ag-footer-row-border);
 }
 
 :where(.ag-paging-page-size) .ag-wrapper {
@@ -32,7 +41,38 @@
     }
 }
 
+:where(.ag-number-field).ag-paging-number {
+    display: inline-block;
+}
+
+:where(.ag-number-field.ag-paging-number) .ag-input-field-input {
+    text-align: end;
+}
+
 .ag-paging-number,
 .ag-paging-row-summary-panel-number {
     font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.ag-paging-description {
+    /* avoids misalignment of buttons and text */
+    line-height: 0;
+}
+
+.ag-paging-row-summary-panel {
+    display: inline-grid;
+}
+
+.ag-paging-row-summary-panel::before {
+    content: var(--ag-internal-pagination-width-string);
+    grid-area: 1/1;
+    visibility: hidden;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.ag-paging-row-summary-content {
+    grid-area: 1/1;
+    justify-self: center;
 }

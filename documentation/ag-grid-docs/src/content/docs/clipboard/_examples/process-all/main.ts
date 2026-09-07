@@ -4,12 +4,17 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { CellSelectionModule, ClipboardModule, ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextEditorModule,
@@ -19,7 +24,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     CellSelectionModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [{ field: 'a' }, { field: 'b' }, { field: 'c' }, { field: 'd' }, { field: 'e' }];
@@ -37,10 +41,10 @@ const gridOptions: GridOptions = {
         flex: 1,
 
         cellClassRules: {
-            'cell-green': 'value.startsWith("Green")',
-            'cell-blue': 'value.startsWith("Blue")',
-            'cell-red': 'value.startsWith("Red")',
-            'cell-yellow': 'value.startsWith("Yellow")',
+            'cell-green': 'value && value.startsWith("Green")',
+            'cell-blue': 'value && value.startsWith("Blue")',
+            'cell-red': 'value && value.startsWith("Red")',
+            'cell-yellow': 'value && value.startsWith("Yellow")',
         },
     },
 

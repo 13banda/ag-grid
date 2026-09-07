@@ -3,10 +3,15 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowSelectionModule,
@@ -15,7 +20,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -29,14 +33,14 @@ const gridOptions: GridOptions<IOlympicData> = {
     rowSelection: {
         mode: 'multiRow',
         hideDisabledCheckboxes: true,
-        isRowSelectable: (node) => (node.data ? node.data.year <= 2004 : false),
+        isRowSelectable: (node) => (node.data ? node.data.year < 2007 : false),
     },
 };
 
 function toggleHideCheckbox() {
     gridApi.setGridOption('rowSelection', {
         mode: 'multiRow',
-        isRowSelectable: (node) => (node.data ? node.data.year <= 2004 : false),
+        isRowSelectable: (node) => (node.data ? node.data.year < 2007 : false),
         hideDisabledCheckboxes: getCheckboxValue('#toggle-hide-checkbox'),
     });
 }

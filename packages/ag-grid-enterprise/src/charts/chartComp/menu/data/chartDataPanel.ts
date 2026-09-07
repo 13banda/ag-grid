@@ -1,5 +1,13 @@
-import type { BeanCollection, ChartDataPanel as ChartDataPanelType, ChartType, IChartService } from 'ag-grid-community';
-import { AgToggleButton, Component, _getDocument, _setDisplayed, _warn } from 'ag-grid-community';
+import { _getDocument, _setDisplayed } from 'ag-stack';
+
+import type {
+    BeanCollection,
+    ChartDataPanel as ChartDataPanelType,
+    ChartType,
+    GridToggleButton,
+    IChartService,
+} from 'ag-grid-community';
+import { AgToggleButton, Component } from 'ag-grid-community';
 
 import type { ChartController } from '../../chartController';
 import type { ColState } from '../../model/chartDataModel';
@@ -36,7 +44,7 @@ export class ChartDataPanel extends Component {
     private seriesDataPanel?: SeriesDataPanel;
     private seriesChartTypePanel?: SeriesChartTypePanel;
     private chartSpecificPanel?: ChartSpecificDataPanel;
-    private switchCategorySeriesToggle: AgToggleButton;
+    private switchCategorySeriesToggle: GridToggleButton;
     private restoreSwitchCategorySeriesToggleFocus = false;
     private panels: Component[] = [];
 
@@ -103,7 +111,9 @@ export class ChartDataPanel extends Component {
     }
 
     private canRefresh(oldChartType: ChartType | undefined, newChartType: ChartType): boolean {
-        if (oldChartType === undefined) return false;
+        if (oldChartType === undefined) {
+            return false;
+        }
         if (oldChartType === newChartType) {
             return true;
         }
@@ -119,7 +129,9 @@ export class ChartDataPanel extends Component {
         this.clearPanelComponents();
 
         const { chartType } = this;
-        if (!chartType) return;
+        if (!chartType) {
+            return;
+        }
 
         const isCategorySeriesSwitched = this.chartController.isCategorySeriesSwitched();
 
@@ -159,7 +171,7 @@ export class ChartDataPanel extends Component {
                 this.chartSpecificPanel = this.createBean(new ChartSpecificDataPanel(this.chartMenuContext, isOpen));
                 this.panels.push(this.chartSpecificPanel);
             } else {
-                _warn(144, { type });
+                this.beans.log.warn(144, { type });
             }
         });
 
@@ -177,19 +189,17 @@ export class ChartDataPanel extends Component {
         const eDocument = _getDocument(this.beans);
         const fragment = eDocument.createDocumentFragment();
         for (const panel of this.panels) {
-            panel.addCssClass('ag-chart-data-section');
+            panel.addCss('ag-chart-data-section');
             fragment.appendChild(panel.getGui());
         }
         this.getGui().appendChild(fragment);
     }
 
     private clearPanelComponents() {
-        const eGui = this.getGui();
-
-        this.panels.forEach((panel) => {
-            eGui.removeChild(panel.getGui());
+        for (const panel of this.panels) {
+            panel.getGui().remove();
             this.destroyBean(panel);
-        });
+        }
         this.panels = [];
     }
 
@@ -198,17 +208,23 @@ export class ChartDataPanel extends Component {
     }
 
     private getCategoryGroupTitle(isCategorySeriesSwitched: boolean): string {
-        if (isCategorySeriesSwitched) return this.chartTranslation.translate('seriesLabels');
+        if (isCategorySeriesSwitched) {
+            return this.chartTranslation.translate('seriesLabels');
+        }
         return this.chartTranslation.translate(this.chartController.isActiveXYChart() ? 'labels' : 'categories');
     }
 
     private getCategoryGroupMultipleSelect(chartType: ChartType, isCategorySeriesSwitched: boolean): boolean {
-        if (isCategorySeriesSwitched) return false;
+        if (isCategorySeriesSwitched) {
+            return false;
+        }
         return getMaxNumCategories(chartType) !== 1;
     }
 
     private getSeriesGroupTitle(isCategorySeriesSwitched: boolean): string {
-        if (isCategorySeriesSwitched) return this.chartTranslation.translate('categoryValues');
+        if (isCategorySeriesSwitched) {
+            return this.chartTranslation.translate('categoryValues');
+        }
         return this.chartTranslation.translate(this.chartController.isActiveXYChart() ? 'xyValues' : 'series');
     }
 
@@ -217,12 +233,14 @@ export class ChartDataPanel extends Component {
     }
 
     private getSeriesGroupMaxSelection(chartType: ChartType, isCategorySeriesSwitched: boolean): number | undefined {
-        if (isCategorySeriesSwitched) return undefined;
+        if (isCategorySeriesSwitched) {
+            return undefined;
+        }
         return getMaxNumSeries(chartType);
     }
 
     private createSwitchCategorySeriesToggle(): void {
-        this.switchCategorySeriesToggle = this.createManagedBean(
+        this.switchCategorySeriesToggle = this.createManagedBean<GridToggleButton>(
             new AgToggleButton({
                 label: this.chartTranslation.translate('switchCategorySeries'),
                 labelAlignment: 'left',

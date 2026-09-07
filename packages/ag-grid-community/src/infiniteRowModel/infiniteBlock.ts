@@ -1,14 +1,15 @@
+import { _exists, _missing } from 'ag-stack';
+
 import { BeanStub } from '../context/beanStub';
 import { RowNode } from '../entities/rowNode';
+import { _addGridCommonParams } from '../gridOptionsUtils';
 import type { IGetRowsParams } from '../interfaces/iDatasource';
 import type { LoadSuccessParams } from '../interfaces/iServerSideRowModel';
-import { _exists, _missing } from '../utils/generic';
-import { _warn } from '../validation/logging';
 import type { InfiniteCache, InfiniteCacheParams } from './infiniteCache';
 
 type RowNodeBlockState = 'needsLoading' | 'loading' | 'loaded' | 'failed';
 
-export type RowNodeBlockEvent = 'loadComplete';
+type RowNodeBlockEvent = 'loadComplete';
 
 export class InfiniteBlock extends BeanStub<RowNodeBlockEvent> {
     public state: RowNodeBlockState = 'needsLoading';
@@ -130,12 +131,13 @@ export class InfiniteBlock extends BeanStub<RowNodeBlockEvent> {
         } else {
             rowNode.setDataAndId(undefined, undefined);
         }
+        this.beans.selectionSvc?.updateRowSelectable(rowNode);
     }
 
     private loadFromDatasource(): void {
         const params = this.createLoadParams();
         if (_missing(this.params.datasource.getRows)) {
-            _warn(90);
+            this.warn(90);
             return;
         }
 
@@ -157,15 +159,14 @@ export class InfiniteBlock extends BeanStub<RowNodeBlockEvent> {
         // is executing before the sort is set up, so server is not getting the sort
         // model. need to change with regards order - so the server side request is
         // AFTER thus it gets the right sort model.
-        const params: IGetRowsParams = {
+        const params: IGetRowsParams = _addGridCommonParams(gos, {
             startRow,
             endRow,
             successCallback: this.pageLoaded.bind(this, version),
             failCallback: this.pageLoadFailed.bind(this, version),
             sortModel,
             filterModel,
-            context: gos.getGridCommonParams().context,
-        };
+        });
         return params;
     }
 
@@ -200,12 +201,12 @@ export class InfiniteBlock extends BeanStub<RowNodeBlockEvent> {
                 // destroy the old row and copy its position into new row. This prevents an additional
                 // set of events being fired as the row renderer tries to understand the changing id
                 rowNodes[index] = new RowNode(beans);
-                rowNodes[index].setRowIndex(rowNode.rowIndex!);
-                rowNodes[index].setRowTop(rowNode.rowTop!);
-                rowNodes[index].setRowHeight(rowNode.rowHeight!);
+                rowNodes[index].setRowIndex(rowNode.rowIndex);
+                rowNodes[index].setRowTop(rowNode.rowTop);
+                rowNodes[index].setRowHeight(rowNode.rowHeight);
 
                 // clean up the old row
-                rowNode.clearRowTopAndRowIndex();
+                rowNode._destroy(true);
             }
             this.setDataAndId(rowNodes[index], data, this.startRow + index);
         });
@@ -214,11 +215,13 @@ export class InfiniteBlock extends BeanStub<RowNodeBlockEvent> {
     }
 
     public override destroy(): void {
-        this.rowNodes.forEach((rowNode) => {
+        const rowNodes = this.rowNodes;
+        for (let i = 0, len = rowNodes.length; i < len; i++) {
             // this is needed, so row render knows to fade out the row, otherwise it
             // sees row top is present, and thinks the row should be shown.
-            rowNode.clearRowTopAndRowIndex();
-        });
+            rowNodes[i]._destroy(false);
+        }
+        rowNodes.length = 0;
         super.destroy();
     }
 }

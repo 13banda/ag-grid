@@ -8,6 +8,7 @@ import type {
 } from 'ag-grid-community';
 import {
     CellStyleModule,
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     HighlightChangesModule,
     ModuleRegistry,
@@ -15,21 +16,26 @@ import {
     RowSelectionModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextEditorModule,
     RowSelectionModule,
     CellStyleModule,
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     RowGroupingModule,
     HighlightChangesModule,
     TextFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const MIN_BOOK_COUNT = 10;

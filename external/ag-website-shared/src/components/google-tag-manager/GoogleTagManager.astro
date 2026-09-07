@@ -1,0 +1,24 @@
+---
+import { getIsStaging } from '@utils/env';
+import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
+
+interface Props {
+    googleTagManagerId: string;
+    googleTagManagerAuth: string;
+    googleTagManagerPreview: string;
+}
+
+const { googleTagManagerId, googleTagManagerAuth, googleTagManagerPreview } = Astro.props as Props;
+const extraParams = getIsStaging() ? `&gtm_auth=${googleTagManagerAuth}&gtm_preview=${googleTagManagerPreview}` : '';
+---
+
+{
+    /* Externalised (was an inline define:vars bootstrap) so the site CSP can drop
+    script-src 'unsafe-inline'; config passes via data- attributes. Must stay a
+    classic, non-deferred script so document.currentScript resolves in the loader. */
+}
+<script
+    is:inline
+    src={urlWithBaseUrl('/scripts/gtm-init.js')}
+    data-gtm-id={googleTagManagerId}
+    data-gtm-extra={extraParams}></script>

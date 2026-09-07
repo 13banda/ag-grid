@@ -1,15 +1,12 @@
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { createColumnRects } from '../miniChartHelpers';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
-export class MiniColumn extends MiniChartWithAxes {
-    static chartType: ChartType = 'groupedColumn';
-
+export class MiniColumnClass extends MiniChartWithAxes {
     private readonly columns: any[];
 
-    private columnData = [2, 3, 4];
+    private readonly columnData = [2, 3, 4];
 
     constructor(container: HTMLElement, agChartsExports: AgChartsExports, fills: string[], strokes: string[]) {
         super(container, agChartsExports, 'groupedColumnTooltip');
@@ -40,3 +37,8 @@ export class MiniColumn extends MiniChartWithAxes {
         });
     }
 }
+
+export const MiniColumn: MiniChartSelector = {
+    chartType: 'groupedColumn',
+    miniChart: MiniColumnClass,
+};

@@ -1,0 +1,123 @@
+name: Expand JIRA Links in PR descriptions
+
+on:
+  pull_request:
+    types: [ opened, assigned, synchronize, auto_merge_enabled, auto_merge_disabled, closed, dequeued, demilestoned, labeled, locked, milestoned, enqueued, reopened, converted_to_draft, review_request_removed, unassigned, ready_for_review, review_requested, unlabeled, unlocked ,edited ]
+
+permissions:
+  contents: read
+            write
+
+# Serialise runs per PR so overlapping edits can't race the duplicate-comment
+# check (check-then-act): later edits wait for the in-flight run to post its
+# sentinel comment, then see it and skip. Do not cancel in progress, or a
+# cancelled run might skip posting while its replacement also skips.
+concurrency:
+  group: gh-comment-hook-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  expand-jira-links:
+    if: github.repository == 'ag-grid/ag-grid'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        if: github.event.action == 'opened' || github.event.action == 'edited'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout:
+            'scripts/ci/_utils.mjs'
+
+      - name: Replace mention with jira link
+        id: notify-start
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_ID: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_ACTION: ${{ github.event.action }}
+          JIRA_API_AUTH: ${{ secrets.JIRA_API_AUTH }}
+          JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          result-encoding: string
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const old_body = process.env.PR_BODY || '';
+            const issue_number = process.env.PR_ID;
+            const pr_url = process.env.PR_URL;
+            const pr_title = process.env.PR_TITLE;
+            const eventAction = process.env.EVENT_ACTION;
+            const headRef = process.env.PR_HEAD_REF || '';
+
+            // Expand bare JIRA ticket mentions (#AG-XXXX) into markdown links
+            const body = old_body.replace(/#((AG|RTI)-\d{3,})/g, `[$1](https://ag-grid.atlassian.net/browse/$1)`);
+            if (body !== old_body) {
+                await github.rest.issues.update({ owner, repo, issue_number, body });
+            }
+
+            // Post a Jira comment when the PR is opened, or when a JIRA reference is added
+            // later via an edit (e.g. auto-generated revert PRs, where the ticket is added
+            // after opening). The per-PR sentinel dedup below prevents duplicate comments.
+            if (eventAction !== 'opened' && eventAction !== 'edited') return;
+            if (!process.env.JIRA_API_AUTH) return;
+
+            // AI Workflow Delivery PRs post their own JIRA comment once the run is
+            // actually ready for review, so skip the generic mention comment here.
+            if (headRef.startsWith('ghabot-ag-')) {
+                console.log(`Skipping JIRA mention comment for AI workflow PR (branch ${headRef}).`);
+                return;
+            }
+
+            const { addJiraComment, getJiraIssueComments } =
+                require('./scripts/ci/_utils.mjs');
+
+            // Collect all JIRA tickets referenced in the PR body (using the possibly-updated body)
+            const ticketRegex = /(AG|RTI)-\d{3,}/gi;
+            const tickets = [...new Set([...(body || old_body).matchAll(ticketRegex)].map(m => m[0].toUpperCase()))];
+            if (!tickets.length) return;
+
+            const prLink = `https://github.com/${owner}/${repo}/pull/${issue_number}`;
+            // Sentinel string embedded in the comment so we can detect it later and avoid duplicates
+            const sentinel = `gh-pr-mention:pr=${issue_number}`;
+
+            const paragraph = (content) => ({ type: 'paragraph', content: Array.isArray(content) ? content : [content] });
+            const txt = (text) => ({ text, type: 'text' });
+            const link = (text, url) => ({ type: 'text', text, marks: [{ type: 'link', attrs: { href: url, title: text } }] });
+
+            await Promise.all(tickets.map(async (ticket) => {
+                // Deduplicate: check whether we already posted a comment for this PR on this ticket
+                const existing = await getJiraIssueComments(ticket);
+                const alreadyPosted = existing?.some(c => {
+                    // Comments stored as ADF; fall back to plain text check on stringified body
+                    const raw = JSON.stringify(c.body || '');
+                    return raw.includes(sentinel);
+                });
+                if (alreadyPosted) {
+                    console.log(`Skipping ${ticket} — already has a comment for PR #${issue_number}`);
+                    return;
+                }
+
+                const adf = {
+                    type: 'doc',
+                    version: 1,
+                    content: [
+                        paragraph([
+                            txt(`This issue was mentioned in `),
+                            link(`PR #${issue_number}`, prLink),
+                            pr_title ? txt(` — ${pr_title}`) : txt(''),
+                            txt(' by '),
+                            link('CI workflow', process.env.JOB_URL || '#'),
+                            txt(`.\n${sentinel}`),
+                        ]),
+                    ],
+                };
+
+                await addJiraComment(ticket, adf);
+            }));

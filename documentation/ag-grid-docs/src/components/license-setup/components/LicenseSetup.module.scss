@@ -4,6 +4,15 @@
     margin: 0 0 6px;
 }
 
+.form h1,
+.form h2,
+.form h3,
+.form h4 {
+    display: flex;
+    align-items: center;
+    gap: $spacing-size-2;
+}
+
 .licenceWrapper {
     margin-top: $spacing-size-2;
     position: relative;
@@ -17,7 +26,7 @@
     word-break: break-all;
     font-family: var(--text-monospace-font-family);
     font-size: 15px;
-    line-height: var(--text-lh-base);
+    line-height: 21px;
 }
 
 .license {
@@ -52,7 +61,7 @@
     display: flex;
     flex-direction: column;
     gap: $spacing-size-4;
-    margin-top: $spacing-size-2;
+    margin-top: $spacing-size-4;
 }
 
 .expired {
@@ -133,7 +142,7 @@
 
         td {
             padding: 0;
-            line-height: var(--text-lh-tight);
+            line-height: var(--text-lh-ratio-tight);
             font-weight: var(--text-bold);
 
             &:not(:last-child) {
@@ -155,7 +164,7 @@
             text-align: right;
         }
 
-        [data-column='Github Repo'] {
+        [data-column='GitHub Repo'] {
             width: 280px;
         }
 

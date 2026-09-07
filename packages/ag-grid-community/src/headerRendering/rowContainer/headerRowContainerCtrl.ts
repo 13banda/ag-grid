@@ -1,30 +1,23 @@
 import type { ColumnMoveService } from '../../columnMove/columnMoveService';
 import { BeanStub } from '../../context/beanStub';
 import type { AgColumn } from '../../entities/agColumn';
-import { isColumn } from '../../entities/agColumn';
 import type { AgColumnGroup } from '../../entities/agColumnGroup';
-import type { FilterManager } from '../../filter/filterManager';
 import type { FocusService } from '../../focusService';
-import { CenterWidthFeature } from '../../gridBodyComp/centerWidthFeature';
 import type { ScrollPartner } from '../../gridBodyComp/gridBodyScrollFeature';
-import type { ColumnPinnedType } from '../../interfaces/iColumn';
 import type { HeaderPosition } from '../../interfaces/iHeaderPosition';
 import type { AbstractHeaderCellCtrl } from '../cells/abstractCell/abstractHeaderCellCtrl';
-import { getHeaderRowCount } from '../headerUtils';
 import type { HeaderRowType } from '../row/headerRowComp';
 import { HeaderRowCtrl } from '../row/headerRowCtrl';
 
-export interface IHeaderRowContainerComp {
-    setCenterWidth(width: string): void;
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface IHeaderRowsComp {
     setViewportScrollLeft(left: number): void;
-    setPinnedContainerWidth(width: string): void;
-    setDisplayed(displayed: boolean): void;
     setCtrls(ctrls: HeaderRowCtrl[]): void;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
-    public comp: IHeaderRowContainerComp;
-    public hidden: boolean = false;
+    public comp: IHeaderRowsComp;
     private includeFloatingFilter: boolean = false;
 
     private filtersRowCtrl: HeaderRowCtrl | undefined;
@@ -32,30 +25,21 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
     private groupsRowCtrls: HeaderRowCtrl[] = [];
     public eViewport: HTMLElement;
 
-    constructor(public readonly pinned: ColumnPinnedType) {
-        super();
-    }
-
-    public setComp(comp: IHeaderRowContainerComp, eGui: HTMLElement): void {
+    public setComp(comp: IHeaderRowsComp, eGui: HTMLElement, eScrollViewport: HTMLElement = eGui): void {
         this.comp = comp;
-        this.eViewport = eGui;
+        this.eViewport = eScrollViewport;
 
-        const { pinnedCols, ctrlsSvc, colModel, colMoves, filterManager } = this.beans;
+        const { ctrlsSvc, colModel, colMoves } = this.beans;
 
-        this.setupCenterWidth();
-        pinnedCols?.setupHeaderPinnedWidth(this);
+        this.setupDragAndDrop(colMoves, eGui);
 
-        this.setupDragAndDrop(colMoves, this.eViewport);
-
-        const onDisplayedColsChanged = this.onDisplayedColumnsChanged.bind(this, filterManager);
+        const onDisplayedColsChanged = this.refresh.bind(this, true);
         this.addManagedEventListeners({
-            gridColumnsChanged: this.onGridColumnsChanged.bind(this),
             displayedColumnsChanged: onDisplayedColsChanged,
             advancedFilterEnabledChanged: onDisplayedColsChanged,
         });
 
-        const headerType = `${typeof this.pinned === 'string' ? this.pinned : 'center'}Header` as const;
-        ctrlsSvc.register(headerType, this);
+        ctrlsSvc.register('headerRowContainerCtrl', this);
 
         if (colModel.ready) {
             this.refresh();
@@ -77,40 +61,50 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
     }
 
     public refresh(keepColumns = false): void {
-        const { focusSvc, colModel, filterManager } = this.beans;
+        const { focusSvc, filterManager, visibleCols } = this.beans;
         let sequence = 0;
         const focusedHeaderPosition = focusSvc.getFocusHeaderToUseAfterRefresh();
 
         const refreshColumnGroups = () => {
-            const groupRowCount = getHeaderRowCount(colModel) - 1;
+            const groupRowCount = visibleCols.headerGroupRowCount;
 
-            this.groupsRowCtrls = this.destroyBeans(this.groupsRowCtrls);
+            sequence = groupRowCount;
 
-            for (let i = 0; i < groupRowCount; i++) {
-                const ctrl = this.createBean(new HeaderRowCtrl(sequence++, this.pinned, 'group'));
+            if (!keepColumns) {
+                this.groupsRowCtrls = this.destroyBeans(this.groupsRowCtrls);
+            }
+
+            const currentGroupCount = this.groupsRowCtrls.length;
+            if (currentGroupCount === groupRowCount) {
+                return;
+            }
+
+            if (currentGroupCount > groupRowCount) {
+                for (let i = groupRowCount; i < currentGroupCount; i++) {
+                    this.destroyBean(this.groupsRowCtrls[i]);
+                }
+                this.groupsRowCtrls.length = groupRowCount;
+                return;
+            }
+
+            for (let i = currentGroupCount; i < groupRowCount; i++) {
+                const ctrl = this.createBean(new HeaderRowCtrl(i, 'group'));
                 this.groupsRowCtrls.push(ctrl);
             }
         };
 
         const refreshColumns = () => {
             const rowIndex = sequence++;
-
-            const needNewInstance =
-                !this.hidden &&
-                (this.columnsRowCtrl == null || !keepColumns || this.columnsRowCtrl.rowIndex !== rowIndex);
-            const shouldDestroyInstance = needNewInstance || this.hidden;
-
-            if (shouldDestroyInstance) {
+            if (this.columnsRowCtrl == null || !keepColumns) {
                 this.columnsRowCtrl = this.destroyBean(this.columnsRowCtrl);
-            }
-
-            if (needNewInstance) {
-                this.columnsRowCtrl = this.createBean(new HeaderRowCtrl(rowIndex, this.pinned, 'column'));
+                this.columnsRowCtrl = this.createBean(new HeaderRowCtrl(rowIndex, 'column'));
+            } else if (this.columnsRowCtrl.rowIndex !== rowIndex) {
+                this.columnsRowCtrl.setRowIndex(rowIndex);
             }
         };
 
         const refreshFilters = () => {
-            this.includeFloatingFilter = !!filterManager?.hasFloatingFilters() && !this.hidden;
+            this.includeFloatingFilter = !!filterManager?.hasFloatingFilters();
 
             const destroyPreviousComp = () => {
                 this.filtersRowCtrl = this.destroyBean(this.filtersRowCtrl);
@@ -121,19 +115,23 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
                 return;
             }
 
+            if (!keepColumns) {
+                destroyPreviousComp();
+            }
+
             const rowIndex = sequence++;
 
             if (this.filtersRowCtrl) {
                 const rowIndexMismatch = this.filtersRowCtrl.rowIndex !== rowIndex;
-                if (!keepColumns || rowIndexMismatch) {
-                    destroyPreviousComp();
+                if (rowIndexMismatch) {
+                    this.filtersRowCtrl.setRowIndex(rowIndex);
                 }
-            }
-
-            if (!this.filtersRowCtrl) {
-                this.filtersRowCtrl = this.createBean(new HeaderRowCtrl(rowIndex, this.pinned, 'filter'));
+            } else {
+                this.filtersRowCtrl = this.createBean(new HeaderRowCtrl(rowIndex, 'filter'));
             }
         };
+
+        const oldCtrls = this.getAllCtrls();
 
         refreshColumnGroups();
         refreshColumns();
@@ -143,11 +141,20 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
         this.comp.setCtrls(allCtrls);
 
         this.restoreFocusOnHeader(focusSvc, focusedHeaderPosition);
+
+        if (oldCtrls.length !== allCtrls.length) {
+            this.beans.eventSvc.dispatchEvent({
+                type: 'headerRowsChanged',
+            });
+        }
     }
 
     public getHeaderCtrlForColumn(column: AgColumn | AgColumnGroup): AbstractHeaderCellCtrl | undefined {
-        if (isColumn(column)) {
-            return this.columnsRowCtrl?.getHeaderCellCtrl(column);
+        const findCtrl = (ctrl: HeaderRowCtrl | undefined) =>
+            ctrl?.getHeaderCellCtrls().find((ctrl) => ctrl.column === column);
+
+        if (column.isColumn) {
+            return findCtrl(this.columnsRowCtrl);
         }
 
         if (this.groupsRowCtrls.length === 0) {
@@ -155,7 +162,7 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
         }
 
         for (let i = 0; i < this.groupsRowCtrls.length; i++) {
-            const ctrl = this.groupsRowCtrls[i].getHeaderCellCtrl(column);
+            const ctrl = findCtrl(this.groupsRowCtrls[i]);
 
             if (ctrl) {
                 return ctrl;
@@ -212,7 +219,7 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
     }
 
     private setupDragAndDrop(colMoves: ColumnMoveService | undefined, dropContainer: HTMLElement): void {
-        const bodyDropTarget = colMoves?.createBodyDropTarget(this.pinned, dropContainer);
+        const bodyDropTarget = colMoves?.createBodyDropTarget(dropContainer);
         if (bodyDropTarget) {
             this.createManagedBean(bodyDropTarget);
         }
@@ -223,33 +230,6 @@ export class HeaderRowContainerCtrl extends BeanStub implements ScrollPartner {
             return;
         }
 
-        const { column } = position;
-
-        if ((column as AgColumn | AgColumnGroup).getPinned() != this.pinned) {
-            return;
-        }
-
-        focusSvc.focusHeaderPosition({ headerPosition: position });
-    }
-
-    // grid cols have changed - this also means the number of rows in the header can have
-    // changed. so we remove all the old rows and insert new ones for a complete refresh
-    private onGridColumnsChanged() {
-        this.refresh(true);
-    }
-
-    private onDisplayedColumnsChanged(filterManager: FilterManager): void {
-        const includeFloatingFilter = !!filterManager?.hasFloatingFilters() && !this.hidden;
-        if (this.includeFloatingFilter !== includeFloatingFilter) {
-            this.refresh(true);
-        }
-    }
-
-    private setupCenterWidth(): void {
-        if (this.pinned != null) {
-            return;
-        }
-
-        this.createManagedBean(new CenterWidthFeature((width) => this.comp.setCenterWidth(`${width}px`), true));
+        focusSvc.focusHeaderPosition({ headerPosition: position, scroll: false });
     }
 }

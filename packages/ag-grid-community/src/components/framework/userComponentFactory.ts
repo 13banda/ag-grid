@@ -1,15 +1,15 @@
+import type { IComponent } from 'ag-stack';
+import { AgPromise } from 'ag-stack';
+
 import type { NamedBean } from '../../context/bean';
 import { BeanStub } from '../../context/beanStub';
-import type { BeanCollection } from '../../context/context';
+import type { BeanCollection, ProcessParamsFunc } from '../../context/context';
 import type { CellEditorSelectorFunc, CellEditorSelectorResult, CellRendererSelectorFunc } from '../../entities/colDef';
 import type { GridOptions } from '../../entities/gridOptions';
 import type { AgGridCommon } from '../../interfaces/iCommon';
-import type { IComponent } from '../../interfaces/iComponent';
 import type { IFrameworkOverrides } from '../../interfaces/iFrameworkOverrides';
 import type { ComponentType, UserCompDetails } from '../../interfaces/iUserCompDetails';
-import { _mergeDeep } from '../../utils/object';
-import { AgPromise } from '../../utils/promise';
-import { _error } from '../../validation/logging';
+import { _mergeDeep } from '../../utils/mergeDeep';
 import type { AgComponentUtils } from './agComponentUtils';
 import type { FrameworkComponentWrapper } from './frameworkComponentWrapper';
 import type { Registry } from './registry';
@@ -18,7 +18,7 @@ function doesImplementIComponent(candidate: any): boolean {
     if (!candidate) {
         return false;
     }
-    return (candidate as any).prototype && 'getGui' in (candidate as any).prototype;
+    return candidate.prototype && 'getGui' in candidate.prototype;
 }
 
 export function _getUserCompKeys<TDefinition>(
@@ -59,7 +59,7 @@ export function _getUserCompKeys<TDefinition>(
 
         const assignComp = (providedJsComp: any) => {
             if (typeof providedJsComp === 'string') {
-                compName = providedJsComp as string;
+                compName = providedJsComp;
             } else if (providedJsComp != null && providedJsComp !== true) {
                 const isFwkComp = frameworkOverrides.isFrameworkComponent(providedJsComp);
                 if (isFwkComp) {
@@ -84,6 +84,7 @@ export function _getUserCompKeys<TDefinition>(
     return { compName, jsComp, fwComp, paramsFromSelector, popupFromSelector, popupPositionFromSelector };
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class UserComponentFactory extends BeanStub implements NamedBean {
     beanName = 'userCompFactory' as const;
 
@@ -96,13 +97,14 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
         this.agCompUtils = beans.agCompUtils;
         this.registry = beans.registry;
         this.frameworkCompWrapper = beans.frameworkCompWrapper;
+        this.frameworkCompWrapper?.setGridId?.(beans.context.getId());
         this.gridOptions = beans.gridOptions;
     }
 
     public getCompDetailsFromGridOptions(
         type: ComponentType,
         defaultName: string | undefined,
-        params: any,
+        params: AgGridCommon<any, any>,
         mandatory = false
     ): UserCompDetails | undefined {
         return this.getCompDetails(this.gridOptions, type, defaultName, params, mandatory);
@@ -112,16 +114,17 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
         defObject: TDefinition,
         type: ComponentType,
         defaultName: string | undefined,
-        params: any,
+        params: AgGridCommon<any, any>,
         mandatory = false
     ): UserCompDetails<TComp> | undefined {
-        const { name, cellRenderer } = type;
+        const { name, supportsJsFunction } = type;
 
         let { compName, jsComp, fwComp, paramsFromSelector, popupFromSelector, popupPositionFromSelector } =
             _getUserCompKeys(this.beans.frameworkOverrides, defObject, type, params);
 
         // for grid-provided comps only
         let defaultCompParams: any;
+        let defaultCompProcessParams: ProcessParamsFunc | undefined;
 
         const lookupFromRegistry = (key: string) => {
             const item = this.registry.getUserComponent(name, key);
@@ -129,6 +132,7 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
                 jsComp = !item.componentFromFramework ? item.component : undefined;
                 fwComp = item.componentFromFramework ? item.component : undefined;
                 defaultCompParams = item.params;
+                defaultCompProcessParams = item.processParams;
             }
         };
 
@@ -143,7 +147,7 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
         }
 
         // if we have a comp option, and it's a function, replace it with an object equivalent adaptor
-        if (jsComp && cellRenderer && !doesImplementIComponent(jsComp)) {
+        if (jsComp && supportsJsFunction && !doesImplementIComponent(jsComp)) {
             jsComp = this.agCompUtils?.adaptFunction(type, jsComp);
         }
 
@@ -155,31 +159,36 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
                     // If we have validation and this is a grid comp without a default (e.g. filters tool panel),
                     // we will have already warned about this
                     if (!validation?.isProvidedUserComp(compName)) {
-                        _error(50, { compName });
+                        this.error(50, { compName });
+                    }
+                } else if (defaultName) {
+                    // validation will have already warned about this
+                    if (!validation) {
+                        this.error(260, {
+                            ...this.gos.getModuleErrorParams(),
+                            propName: name,
+                            compName: defaultName,
+                        });
                     }
                 } else {
-                    if (defaultName) {
-                        // validation will have already warned about this
-                        if (!validation) {
-                            _error(260, {
-                                ...this.gos.getModuleErrorParams(),
-                                propName: name,
-                                compName: defaultName,
-                            });
-                        }
-                    } else {
-                        _error(216, { name });
-                    }
+                    this.error(216, { name });
                 }
             } else if (defaultName && !validation) {
                 // Grid should be providing this component.
                 // Validation service will have already warned about this with the correct module name if it was present.
-                _error(146, { comp: defaultName });
+                this.error(146, { comp: defaultName });
             }
             return;
         }
 
-        const paramsMerged = this.mergeParams(defObject, type, params, paramsFromSelector, defaultCompParams);
+        const paramsMerged = this.mergeParams(
+            defObject,
+            type,
+            params,
+            paramsFromSelector,
+            defaultCompParams,
+            defaultCompProcessParams
+        );
 
         const componentFromFramework = jsComp == null;
         const componentClass = jsComp ?? fwComp;
@@ -234,22 +243,16 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
     public mergeParams<TDefinition>(
         defObject: TDefinition,
         type: ComponentType,
-        paramsFromGrid: any,
+        paramsFromGrid: AgGridCommon<any, any>,
         paramsFromSelector: any = null,
-        defaultCompParams?: any
+        defaultCompParams?: any,
+        defaultCompProcessParams?: ProcessParamsFunc
     ): any {
-        const params: AgGridCommon<any, any> = this.gos.getGridCommonParams();
+        const params = { ...paramsFromGrid, ...defaultCompParams };
 
-        _mergeDeep(params, paramsFromGrid);
-
-        if (defaultCompParams) {
-            _mergeDeep(params, defaultCompParams);
-        }
-
-        // pull user params from either the old prop name and new prop name
-        // eg either cellRendererParams and cellCompParams
+        // pull user params from the defObject
         const defObjectAny = defObject as any;
-        const userParams = defObjectAny && defObjectAny[type.name + 'Params'];
+        const userParams = defObjectAny?.[type.name + 'Params'];
 
         if (typeof userParams === 'function') {
             const userParamsFromFunc = userParams(paramsFromGrid);
@@ -260,6 +263,6 @@ export class UserComponentFactory extends BeanStub implements NamedBean {
 
         _mergeDeep(params, paramsFromSelector);
 
-        return params;
+        return defaultCompProcessParams ? defaultCompProcessParams(params, this.beans) : params;
     }
 }

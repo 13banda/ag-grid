@@ -3,12 +3,17 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, TreeDataModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowSelectionModule,
@@ -17,7 +22,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     TreeDataModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -30,6 +34,10 @@ const gridOptions: GridOptions = {
             field: 'size',
             aggFunc: 'sum',
             valueFormatter: (params) => {
+                if (params.value == null) {
+                    return ''; // params.value can be null/undefined here (e.g. no size for this row)
+                }
+
                 const sizeInKb = params.value / 1024;
 
                 if (sizeInKb > 1024) {

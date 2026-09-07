@@ -1,7 +1,10 @@
+import { _exists, _getActiveDomElement, _getDocument, _last, _removeFromArray } from 'ag-stack';
+
 import type {
     AgColumn,
     CellPosition,
     CellRange,
+    ChangedPath,
     CsvExportParams,
     GridCtrl,
     GridOptions,
@@ -19,32 +22,19 @@ import type {
 } from 'ag-grid-community';
 import {
     BeanStub,
-    ChangedPath,
     _createCellId,
-    _exists,
-    _getActiveDomElement,
-    _getDocument,
+    _forEachChangedGroupDepthFirst,
+    _getRowBelow,
     _getRowNode,
     _isClientSideRowModel,
     _isSameRow,
-    _last,
-    _removeFromArray,
-    _warn,
+    isColumnSelectionCol,
+    isSpecialCol,
 } from 'ag-grid-community';
 
-interface RowCallback {
-    (
-        gridRow: RowPosition,
-        rowNode: RowNode | undefined,
-        columns: AgColumn[],
-        rangeIndex: number,
-        isLastRow?: boolean
-    ): void;
-}
+type RowCallback = (gridRow: RowPosition, rowNode: RowNode, range: CellRange, rangeIndex: number) => void;
 
-interface ColumnCallback {
-    (columns: AgColumn[]): void;
-}
+type RangeCallback = (callRange: CellRange) => void;
 
 type CellsToFlashType = { [key: string]: boolean };
 type DataForCellRangesType = { data: string; cellsToFlash: CellsToFlashType };
@@ -60,9 +50,9 @@ enum CellClearType {
     FocusedCell,
 }
 
-// This will parse a delimited string into an array of arrays.
+/** @knipIgnore Used in tests */
 export function stringToArray(strData: string, delimiter = ','): string[][] {
-    const data: any[][] = [];
+    const data: string[][] = [];
     const isNewline = (char: string) => char === '\r' || char === '\n';
 
     let insideQuotedField = false;
@@ -171,12 +161,12 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         // Some browsers (Firefox) do not allow Web Applications to read from
         // the clipboard so verify if not only the ClipboardAPI is available,
         // but also if the `readText` method is public.
-        if (allowNavigator && !this.navigatorApiFailed && navigator.clipboard && navigator.clipboard.readText) {
+        if (allowNavigator && !this.navigatorApiFailed && navigator.clipboard?.readText) {
             navigator.clipboard
                 .readText()
                 .then(this.processClipboardData.bind(this))
                 .catch((e) => {
-                    _warn(40, { e, method: 'readText' });
+                    this.warn(40, { e, method: 'readText' });
                     this.navigatorApiFailed = true;
                     this.pasteFromClipboardLegacy();
                 });
@@ -189,7 +179,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         // Method 2 - if modern API fails, the old school hack
         let defaultPrevented = false;
         const handlePasteEvent = (e: ClipboardEvent) => {
-            const currentPastOperationTime = new Date().getTime();
+            const currentPastOperationTime = Date.now();
             if (currentPastOperationTime - this.lastPasteOperationTime < 50) {
                 defaultPrevented = true;
                 e.preventDefault();
@@ -254,10 +244,10 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             this.removeLastLineIfBlank(parsedData);
         }
 
-        const { rangeSvc } = this.beans;
+        const { rangeSvc, editSvc } = this.beans;
 
         const pasteOperation = (
-            cellsToFlash: any,
+            cellsToFlash: Record<string, boolean>,
             updatedRowNodes: RowNode[],
             focusedCell: CellPosition,
             changedPath: ChangedPath | undefined
@@ -266,10 +256,12 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             const pasteIntoRange = rangeActive && !this.hasOnlyOneValueToPaste(parsedData!);
 
             if (pasteIntoRange) {
-                this.pasteIntoActiveRange(rangeSvc!, parsedData!, cellsToFlash, updatedRowNodes, changedPath);
+                this.pasteIntoActiveRange(parsedData!, cellsToFlash, updatedRowNodes, changedPath);
             } else {
                 this.pasteStartingFromFocusedCell(parsedData!, cellsToFlash, updatedRowNodes, focusedCell, changedPath);
             }
+
+            editSvc?.stopEditing(undefined, { source: SOURCE_PASTE });
         };
 
         this.doPasteOperation(pasteOperation);
@@ -278,7 +270,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     // common code to paste operations, e.g. paste to cell, paste to range, and copy range down
     private doPasteOperation(
         pasteOperationFunc: (
-            cellsToFlash: any,
+            cellsToFlash: Record<string, boolean>,
             updatedRowNodes: RowNode[],
             focusedCell: CellPosition | null,
             changedPath: ChangedPath | null | undefined
@@ -286,7 +278,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     ): void {
         const source = 'clipboard';
 
-        const { eventSvc, focusSvc, rowRenderer, gos } = this.beans;
+        const { eventSvc, focusSvc, rowRenderer, gos, editSvc } = this.beans;
 
         eventSvc.dispatchEvent({
             type: 'pasteStart',
@@ -295,20 +287,25 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
 
         const { clientSideRowModel } = this;
         const rootNode = clientSideRowModel?.rootNode;
-        const changedPath = rootNode && new ChangedPath(gos.get('aggregateOnlyChangedColumns'), rootNode);
+        const changedPath = rootNode && this.beans.changedPathFactory?.newPath(gos.get('aggregateOnlyChangedColumns'));
 
-        const cellsToFlash = {} as any;
+        const cellsToFlash: Record<string, boolean> = {};
         const updatedRowNodes: RowNode[] = [];
         const focusedCell = focusSvc.getFocusedCell();
 
-        pasteOperationFunc(cellsToFlash, updatedRowNodes, focusedCell, changedPath);
+        editSvc?.beginBulkWrite();
+        try {
+            pasteOperationFunc(cellsToFlash, updatedRowNodes, focusedCell, changedPath);
+        } finally {
+            editSvc?.endBulkWrite();
+        }
 
-        const nodesToRefresh: RowNode[] = [...updatedRowNodes];
+        const nodesToRefresh: RowNode[] = updatedRowNodes.slice();
         if (changedPath) {
             clientSideRowModel.doAggregate(changedPath);
 
             // add all nodes impacted by aggregation, as they need refreshed also.
-            changedPath.forEachChangedNodeDepthFirst((rowNode) => {
+            _forEachChangedGroupDepthFirst(rootNode, clientSideRowModel.hierarchical, changedPath, (rowNode) => {
                 nodesToRefresh.push(rowNode);
             });
         }
@@ -321,7 +318,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         this.fireRowChanged(updatedRowNodes);
 
         // if using the clipboard hack with a temp element, then the focus has been lost,
-        // so need to put it back. otherwise paste operation loosed focus on cell and keyboard
+        // so need to put it back. otherwise paste operation looses focus on cell and keyboard
         // navigation stops.
         this.refocusLastFocusedCell();
         eventSvc.dispatchEvent({
@@ -330,29 +327,65 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         });
     }
 
+    private getPreProcessRangeCallback(clipboardData: string[][]): RangeCallback {
+        return (cellRange: CellRange) => {
+            const { rangeSvc } = this.beans;
+
+            if (!rangeSvc) {
+                return;
+            }
+
+            const { rowDiff, colDiff } = this.getAdjustedRangeDimensionForPaste(cellRange, clipboardData);
+
+            if (rowDiff !== 0) {
+                rangeSvc.extendRangeRowCountBy(cellRange, rowDiff);
+            }
+
+            if (colDiff !== 0) {
+                rangeSvc.extendRangeColumnCountBy(cellRange, colDiff);
+            }
+        };
+    }
+
+    private getAdjustedRangeDimensionForPaste(
+        cellRange: CellRange,
+        clipboardData: string[][]
+    ): { colDiff: number; rowDiff: number } {
+        const rangeSvc = this.beans.rangeSvc!;
+
+        const clipboardRowCount = clipboardData.length;
+        const rangeRowCount = rangeSvc.getRangeRowCount(cellRange);
+        const isRowMultiple = rangeRowCount >= clipboardRowCount && rangeRowCount % clipboardRowCount === 0;
+
+        const clipboardColCount = clipboardData[0].length;
+        const rangeColCount = cellRange.columns.length;
+        const isColMultiple = rangeColCount >= clipboardColCount && rangeColCount % clipboardColCount === 0;
+
+        return {
+            rowDiff: isRowMultiple ? 0 : clipboardRowCount - rangeRowCount,
+            colDiff: isColMultiple ? 0 : clipboardColCount - rangeColCount,
+        };
+    }
+
     private pasteIntoActiveRange(
-        rangeSvc: IRangeService,
         clipboardData: string[][],
-        cellsToFlash: any,
+        cellsToFlash: Record<string, boolean>,
         updatedRowNodes: RowNode[],
         changedPath: ChangedPath | undefined
     ) {
-        // true if clipboard data can be evenly pasted into range, otherwise false
-        const abortRepeatingPasteIntoRows = this.getRangeSize(rangeSvc) % clipboardData.length != 0;
-
         let indexOffset = 0;
         let dataRowIndex = 0;
 
         const rowCallback: RowCallback = (
             currentRow: RowPosition,
             rowNode: RowNode,
-            columns: AgColumn[],
-            index: number
+            range: CellRange,
+            rangeIndex: number
         ) => {
-            const atEndOfClipboardData = index - indexOffset >= clipboardData.length;
+            const atEndOfClipboardData = rangeIndex - indexOffset >= clipboardData.length;
 
             if (atEndOfClipboardData) {
-                if (abortRepeatingPasteIntoRows) {
+                if (rangeIndex % clipboardData.length !== 0) {
                     return;
                 }
 
@@ -361,53 +394,66 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                 dataRowIndex = 0;
             }
 
-            const currentRowData = clipboardData[index - indexOffset];
+            const currentRowData = clipboardData[rangeIndex - indexOffset];
 
             // otherwise we are not the first row, so copy
             updatedRowNodes.push(rowNode);
 
             const processCellFromClipboardFunc = this.gos.getCallback('processCellFromClipboard');
+            const columns = range.columns as AgColumn[];
 
-            columns.forEach((column, idx) => {
+            // remove the selection column (paste into selection is not supported)
+            // this columns should be removed from the paste operation but not
+            // from the range itself.
+            const selectionColIdx = columns.findIndex(isColumnSelectionCol);
+            if (selectionColIdx !== -1) {
+                columns.splice(selectionColIdx, 1);
+            }
+
+            for (let idx = 0; idx < columns.length; idx++) {
+                const column = columns[idx];
                 if (!column.isCellEditable(rowNode) || column.isSuppressPaste(rowNode)) {
-                    return;
+                    continue;
                 }
 
                 // repeat data for columns we don't have data for - happens when to range is bigger than copied data range
+                let calculatedIdx = idx;
                 if (idx >= currentRowData.length) {
-                    idx = idx % currentRowData.length;
+                    calculatedIdx = idx % currentRowData.length;
                 }
 
                 const newValue = this.processCell(
                     rowNode,
                     column,
-                    currentRowData[idx],
+                    currentRowData[calculatedIdx],
                     EXPORT_TYPE_DRAG_COPY,
                     processCellFromClipboardFunc,
                     true
                 );
 
                 rowNode.setDataValue(column, newValue, SOURCE_PASTE);
-
-                if (changedPath) {
-                    changedPath.addParentNode(rowNode.parent, [column]);
-                }
+                changedPath?.addCell(rowNode.parent, column.getId());
 
                 const { rowIndex, rowPinned } = currentRow;
                 const cellId = _createCellId({ rowIndex, column, rowPinned });
                 cellsToFlash[cellId] = true;
-            });
+            }
 
             dataRowIndex++;
         };
 
-        this.iterateActiveRanges(false, rowCallback);
+        this.iterateActiveRanges(rowCallback, false, this.getPreProcessRangeCallback(clipboardData));
     }
 
     private getDisplayedColumnsStartingAt(column: AgColumn): AgColumn[] {
         let currentColumn: AgColumn | null = column;
         const columns: AgColumn[] = [];
-        const visibleCols = this.beans.visibleCols;
+        const { visibleCols } = this.beans;
+
+        // first, skip row numbers column and selection column
+        while (currentColumn && isSpecialCol(currentColumn)) {
+            currentColumn = visibleCols.getColAfter(currentColumn);
+        }
 
         while (currentColumn != null) {
             columns.push(currentColumn);
@@ -419,7 +465,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
 
     private pasteStartingFromFocusedCell(
         parsedData: string[][],
-        cellsToFlash: any,
+        cellsToFlash: Record<string, boolean>,
         updatedRowNodes: RowNode[],
         focusedCell: CellPosition,
         changedPath: ChangedPath | undefined
@@ -455,19 +501,19 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     private pasteSingleValueIntoRange(
         parsedData: string[][],
         updatedRowNodes: RowNode[],
-        cellsToFlash: any,
+        cellsToFlash: Record<string, boolean>,
         changedPath: ChangedPath | undefined
     ) {
         const value = parsedData[0][0];
 
-        const rowCallback: RowCallback = (currentRow: RowPosition, rowNode: RowNode, columns: AgColumn[]) => {
+        const rowCallback: RowCallback = (currentRow: RowPosition, rowNode: RowNode, range: CellRange) => {
             updatedRowNodes.push(rowNode);
-            columns.forEach((column) =>
+            range.columns.forEach((column: AgColumn) =>
                 this.updateCellValue(rowNode, column, value, cellsToFlash, EXPORT_TYPE_CLIPBOARD, changedPath)
             );
         };
 
-        this.iterateActiveRanges(false, rowCallback);
+        this.iterateActiveRanges(rowCallback);
     }
 
     private hasOnlyOneValueToPaste(parsedData: string[][]) {
@@ -475,7 +521,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     }
 
     public copyRangeDown(): void {
-        const { rangeSvc, gos, valueSvc } = this.beans;
+        const { rangeSvc, gos, formula, valueSvc } = this.beans;
         if (!rangeSvc || rangeSvc.isEmpty()) {
             return;
         }
@@ -483,7 +529,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const firstRowValues: any[] = [];
 
         const pasteOperation = (
-            cellsToFlash: any,
+            cellsToFlash: Record<string, boolean>,
             updatedRowNodes: RowNode[],
             focusedCell: CellPosition,
             changedPath: ChangedPath | undefined
@@ -491,16 +537,17 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             const processCellForClipboardFunc = gos.getCallback('processCellForClipboard');
             const processCellFromClipboardFunc = gos.getCallback('processCellFromClipboard');
 
-            const rowCallback: RowCallback = (currentRow: RowPosition, rowNode: RowNode, columns: AgColumn[]) => {
+            const rowCallback: RowCallback = (currentRow: RowPosition, rowNode: RowNode, range: CellRange) => {
+                const { columns } = range;
                 // take reference of first row, this is the one we will be using to copy from
                 if (!firstRowValues.length) {
                     // two reasons for looping through columns
-                    columns.forEach((column) => {
+                    columns.forEach((column: AgColumn) => {
                         // get the initial values to copy down
                         const value = this.processCell(
                             rowNode,
                             column,
-                            valueSvc.getValue(column, rowNode),
+                            valueSvc.getValue(column, rowNode, 'batch'),
                             EXPORT_TYPE_DRAG_COPY,
                             processCellForClipboardFunc,
                             false,
@@ -512,9 +559,18 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                 } else {
                     // otherwise we are not the first row, so copy
                     updatedRowNodes.push(rowNode);
-                    columns.forEach((column, index) => {
+                    columns.forEach((column: AgColumn, index) => {
                         if (!column.isCellEditable(rowNode) || column.isSuppressPaste(rowNode)) {
                             return;
+                        }
+
+                        const isFormula = column.allowFormula && formula?.isFormula(firstRowValues[index]);
+
+                        if (isFormula) {
+                            firstRowValues[index] = formula?.updateFormulaByOffset({
+                                value: firstRowValues[index],
+                                rowDelta: 1,
+                            });
                         }
 
                         const firstRowValue = this.processCell(
@@ -527,10 +583,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                         );
 
                         rowNode.setDataValue(column, firstRowValue, SOURCE_PASTE);
-
-                        if (changedPath) {
-                            changedPath.addParentNode(rowNode.parent, [column]);
-                        }
+                        changedPath?.addCell(rowNode.parent, column.getId());
 
                         const { rowIndex, rowPinned } = currentRow;
                         const cellId = _createCellId({ rowIndex, column, rowPinned });
@@ -539,7 +592,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                 }
             };
 
-            this.iterateActiveRanges(true, rowCallback);
+            this.iterateActiveRanges(rowCallback, true);
         };
 
         this.doPasteOperation(pasteOperation);
@@ -548,7 +601,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     private removeLastLineIfBlank(parsedData: string[][]): void {
         // remove last row if empty, excel puts empty last row in
         const lastLine = _last(parsedData);
-        const lastLineIsBlank = lastLine && lastLine.length === 1 && lastLine[0] === '';
+        const lastLineIsBlank = lastLine?.length === 1 && lastLine[0] === '';
 
         if (lastLineIsBlank) {
             // do not remove the last empty line when that is the only line pasted
@@ -564,7 +617,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             return;
         }
 
-        rowNodes.forEach((rowNode) => {
+        for (const rowNode of rowNodes) {
             this.eventSvc.dispatchEvent({
                 type: 'rowValueChanged',
                 node: rowNode,
@@ -572,7 +625,24 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                 rowIndex: rowNode.rowIndex!,
                 rowPinned: rowNode.rowPinned,
             });
-        });
+        }
+    }
+
+    /** Returns true when a row should be skipped during paste. */
+    private shouldSkipPasteRow(row: RowNode, columns: AgColumn[], skipGroupRows: boolean): boolean {
+        if (row.detail || row.footer) {
+            return true;
+        }
+        if (skipGroupRows && row.group) {
+            // Allow the group row through if any paste column is editable for it
+            for (const col of columns) {
+                if (col.isCellEditable(row)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     private pasteMultipleValues(
@@ -580,52 +650,38 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         currentRow: RowPosition | null,
         updatedRowNodes: RowNode[],
         columnsToPasteInto: AgColumn[],
-        cellsToFlash: any,
+        cellsToFlash: Record<string, boolean>,
         type: string,
         changedPath: ChangedPath | undefined
     ): void {
         let rowPointer = currentRow;
 
         const beans = this.beans;
-        const { gos, cellNavigation } = beans;
+        const { gos } = beans;
 
-        // if doing CSRM and NOT tree data, then it means groups are aggregates, which are read only,
-        // so we should skip them when doing paste operations.
+        // If doing CSRM and NOT tree data, group rows are aggregates and read-only by default.
         const skipGroupRows = this.clientSideRowModel != null && !gos.get('enableGroupEdit') && !gos.get('treeData');
 
         const getNextGoodRowNode = () => {
-            while (true) {
-                if (!rowPointer) {
-                    return null;
-                }
+            while (rowPointer) {
                 const res = _getRowNode(beans, rowPointer);
-                // move to next row down for next set of values
-                rowPointer = cellNavigation!.getRowBelow({
+                rowPointer = _getRowBelow(beans, {
                     rowPinned: rowPointer.rowPinned,
                     rowIndex: rowPointer.rowIndex,
                 });
-
-                // if no more rows, return null
-                if (res == null) {
-                    return null;
-                }
-
-                // skip details rows and footer rows, never paste into them as they don't hold data
-                const skipRow = res.detail || res.footer || (skipGroupRows && res.group);
-
-                // skipping row means we go into the next iteration of the while loop
-                if (!skipRow) {
+                if (res != null && !this.shouldSkipPasteRow(res, columnsToPasteInto, skipGroupRows)) {
                     return res;
                 }
             }
+            return null;
         };
 
-        clipboardGridData.forEach((clipboardRowData) => {
+        for (const clipboardRowData of clipboardGridData) {
             const rowNode = getNextGoodRowNode();
 
             // if we have come to end of rows in grid, then skip
             if (!rowNode) {
-                return;
+                continue;
             }
 
             clipboardRowData.forEach((value, index) =>
@@ -633,18 +689,18 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             );
 
             updatedRowNodes.push(rowNode);
-        });
+        }
     }
 
     private updateCellValue(
         rowNode: RowNode | null,
-        column: AgColumn,
+        column: AgColumn | null,
         value: string,
-        cellsToFlash: any,
+        cellsToFlash: Record<string, boolean>,
         type: string,
         changedPath: ChangedPath | undefined
     ) {
-        if (!rowNode || !column || !column.isCellEditable(rowNode) || column.isSuppressPaste(rowNode)) {
+        if (!rowNode || !column?.isCellEditable(rowNode) || column?.isSuppressPaste(rowNode)) {
             return;
         }
 
@@ -656,15 +712,13 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             this.gos.getCallback('processCellFromClipboard'),
             true
         );
+
         rowNode.setDataValue(column, processedValue, SOURCE_PASTE);
 
         const { rowIndex, rowPinned } = rowNode;
         const cellId = _createCellId({ rowIndex: rowIndex!, column, rowPinned });
         cellsToFlash[cellId] = true;
-
-        if (changedPath) {
-            changedPath.addParentNode(rowNode.parent, [column]);
-        }
+        changedPath?.addCell(rowNode.parent, column.getId());
     }
 
     public copyToClipboard(params: IClipboardCopyParams = {}): void {
@@ -798,44 +852,43 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         if (!column.isCellEditable(rowNode)) {
             return;
         }
-        const emptyValue = this.beans.valueSvc.getDeleteValue(column, rowNode);
-        rowNode.setDataValue(column, emptyValue, 'clipboardSvc');
+        const deleteValue = this.beans.valueSvc.getDeleteValue(column, rowNode);
+        rowNode.setDataValue(column, deleteValue, 'clipboardSvc');
     }
 
-    private iterateActiveRanges(onlyFirst: boolean, rowCallback: RowCallback, columnCallback?: ColumnCallback): void {
+    private iterateActiveRanges(rowCallback: RowCallback, onlyFirst?: boolean, preProcessRange?: RangeCallback): void {
         const rangeSvc = this.beans.rangeSvc;
         if (!rangeSvc || rangeSvc.isEmpty()) {
             return;
         }
 
-        const cellRanges = rangeSvc.getCellRanges();
+        const currentCellRanges = rangeSvc.getCellRanges();
+        const cellRanges = onlyFirst ? [currentCellRanges[0]] : currentCellRanges;
 
-        if (onlyFirst) {
-            this.iterateActiveRange(cellRanges[0], rowCallback, columnCallback, true);
-        } else {
-            cellRanges.forEach((range, idx) =>
-                this.iterateActiveRange(range, rowCallback, columnCallback, idx === cellRanges.length - 1)
-            );
+        for (const cellRange of cellRanges) {
+            this.iterateActiveRange({ cellRange, rowCallback, preProcessRange });
         }
     }
 
-    private iterateActiveRange(
-        range: CellRange,
-        rowCallback: RowCallback,
-        columnCallback?: ColumnCallback,
-        isLastRange?: boolean
-    ): void {
-        const { rangeSvc, cellNavigation } = this.beans;
+    private iterateActiveRange(params: {
+        cellRange: CellRange;
+        rowCallback: RowCallback;
+        preProcessRange?: RangeCallback;
+    }): void {
+        const { cellRange, preProcessRange, rowCallback } = params;
+        const { beans } = this;
+        const { rangeSvc } = beans;
+
         if (!rangeSvc) {
             return;
         }
 
-        let currentRow: RowPosition | null = rangeSvc.getRangeStartRow(range);
-        const lastRow = rangeSvc.getRangeEndRow(range);
-
-        if (columnCallback && range.columns) {
-            columnCallback(range.columns as AgColumn[]);
+        if (preProcessRange) {
+            preProcessRange(cellRange);
         }
+
+        let currentRow: RowPosition | null = rangeSvc.getRangeStartRow(cellRange);
+        const lastRow = rangeSvc.getRangeEndRow(cellRange);
 
         let rangeIndex = 0;
         let isLastRow = false;
@@ -843,12 +896,12 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         // the currentRow could be missing if the user sets the active range manually, and sets a range
         // that is outside of the grid (eg. sets range rows 0 to 100, but grid has only 20 rows).
         while (!isLastRow && currentRow != null) {
-            const rowNode = _getRowNode(this.beans, currentRow);
+            const rowNode = _getRowNode(beans, currentRow)!;
             isLastRow = _isSameRow(currentRow, lastRow);
 
-            rowCallback(currentRow, rowNode, range.columns as AgColumn[], rangeIndex++, isLastRow && isLastRange);
+            rowCallback(currentRow, rowNode, cellRange, rangeIndex++);
 
-            currentRow = cellNavigation!.getRowBelow(currentRow);
+            currentRow = _getRowBelow(beans, currentRow);
         }
     }
 
@@ -874,28 +927,34 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const allRowPositions: RowPosition[] = [];
         const allCellsToFlash: CellsToFlashType = {};
 
-        ranges.forEach((range) => {
+        const isClientSideRowModel = _isClientSideRowModel(this.gos, this.beans.rowModel);
+        const flatCache = new Set();
+        if (!isClientSideRowModel) {
+            this.beans.rowModel.forEachNode((node) => {
+                flatCache.add(node.rowIndex);
+            });
+        }
+
+        for (const range of ranges) {
             range.columns.forEach((col: AgColumn) => columnsSet.add(col));
             const { rowPositions, cellsToFlash } = this.getRangeRowPositionsAndCellsToFlash(rangeSvc, range);
-            rowPositions.forEach((rowPosition) => {
+            for (const rowPosition of rowPositions) {
+                const isInCache = flatCache.has(rowPosition.rowIndex);
+                if (!isClientSideRowModel && !isInCache) {
+                    continue; // skip rows that are not in the flat cache
+                }
                 const rowPositionAsString = `${rowPosition.rowIndex}-${rowPosition.rowPinned || 'null'}`;
                 if (!rowPositionsMap.get(rowPositionAsString)) {
                     rowPositionsMap.set(rowPositionAsString, true);
                     allRowPositions.push(rowPosition);
                 }
-            });
+            }
             Object.assign(allCellsToFlash, cellsToFlash);
-        });
+        }
 
-        const allColumns = this.beans.visibleCols.allCols;
-        const exportedColumns = Array.from(columnsSet) as AgColumn[];
+        const exportedColumns = Array.from(columnsSet);
 
-        exportedColumns.sort((a, b) => {
-            const posA = allColumns.indexOf(a);
-            const posB = allColumns.indexOf(b);
-
-            return posA - posB;
-        });
+        exportedColumns.sort((a, b) => a.allColsIndex - b.allColsIndex);
 
         const data = this.buildExportParams({
             columns: exportedColumns,
@@ -912,7 +971,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const data: string[] = [];
         const allCellsToFlash: CellsToFlashType = {};
 
-        ranges.forEach((range) => {
+        for (const range of ranges) {
             const { rowPositions, cellsToFlash } = this.getRangeRowPositionsAndCellsToFlash(rangeSvc, range);
             Object.assign(allCellsToFlash, cellsToFlash);
             data.push(
@@ -923,7 +982,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                     includeGroupHeaders: params.includeGroupHeaders,
                 })
             );
-        });
+        }
 
         return { data: data.join('\n'), cellsToFlash: allCellsToFlash };
     }
@@ -936,20 +995,19 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const cellsToFlash: CellsToFlashType = {};
         const startRow = rangeSvc.getRangeStartRow(range);
         const lastRow = rangeSvc.getRangeEndRow(range);
-
         let node: RowPosition | null = startRow;
 
         while (node) {
             rowPositions.push(node);
-            range.columns.forEach((column) => {
-                const { rowIndex, rowPinned } = node!;
+            for (const column of range.columns) {
+                const { rowIndex, rowPinned } = node;
                 const cellId = _createCellId({ rowIndex, column, rowPinned });
                 cellsToFlash[cellId] = true;
-            });
+            }
             if (_isSameRow(node, lastRow)) {
                 break;
             }
-            node = this.beans.cellNavigation!.getRowBelow(node);
+            node = _getRowBelow(this.beans, node);
         }
 
         return { rowPositions, cellsToFlash };
@@ -962,7 +1020,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             const { level, rowIndex: index, rowPinned, sibling } = rowNodes[i];
 
             // Account for the grand total row (sibling of root node)
-            const rowIndex = level === -1 ? sibling.rowIndex : index;
+            const rowIndex = level === -1 ? sibling?.rowIndex : index;
 
             if (rowIndex == null) {
                 continue;
@@ -978,11 +1036,13 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
     }
 
     private copyFocusedCellToClipboard(params: IClipboardCopyParams = {}): void {
-        const focusedCell = this.beans.focusSvc.getFocusedCell();
+        let focusedCell = this.beans.focusSvc.getFocusedCell();
 
         if (focusedCell == null) {
             return;
         }
+
+        focusedCell = this.beans.rowSpanSvc?.getCellStart(focusedCell) ?? focusedCell;
 
         const cellId = _createCellId(focusedCell);
         const currentRow: RowPosition = { rowPinned: focusedCell.rowPinned, rowIndex: focusedCell.rowIndex };
@@ -1022,6 +1082,31 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const { columns, rowPositions, includeHeaders = false, includeGroupHeaders = false } = params;
         const { gos, csvCreator } = this.beans;
 
+        const processRowGroupCallback = ({ node, column }: ProcessRowGroupForExportParams) => {
+            const { value, valueFormatted } = this.beans.valueSvc.getValueForDisplay({
+                column: column as AgColumn,
+                node,
+                includeValueFormatted: true,
+                from: 'batch',
+                transformValues: true,
+            });
+
+            const val = valueFormatted ?? value ?? '';
+            const cb = gos.getCallback('processCellForClipboard');
+            if (!cb) {
+                return val;
+            }
+            return cb({
+                column: column!,
+                node,
+                value: val,
+                type: EXPORT_TYPE_CLIPBOARD,
+                formatValue: (valueToFormat: any) =>
+                    this.beans.valueSvc.formatValue(column as AgColumn, node, valueToFormat) ?? valueToFormat,
+                parseValue: (valueToParse: any) =>
+                    this.beans.valueSvc.parseValue(column as AgColumn, node, valueToParse, value) ?? valueToParse,
+            });
+        };
         const exportParams: CsvExportParams = {
             columnKeys: columns,
             rowPositions,
@@ -1030,8 +1115,10 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             suppressQuotes: true,
             columnSeparator: this.getClipboardDelimiter(),
             onlySelected: !rowPositions,
+            valueFrom: 'batch',
+            transformValues: true,
             processCellCallback: gos.getCallback('processCellForClipboard'),
-            processRowGroupCallback: (params) => this.processRowGroupCallback(params),
+            processRowGroupCallback: processRowGroupCallback,
             processHeaderCallback: gos.getCallback('processHeaderForClipboard'),
             processGroupHeaderCallback: gos.getCallback('processGroupHeaderForClipboard'),
         };
@@ -1039,58 +1126,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         return csvCreator!.getDataAsCsv(exportParams, true);
     }
 
-    private processRowGroupCallback({ node, column }: ProcessRowGroupForExportParams) {
-        const { gos, valueSvc, rowGroupColsSvc } = this.beans;
-
-        const isTreeData = gos.get('treeData');
-
-        // if not tree datathen we get the value from the group data
-        const getValueFromNode = () => {
-            if (isTreeData || !column) {
-                return node.key;
-            }
-            const value = node.groupData?.[column.getId()];
-            if (
-                !value ||
-                !node.rowGroupColumn ||
-                node.rowGroupColumn.getColDef().useValueFormatterForExport === false
-            ) {
-                return value;
-            }
-            return valueSvc.formatValue(node.rowGroupColumn as AgColumn, node, value) ?? value;
-        };
-        let value = getValueFromNode();
-
-        if (node.footer) {
-            let suffix = '';
-            if (value && value.length) {
-                suffix = ` ${value}`;
-            }
-            value = `Total${suffix}`;
-        }
-        const processCellForClipboard = gos.getCallback('processCellForClipboard');
-
-        if (processCellForClipboard) {
-            let column = node.rowGroupColumn as AgColumn;
-
-            if (!column && node.footer && node.level === -1 && rowGroupColsSvc) {
-                column = rowGroupColsSvc.columns[0];
-            }
-            return processCellForClipboard({
-                value,
-                node,
-                column,
-                type: 'clipboard',
-                formatValue: (valueToFormat) => valueSvc.formatValue(column, node, valueToFormat) ?? valueToFormat,
-                parseValue: (valueToParse) =>
-                    valueSvc.parseValue(column, node, valueToParse, valueSvc.getValue(column, node)),
-            });
-        }
-        return value;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/ban-types
-    private dispatchFlashCells(cellsToFlash: {}): void {
+    private dispatchFlashCells(cellsToFlash: Record<string, boolean>): void {
         window.setTimeout(() => {
             this.eventSvc.dispatchEvent({
                 type: 'flashCells',
@@ -1108,7 +1144,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         canParse?: boolean,
         canFormat?: boolean
     ): T {
-        const valueSvc = this.beans.valueSvc;
+        const { valueSvc, formula } = this.beans;
         if (func) {
             const params: WithoutGridCommon<ProcessCellForExportParams> = {
                 column,
@@ -1118,17 +1154,25 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
                 formatValue: (valueToFormat: any) =>
                     valueSvc.formatValue(column, rowNode ?? null, valueToFormat) ?? valueToFormat,
                 parseValue: (valueToParse: string) =>
-                    valueSvc.parseValue(column, rowNode ?? null, valueToParse, valueSvc.getValue(column, rowNode)),
+                    valueSvc.parseValue(
+                        column,
+                        rowNode ?? null,
+                        valueToParse,
+                        valueSvc.getValue(column, rowNode, 'edit')
+                    ),
             };
 
             return func(params);
         }
 
-        if (canParse && column.getColDef().useValueParserForImport !== false) {
-            return valueSvc.parseValue(column, rowNode ?? null, value, valueSvc.getValue(column, rowNode));
+        if (canParse && column.colDef.useValueParserForImport !== false) {
+            return valueSvc.parseValue(column, rowNode ?? null, value, valueSvc.getValue(column, rowNode, 'edit'));
         }
 
-        if (canFormat && column.getColDef().useValueFormatterForExport !== false) {
+        if (canFormat && column.colDef.useValueFormatterForExport !== false) {
+            if (formula?.isFormula(value)) {
+                return value;
+            }
             return valueSvc.formatValue(column, rowNode ?? null, value) ?? (value as any);
         }
 
@@ -1148,7 +1192,7 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
         const allowNavigator = !this.gos.get('suppressClipboardApi');
         if (allowNavigator && navigator.clipboard) {
             navigator.clipboard.writeText(data).catch((e) => {
-                _warn(40, { e, method: 'writeText' });
+                this.warn(40, { e, method: 'writeText' });
                 this.copyDataToClipboardLegacy(data);
             });
             return;
@@ -1170,10 +1214,10 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
             const result = eDocument.execCommand('copy');
 
             if (!result) {
-                _warn(41);
+                this.warn(41);
             }
 
-            if (focusedElementBefore != null && focusedElementBefore.focus != null) {
+            if (focusedElementBefore?.focus != null) {
                 focusedElementBefore.focus({ preventScroll: true });
             }
         });
@@ -1209,31 +1253,18 @@ export class ClipboardService extends BeanStub implements NamedBean, IClipboardS
 
         try {
             callbackNow(eTempInput);
-        } catch (err) {
-            _warn(42);
+        } catch {
+            this.warn(42);
         }
 
         //It needs 100 otherwise OS X seemed to not always be able to paste... Go figure...
         if (callbackAfter) {
             window.setTimeout(() => {
                 callbackAfter(eTempInput);
-                guiRoot.removeChild(eTempInput);
+                eTempInput.remove();
             }, 100);
         } else {
-            guiRoot.removeChild(eTempInput);
+            eTempInput.remove();
         }
-    }
-
-    private getRangeSize(rangeSvc: IRangeService): number {
-        const ranges = rangeSvc.getCellRanges();
-        let startRangeIndex = 0;
-        let endRangeIndex = 0;
-
-        if (ranges.length > 0) {
-            startRangeIndex = rangeSvc.getRangeStartRow(ranges[0]).rowIndex;
-            endRangeIndex = rangeSvc.getRangeEndRow(ranges[0]).rowIndex;
-        }
-
-        return startRangeIndex - endRangeIndex + 1;
     }
 }

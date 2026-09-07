@@ -11,16 +11,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    TextFilterModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, TextFilterModule, NumberFilterModule]);
 
 const columnDefs: ColDef<IOlympicData>[] = [
     {
@@ -63,7 +63,6 @@ const gridOptions: GridOptions<IOlympicData> = {
         filter: true,
     },
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 // setup the grid after the page has finished loading

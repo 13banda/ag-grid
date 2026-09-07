@@ -1,47 +1,53 @@
-import type { ICellEditorComp, ICellEditorParams } from '../../interfaces/iCellEditor';
-import { _getAriaCheckboxStateName } from '../../utils/aria';
-import type { AgCheckbox } from '../../widgets/agCheckbox';
-import { AgCheckboxSelector } from '../../widgets/agCheckbox';
-import { RefPlaceholder } from '../../widgets/component';
-import { PopupComponent } from '../../widgets/popupComponent';
+import { RefPlaceholder, _getAriaCheckboxStateName } from 'ag-stack';
 
-export class CheckboxCellEditor extends PopupComponent implements ICellEditorComp {
+import { AgCheckboxSelector } from '../../agWidgets/agCheckbox';
+import type { ICellEditorParams } from '../../interfaces/iCellEditor';
+import type { ElementParams } from '../../utils/element';
+import type { GridCheckbox } from '../../widgets/gridWidgetTypes';
+import { AgAbstractCellEditor } from './agAbstractCellEditor';
+
+const CheckboxCellEditorElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-cell-wrapper ag-cell-edit-wrapper ag-checkbox-edit',
+    children: [
+        {
+            tag: 'ag-checkbox',
+            ref: 'eEditor',
+            role: 'presentation',
+        },
+    ],
+};
+export class CheckboxCellEditor extends AgAbstractCellEditor<ICellEditorParams<any, boolean>, boolean> {
     constructor() {
-        super(
-            /* html */ `
-            <div class="ag-cell-wrapper ag-cell-edit-wrapper ag-checkbox-edit">
-                <ag-checkbox role="presentation" data-ref="eCheckbox"></ag-checkbox>
-            </div>`,
-            [AgCheckboxSelector]
-        );
+        super(CheckboxCellEditorElement, [AgCheckboxSelector]);
     }
 
-    private readonly eCheckbox: AgCheckbox = RefPlaceholder;
-    private params: ICellEditorParams<any, boolean>;
+    protected readonly eEditor: GridCheckbox = RefPlaceholder;
 
-    public init(params: ICellEditorParams<any, boolean>): void {
-        this.params = params;
-        const isSelected = params.value ?? undefined;
+    public initialiseEditor(params: ICellEditorParams<any, boolean>): void {
+        this.agSetEditValue(params.value);
 
-        const eCheckbox = this.eCheckbox;
-        eCheckbox.setValue(isSelected);
-
-        const inputEl = eCheckbox.getInputElement();
+        const inputEl = this.eEditor.getInputElement();
         inputEl.setAttribute('tabindex', '-1');
 
-        this.setAriaLabel(isSelected);
-
-        this.addManagedListeners(eCheckbox, {
+        this.addManagedListeners(this.eEditor, {
             fieldValueChanged: (event: { selected?: boolean }) => this.setAriaLabel(event.selected),
         });
     }
 
+    public override agSetEditValue(value: boolean | null | undefined): void {
+        this.params.value = value;
+        const isSelected = value ?? undefined;
+        this.eEditor.setValue(isSelected, true);
+        this.setAriaLabel(isSelected);
+    }
+
     public getValue(): boolean | undefined {
-        return this.eCheckbox.getValue();
+        return this.eEditor.getValue();
     }
 
     public focusIn(): void {
-        this.eCheckbox.getFocusableElement().focus();
+        this.eEditor.getFocusableElement().focus();
     }
 
     public afterGuiAttached(): void {
@@ -58,6 +64,26 @@ export class CheckboxCellEditor extends PopupComponent implements ICellEditorCom
         const translate = this.getLocaleTextFunc();
         const stateName = _getAriaCheckboxStateName(translate, isSelected);
         const ariaLabel = translate('ariaToggleCellValue', 'Press SPACE to toggle cell value');
-        this.eCheckbox.setInputAriaLabel(`${ariaLabel} (${stateName})`);
+        this.eEditor.setInputAriaLabel(`${ariaLabel} (${stateName})`);
+    }
+
+    public getValidationElement(tooltip: boolean): HTMLElement | HTMLInputElement {
+        return tooltip ? this.params.eGridCell : this.eEditor.getInputElement();
+    }
+
+    public getValidationErrors() {
+        const { params } = this;
+        const { getValidationErrors } = params;
+        const value = this.getValue();
+
+        if (!getValidationErrors) {
+            return null;
+        }
+
+        return getValidationErrors({
+            value,
+            internalErrors: null,
+            cellEditorParams: params,
+        });
     }
 }

@@ -1,0 +1,67 @@
+import React, { StrictMode, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import type { ColDef } from 'ag-grid-community';
+import { ClientSideRowModelModule, enableDevValidations } from 'ag-grid-community';
+import { AgGridProvider, AgGridReact } from 'ag-grid-react';
+
+import CustomNoRowsOverlay from './customNoRowsOverlay';
+import './styles.css';
+
+interface IAthlete {
+    athlete: string;
+    country: string;
+}
+
+const columnDefs: ColDef[] = [{ field: 'athlete' }, { field: 'country' }];
+
+const defaultColDef = {
+    flex: 1,
+};
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+const modules = [ClientSideRowModelModule];
+
+const GridExample = () => {
+    const [rowData, setRowData] = useState<IAthlete[]>([]);
+
+    const noRowsOverlayComponentParams = useMemo(() => {
+        return {
+            noRowsMessageFunc: () => 'No rows found at: ' + new Date().toLocaleTimeString(),
+        };
+    }, []);
+
+    return (
+        <AgGridProvider modules={modules}>
+            <div className="example-wrapper">
+                <div>
+                    <button onClick={() => setRowData([])}>Clear rowData</button>
+                    <button onClick={() => setRowData([{ athlete: 'Michael Phelps', country: 'US' }])}>
+                        Set rowData
+                    </button>
+                </div>
+
+                <div style={{ height: '100%' }}>
+                    <AgGridReact<IAthlete>
+                        rowData={rowData}
+                        columnDefs={columnDefs}
+                        defaultColDef={defaultColDef}
+                        noRowsOverlayComponent={CustomNoRowsOverlay}
+                        noRowsOverlayComponentParams={noRowsOverlayComponentParams}
+                    />
+                </div>
+            </div>
+        </AgGridProvider>
+    );
+};
+
+const root = createRoot(document.getElementById('root')!);
+root.render(
+    <StrictMode>
+        <GridExample />
+    </StrictMode>
+);

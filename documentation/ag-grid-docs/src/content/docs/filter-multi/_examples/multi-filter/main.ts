@@ -1,65 +1,26 @@
-import type {
-    GridApi,
-    GridOptions,
-    IDateFilterParams,
-    IMultiFilterParams,
-    ISetFilterParams,
-    ITextFilterParams,
-} from 'ag-grid-community';
+import type { GridApi, GridOptions, IMultiFilterParams } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
-    DateFilterModule,
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import {
-    ClipboardModule,
-    ColumnMenuModule,
-    ContextMenuModule,
-    FiltersToolPanelModule,
-    MultiFilterModule,
-    SetFilterModule,
-} from 'ag-grid-enterprise';
+import { MultiFilterModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
-    ClipboardModule,
-    FiltersToolPanelModule,
-    ColumnMenuModule,
-    ContextMenuModule,
     MultiFilterModule,
     SetFilterModule,
     TextFilterModule,
     NumberFilterModule,
-    DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
-
-const dateFilterParams: IMultiFilterParams = {
-    filters: [
-        {
-            filter: 'agDateColumnFilter',
-            filterParams: {
-                comparator: (filterDate: Date, cellValue: string) => {
-                    if (cellValue == null) return -1;
-
-                    return getDate(cellValue).getTime() - filterDate.getTime();
-                },
-            } as IDateFilterParams,
-        },
-        {
-            filter: 'agSetColumnFilter',
-            filterParams: {
-                comparator: (a: string, b: string) => {
-                    return getDate(a).getTime() - getDate(b).getTime();
-                },
-            } as ISetFilterParams,
-        },
-    ],
-};
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -73,9 +34,6 @@ const gridOptions: GridOptions<IOlympicData> = {
                 filters: [
                     {
                         filter: 'agTextColumnFilter',
-                        filterParams: {
-                            defaultOption: 'startsWith',
-                        } as ITextFilterParams,
                     },
                     {
                         filter: 'agSetColumnFilter',
@@ -84,7 +42,7 @@ const gridOptions: GridOptions<IOlympicData> = {
             } as IMultiFilterParams,
         },
         {
-            field: 'gold',
+            field: 'year',
             filter: 'agMultiColumnFilter',
             filterParams: {
                 filters: [
@@ -98,26 +56,25 @@ const gridOptions: GridOptions<IOlympicData> = {
             } as IMultiFilterParams,
         },
         {
-            field: 'date',
+            field: 'age',
             filter: 'agMultiColumnFilter',
-            filterParams: dateFilterParams,
+            filterParams: {
+                filters: [
+                    {
+                        filter: 'agNumberColumnFilter',
+                    },
+                    {
+                        filter: 'agSetColumnFilter',
+                    },
+                ],
+            } as IMultiFilterParams,
         },
     ],
     defaultColDef: {
         flex: 1,
         minWidth: 200,
-        suppressHeaderMenuButton: true,
-        suppressHeaderContextMenu: true,
-    },
-    sideBar: {
-        toolPanels: ['filters'],
     },
 };
-
-function getDate(value: string): Date {
-    const dateParts = value.split('/');
-    return new Date(Number(dateParts[2]), Number(dateParts[1]) - 1, Number(dateParts[0]));
-}
 
 // setup the grid after the page has finished loading
 document.addEventListener('DOMContentLoaded', function () {

@@ -1,17 +1,33 @@
-import type { AgColumn, FilterOpenedEvent, IFilterComp, IconName } from 'ag-grid-community';
-import {
-    Component,
-    FilterWrapperComp,
-    KeyCode,
-    RefPlaceholder,
-    _clearElement,
-    _createIconNoSpan,
-    _loadTemplate,
-    _setAriaExpanded,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { RefPlaceholder, _clearElement, _setAriaExpanded, _setAriaLabel, _setAriaRole, _setDisplayed } from 'ag-stack';
 
-export type ToolPanelFilterCompEvent = 'filterChanged';
+import type { AgColumn, ElementParams, FilterOpenedEvent, IFilterComp, IconName } from 'ag-grid-community';
+import { Component, FilterComp, KeyCode, _createElement, _createIconNoSpan } from 'ag-grid-community';
+
+type ToolPanelFilterCompEvent = 'filterChanged';
+
+const ToolPanelFilterElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-filter-toolpanel-instance',
+    children: [
+        {
+            tag: 'div',
+            ref: 'eFilterToolPanelHeader',
+            cls: 'ag-filter-toolpanel-header ag-filter-toolpanel-instance-header',
+            role: 'button',
+            attrs: { 'aria-expanded': 'false' },
+            children: [
+                { tag: 'div', ref: 'eExpand', cls: 'ag-filter-toolpanel-expand' },
+                { tag: 'span', ref: 'eFilterName', cls: 'ag-header-cell-text' },
+                {
+                    tag: 'span',
+                    ref: 'eFilterIcon',
+                    cls: 'ag-header-icon ag-filter-icon ag-filter-toolpanel-instance-header-icon',
+                },
+            ],
+        },
+        { tag: 'div', ref: 'agFilterToolPanelBody', cls: 'ag-filter-toolpanel-instance-body ag-filter' },
+    ],
+};
 export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
     private readonly eFilterToolPanelHeader: HTMLElement = RefPlaceholder;
     private readonly eFilterName: HTMLElement = RefPlaceholder;
@@ -24,36 +40,34 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
     private column: AgColumn;
     private expanded: boolean = false;
     private underlyingFilter: IFilterComp | null;
-    private filterWrapperComp?: FilterWrapperComp;
+    private filterComp?: FilterComp;
 
     constructor(
-        private hideHeader: boolean,
+        private readonly hideHeader: boolean,
         private readonly expandedCallback: () => void
     ) {
-        super(/* html */ `
-            <div class="ag-filter-toolpanel-instance">
-                <div class="ag-filter-toolpanel-header ag-filter-toolpanel-instance-header" data-ref="eFilterToolPanelHeader" role="button" aria-expanded="false">
-                    <div data-ref="eExpand" class="ag-filter-toolpanel-expand"></div>
-                    <span data-ref="eFilterName" class="ag-header-cell-text"></span>
-                    <span data-ref="eFilterIcon" class="ag-header-icon ag-filter-icon ag-filter-toolpanel-instance-header-icon" aria-hidden="true"></span>
-                </div>
-                <div class="ag-filter-toolpanel-instance-body ag-filter" data-ref="agFilterToolPanelBody"></div>
-            </div>`);
+        super(ToolPanelFilterElement);
     }
 
     public postConstruct() {
-        const { beans, eExpand } = this;
+        const { beans, eExpand, eFilterIcon } = this;
         const eExpandChecked = _createIconNoSpan('accordionOpen', beans)!;
         this.eExpandChecked = eExpandChecked;
         const eExpandUnchecked = _createIconNoSpan('accordionClosed', beans)!;
         this.eExpandUnchecked = eExpandUnchecked;
         eExpand.appendChild(eExpandChecked);
         eExpand.appendChild(eExpandUnchecked);
+        // as we only display the icons when the filter is active
+        // the aria-label should always be `ariaFilterActive`.
+        const translate = this.getLocaleTextFunc();
+        _setAriaLabel(eFilterIcon, translate('ariaFilterActive', 'Filter Active'));
+        _setAriaRole(eFilterIcon, 'img');
     }
 
     public setColumn(column: AgColumn): void {
         this.column = column;
         const { beans, eFilterToolPanelHeader, eFilterIcon, eExpandChecked, hideHeader } = this;
+        // eslint-disable-next-line no-restricted-properties -- Could swap to textContent, but could be a breaking change
         this.eFilterName.innerText = beans.colNames.getDisplayNameForColumn(column, 'filterToolPanel', false) || '';
         this.addManagedListeners(eFilterToolPanelHeader, {
             click: this.toggleExpanded.bind(this),
@@ -62,7 +76,7 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
         this.addManagedEventListeners({ filterOpened: this.onFilterOpened.bind(this) });
         this.addInIcon('filterActive', eFilterIcon, column);
 
-        _setDisplayed(eFilterIcon, this.isFilterActive(), { skipAriaHidden: true });
+        _setDisplayed(eFilterIcon, this.isFilterActive());
         _setDisplayed(eExpandChecked, false);
 
         if (hideHeader) {
@@ -116,16 +130,20 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
     }
 
     public isFilterActive(): boolean {
-        return !!this.beans.filterManager?.isFilterActive(this.column);
+        return !!this.beans.colFilter?.isFilterActive(this.column);
     }
 
     private onFilterChanged(): void {
-        _setDisplayed(this.eFilterIcon, this.isFilterActive(), { skipAriaHidden: true });
+        _setDisplayed(this.eFilterIcon, this.isFilterActive());
         this.dispatchLocalEvent({ type: 'filterChanged' });
     }
 
     public toggleExpanded(): void {
-        this.expanded ? this.collapse() : this.expand();
+        if (this.expanded) {
+            this.collapse();
+        } else {
+            this.expand();
+        }
     }
 
     public expand(): void {
@@ -145,9 +163,9 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
     }
 
     private addFilterElement(suppressFocus?: boolean): void {
-        const filterPanelWrapper = _loadTemplate(/* html */ `<div class="ag-filter-toolpanel-instance-filter"></div>`);
-        const comp = this.createManagedBean(new FilterWrapperComp(this.column, 'TOOLBAR'));
-        this.filterWrapperComp = comp;
+        const filterPanelWrapper = _createElement({ tag: 'div', cls: 'ag-filter-toolpanel-instance-filter' });
+        const comp = this.createManagedBean(new FilterComp(this.column, 'TOOLBAR'));
+        this.filterComp = comp;
 
         if (!comp.hasFilter()) {
             return;
@@ -179,9 +197,9 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
         _setDisplayed(this.eExpandChecked, false);
         _setDisplayed(this.eExpandUnchecked, true);
 
-        const filterWrapperComp = this.filterWrapperComp;
-        filterWrapperComp?.afterGuiDetached();
-        this.destroyBean(filterWrapperComp);
+        const filterComp = this.filterComp;
+        filterComp?.afterGuiDetached();
+        this.destroyBean(filterComp);
 
         this.expandedCallback();
     }
@@ -194,7 +212,7 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
         return this.expanded;
     }
 
-    public refreshFilter(isDisplayed: boolean): void {
+    public onPanelHidden(): void {
         if (!this.expanded) {
             return;
         }
@@ -205,16 +223,7 @@ export class ToolPanelFilterComp extends Component<ToolPanelFilterCompEvent> {
             return;
         }
 
-        if (isDisplayed) {
-            // set filters should be updated when the filter has been changed elsewhere, i.e. via api. Note that we can't
-            // use 'afterGuiAttached' to refresh the virtual list as it also focuses on the mini filter which changes the
-            // scroll position in the filter list panel
-            if (typeof filter.refreshVirtualList === 'function') {
-                filter.refreshVirtualList();
-            }
-        } else {
-            filter.afterGuiDetached?.();
-        }
+        filter.afterGuiDetached?.();
     }
 
     private onFilterOpened(event: FilterOpenedEvent): void {

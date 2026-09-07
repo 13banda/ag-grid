@@ -1,8 +1,10 @@
-import type { BeanCollection, IChartService } from 'ag-grid-community';
-import { AgSelect, Component, RefPlaceholder } from 'ag-grid-community';
+import { RefPlaceholder } from 'ag-stack';
 
-import type { AgGroupComponent, AgGroupComponentParams } from '../../../../widgets/agGroupComponent';
-import { AgGroupComponentSelector } from '../../../../widgets/agGroupComponent';
+import type { BeanCollection, GridSelect, GridToggleButton, IChartService } from 'ag-grid-community';
+import { AgSelect, AgToggleButton, Component } from 'ag-grid-community';
+
+import { AgGroupComponentSelector } from '../../../../agStack/agGroupComponent';
+import type { GroupComponent, GroupComponentParams } from '../../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartTranslationService } from '../../services/chartTranslationService';
 import {
     SERIES_GROUP_TYPES,
@@ -22,29 +24,30 @@ export class ChartSpecificDataPanel extends Component {
         this.chartSvc = beans.chartSvc!;
     }
 
-    private readonly chartSpecificGroup: AgGroupComponent = RefPlaceholder;
+    private readonly chartSpecificGroup: GroupComponent = RefPlaceholder;
 
-    private directionSelect?: AgSelect;
-    private groupTypeSelect?: AgSelect;
+    private directionSelect?: GridSelect;
+    private reverseToggle?: GridToggleButton;
+    private groupTypeSelect?: GridSelect;
     private hasContent = false;
 
     constructor(
         private readonly chartMenuContext: ChartMenuContext,
-        private isOpen?: boolean
+        private readonly isOpen?: boolean
     ) {
         super();
     }
 
     public postConstruct(): void {
         const title = this.getTitle();
-        const chartSpecificGroupParams: AgGroupComponentParams = {
+        const chartSpecificGroupParams: GroupComponentParams = {
             title,
             enabled: true,
             suppressEnabledCheckbox: true,
             suppressOpenCloseIcons: false,
             cssIdentifier: 'charts-data',
             expanded: this.isOpen,
-            items: [...this.createDirectionSelect(), this.createGroupTypeSelect()],
+            items: [...this.createDirectionSelect(), this.createReverseSelect(), this.createGroupTypeSelect()],
         };
         this.setTemplate(
             /* html */ `
@@ -63,6 +66,7 @@ export class ChartSpecificDataPanel extends Component {
         this.hasContent = false;
         this.chartSpecificGroup.setTitle(this.getTitle());
         this.updateDirectionSelect();
+        this.updateReverseSelect();
         this.updateGroupTypeSelect();
         this.setDisplayed(this.hasContent);
     }
@@ -72,7 +76,7 @@ export class ChartSpecificDataPanel extends Component {
         return this.chartTranslation.translate(getFullChartNameTranslationKey(chartType));
     }
 
-    private createDirectionSelect(): AgSelect[] {
+    private createDirectionSelect(): GridSelect[] {
         if (!this.chartSvc.isEnterprise()) {
             return [];
         }
@@ -99,12 +103,25 @@ export class ChartSpecificDataPanel extends Component {
         return [this.directionSelect];
     }
 
+    private createReverseSelect(): GridToggleButton {
+        const { chartMenuParamsFactory } = this.chartMenuContext;
+        const params = chartMenuParamsFactory.getDefaultToggleParams('series.reverse', 'reverse');
+        this.reverseToggle = this.createManagedBean(new AgToggleButton(params));
+        this.updateReverseSelect();
+        return this.reverseToggle;
+    }
+
+    private updateReverseSelect(): void {
+        const isDisplayed = this.chartMenuContext.chartController.getChartType() === 'pyramid';
+        this.updateDisplayed(this.reverseToggle, isDisplayed);
+    }
+
     private updateDirectionSelect(): void {
         const isDisplayed = canSwitchDirection(this.chartMenuContext.chartController.getChartType());
         this.updateDisplayed(this.directionSelect, isDisplayed);
     }
 
-    private createGroupTypeSelect(): AgSelect {
+    private createGroupTypeSelect(): GridSelect {
         const { chartController, chartMenuParamsFactory } = this.chartMenuContext;
         this.groupTypeSelect = this.createManagedBean(
             new AgSelect(
@@ -130,7 +147,7 @@ export class ChartSpecificDataPanel extends Component {
         this.updateDisplayed(this.groupTypeSelect, isDisplayed);
     }
 
-    private updateDisplayed(select: AgSelect | undefined, isDisplayed: boolean): void {
+    private updateDisplayed(select: GridSelect | GridToggleButton | undefined, isDisplayed: boolean): void {
         select?.setDisplayed(isDisplayed);
         if (select) {
             this.hasContent = this.hasContent || isDisplayed;

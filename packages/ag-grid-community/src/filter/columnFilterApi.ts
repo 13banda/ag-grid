@@ -1,25 +1,26 @@
 import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
 import type { Column } from '../interfaces/iColumn';
-import type { FilterModel, IFilter } from '../interfaces/iFilter';
-import { _error } from '../validation/logging';
+import type { FilterActionParams, FilterHandler, FilterModel, IFilter } from '../interfaces/iFilter';
 
 export function isColumnFilterPresent(beans: BeanCollection): boolean {
     const filterManager = beans.filterManager;
     return !!filterManager?.isColumnFilterPresent() || !!filterManager?.isAggregateFilterPresent();
 }
 
-export function getColumnFilterInstance<TFilter extends IFilter>(
+export function getColumnFilterInstance<TFilter = IFilter>(
     beans: BeanCollection,
     key: string | Column
 ): Promise<TFilter | null | undefined> {
-    return beans.filterManager?.getColumnFilterInstance(key as string | AgColumn) ?? Promise.resolve(undefined);
+    return (
+        (beans.filterManager?.getColumnFilterInstance(key as string | AgColumn) as any) ?? Promise.resolve(undefined)
+    );
 }
 
 export function destroyFilter(beans: BeanCollection, key: string | Column) {
-    const column = beans.colModel.getColDefCol(key);
+    const column = beans.colModel.getCol(key);
     if (column) {
-        return beans.filterManager?.destroyFilter(column, 'api');
+        return beans.colFilter?.destroyFilter(column, 'api');
     }
 }
 
@@ -31,8 +32,18 @@ export function getFilterModel(beans: BeanCollection): FilterModel {
     return beans.filterManager?.getFilterModel() ?? {};
 }
 
-export function getColumnFilterModel<TModel>(beans: BeanCollection, column: string | Column): TModel | null {
-    return beans.filterManager?.getColumnFilterModel(column as string | AgColumn) ?? null;
+export function getColumnFilterModel<TModel>(
+    beans: BeanCollection,
+    key: string | Column,
+    useUnapplied?: boolean
+): TModel | null {
+    const { gos, colModel, colFilter } = beans;
+    if (useUnapplied && !gos.get('enableFilterHandlers')) {
+        beans.log.warn(288);
+        useUnapplied = false;
+    }
+    const column = colModel.getCol(key);
+    return column ? (colFilter?.getModelForColumn(column, useUnapplied) ?? null) : null;
 }
 
 export function setColumnFilterModel<TModel>(
@@ -47,7 +58,7 @@ export function showColumnFilter(beans: BeanCollection, colKey: string | Column)
     const column = beans.colModel.getCol(colKey);
     if (!column) {
         // Column not found, can't show filter
-        _error(12, { colKey });
+        beans.log.error(12, { colKey });
         return;
     }
     beans.menuSvc?.showFilterMenu({
@@ -55,4 +66,35 @@ export function showColumnFilter(beans: BeanCollection, colKey: string | Column)
         containerType: 'columnFilter',
         positionBy: 'auto',
     });
+}
+
+export function hideColumnFilter(beans: BeanCollection): void {
+    beans.menuSvc?.hideFilterMenu();
+}
+
+export function getColumnFilterHandler(beans: BeanCollection, colKey: string | Column): FilterHandler | undefined {
+    const column = beans.colModel.getCol(colKey);
+    if (!column) {
+        // Column not found, can't show filter
+        beans.log.error(12, { colKey });
+        return undefined;
+    }
+    return beans.colFilter?.getHandler(column, true);
+}
+
+export function doFilterAction(beans: BeanCollection, params: FilterActionParams): void {
+    const { colModel, colFilter, gos } = beans;
+    if (!gos.get('enableFilterHandlers')) {
+        beans.log.warn(287);
+        return;
+    }
+    const { colId, action } = params;
+    if (colId) {
+        const column = colModel.colsById[colId];
+        if (column) {
+            colFilter?.updateModel(column, action);
+        }
+    } else {
+        colFilter?.updateAllModels(action);
+    }
 }

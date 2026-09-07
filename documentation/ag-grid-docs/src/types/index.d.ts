@@ -36,4 +36,23 @@ declare global {
         minutes: number;
         callRecords: ICallRecord[];
     }
+
+    export interface Math {
+        /**
+         *
+         * @param seed Monkeypatched from seedrandom prng library
+         */
+        seedrandom(seed: string): void;
+    }
+
+    /**
+     * This is a global variable that is used to access the alasql library.
+     */
+    export const alasql: any;
+
+    /**
+     * Custom hook to fetch JSON data from a URL for React provided examples to use
+     * Actual code will be added by the example generator
+     */
+    export const useFetchJson: <TData = any>(url: string, limit?: number) => { data: TData[]; loading: boolean };
 }

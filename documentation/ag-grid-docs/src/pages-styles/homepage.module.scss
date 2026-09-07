@@ -10,18 +10,35 @@ body {
 }
 
 .homepageHero {
+    --background-split: 280px;
+    --gradient-top: var(--color-brand-200);
+
     position: relative;
     padding-top: $spacing-size-10;
 
-    &::before {
+    &::before,
+    &::after {
         content: '';
         position: absolute;
-        top: 0;
         right: 0;
-        bottom: 280px;
         left: 0;
-        background-color: var(--color-bg-site-header);
         z-index: -1;
+    }
+
+    &::before {
+        top: 0;
+        bottom: var(--background-split);
+        background-color: var(--color-bg-site-header);
+    }
+
+    &::after {
+        height: calc(var(--background-split) + #{$spacing-size-16});
+        bottom: #{-$spacing-size-16};
+        background: linear-gradient(var(--gradient-top), var(--color-bg-primary));
+    }
+
+    #{$selector-darkmode} & {
+        --gradient-top: color-mix(in srgb, #000 35%, var(--color-bg-primary));
     }
 
     @media screen and (min-width: $breakpoint-hero-small) {
@@ -30,6 +47,16 @@ body {
 
     @media screen and (min-width: $breakpoint-hero-large) {
         padding-top: $spacing-size-24;
+    }
+}
+
+.heroInner {
+    display: flex;
+    flex-direction: column;
+    gap: 0 $spacing-size-16;
+
+    @media screen and (min-width: $breakpoint-hero-large) {
+        flex-direction: row;
     }
 }
 
@@ -42,7 +69,7 @@ body {
 
     h1,
     h2 {
-        line-height: var(--text-lh-tight);
+        line-height: var(--text-lh-ratio-tight);
         color: var(--color-white);
     }
 
@@ -84,14 +111,8 @@ body {
     }
 }
 
-.heroInner {
-    display: flex;
-    flex-direction: column;
-    gap: 0 $spacing-size-16;
-
-    @media screen and (min-width: $breakpoint-hero-large) {
-        flex-direction: row;
-    }
+.heroTopLine {
+    display: inline-flex;
 }
 
 .heroSectionDemoContainer {
@@ -102,21 +123,25 @@ body {
     padding-left: var(--layout-horizontal-margins);
 
     @media screen and (max-width: 500px) {
-        padding-top: 0;
-    }
-
-    @media screen and (max-width: 500px) {
         padding: $spacing-size-4;
     }
 }
 
 .loadingLogoContainer {
-    height: 100%;
-    right: var(--layout-horizontal-margins);
-    left: var(--layout-horizontal-margins);
     position: absolute;
+    top: 0;
+    right: var(--layout-horizontal-margins);
+    bottom: 54px;
+    left: var(--layout-horizontal-margins);
     background-color: var(--color-bg-primary);
     border-radius: 8px;
+
+    @media screen and (max-width: 500px) {
+        top: $spacing-size-4;
+        right: $spacing-size-4;
+        bottom: 70px;
+        left: $spacing-size-4;
+    }
 
     svg[class*='logo-mark'] {
         position: absolute;
@@ -130,16 +155,25 @@ body {
 }
 
 .heroSectionGrid {
-    height: 450px;
+    height: 449px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
 }
 
 .heroLinks {
     position: relative;
     display: flex;
+    // Wraps because the row now carries four CTAs — without it the trial and pricing buttons
+    // push the row past the viewport on narrow screens.
+    flex-wrap: wrap;
     gap: $spacing-size-2;
     align-items: center;
     margin: $spacing-size-4 0 0;
     justify-content: flex-end;
+
+    :global(.button-tertiary):hover {
+        background-color: color-mix(in srgb, var(--color-button-tertiary-bg), transparent 33.3333%);
+    }
 
     a svg {
         --icon-size: #{$spacing-size-6};
@@ -207,60 +241,6 @@ body {
         margin-right: auto;
         color: var(--color-text-tertiary);
         opacity: 0.6;
-    }
-}
-
-.customerLogos {
-    --overflow-width: 10vw;
-
-    position: relative;
-    width: calc(100% + var(--overflow-width) * 2);
-    height: 107px;
-    margin-left: calc(var(--overflow-width) * -1);
-    // NOTE: This image is also prefetched on the page
-    background-image: url(urlWithBaseUrl('/images/ag-grid-customer-logos.webp'));
-    background-size: auto 107px;
-    animation-name: customerMarquee;
-    animation-duration: 1600s;
-    animation-timing-function: linear;
-    animation-iteration-count: infinite;
-
-    @media screen and (min-width: $breakpoint-grid-homepage-medium) {
-        animation-duration: 400s;
-    }
-
-    &::before,
-    &::after {
-        content: '';
-        position: absolute;
-        height: 100%;
-        width: var(--overflow-width);
-    }
-
-    &::before {
-        left: 0;
-        background-image: linear-gradient(90deg, var(--color-bg-primary), transparent);
-    }
-
-    &::after {
-        right: 0;
-        background-image: linear-gradient(90deg, transparent, var(--color-bg-primary));
-    }
-
-    @media screen and (max-width: $breakpoint-hero-small) {
-        margin: 0 auto;
-        width: 100%;
-        animation-duration: 1100s;
-    }
-}
-
-@keyframes customerMarquee {
-    from {
-        background-position-x: 0%;
-    }
-
-    to {
-        background-position-x: 5000%;
     }
 }
 
@@ -366,7 +346,7 @@ body {
     > div {
         text-align: center;
         margin-bottom: $spacing-size-10;
-        list-style: var(--text-lh-tight);
+        list-style: var(--text-lh-ratio-tight);
 
         @media screen and (min-width: $breakpoint-sponsorship-large) {
             text-align: unset;
@@ -439,8 +419,8 @@ body {
     display: flex;
     justify-content: center;
     gap: $spacing-size-4;
-    margin-bottom: $spacing-size-16;
-    margin-top: $spacing-size-4;
+    margin-bottom: $spacing-size-8;
+    margin-top: $spacing-size-12;
 
     a {
         height: 48px;
@@ -460,46 +440,26 @@ body {
     border-radius: var(--radius-md);
     height: 48px;
     padding: 0px 12px 0px 2px;
-    background-color: rgba(0, 0, 0, 0.1);
     transition: all 0.3s;
-
-    #{$selector-darkmode} & {
-        background-color: rgba(0, 0, 0, 0.1);
-    }
-    &:hover {
-        background-color: rgba(0, 0, 0, 0.15);
-        transition: all 0.3s;
-    }
 }
 
 .heroSectioncta1 {
-    display: flex;
-    justify-content: center;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    transition: opacity 0.3s;
-    background-color: var(--color-white);
-    color: var(--color-brand-500);
+    gap: $spacing-size-2;
+    width: fit-content;
+    padding: 0.5em 0.5em 0.5em 1em;
 
-    svg path {
-        fill: var(--color-brand-500);
+    :global(.icon) {
+        --icon-size: #{$spacing-size-4};
+
+        transform: translate(-3px, 1px);
+        transition: transform $transition-default-timing;
     }
 
-    #{$selector-darkmode} & {
-        background-color: var(--color-white);
-        &:hover {
-            opacity: 0.8;
-            transition: opacity 0.3s;
-            color: var(--color-brand-500);
-        }
+    &:hover :global(.icon) {
+        transform: translate(4px, 1px);
     }
-}
-
-.heroSectioncta1 svg {
-    height: 24px;
-    width: 24px;
-    fill: var(--color-fg-secondary);
-    opacity: 0.8;
 }
 
 .heroButton {
@@ -655,9 +615,16 @@ body {
     margin-top: $spacing-size-8;
     margin-bottom: $spacing-size-8;
 
-    @media screen and (max-width: $breakpoint-landing-page-small) {
+    @media screen and (max-width: 700px) {
         flex-direction: column;
         gap: $spacing-size-3;
+    }
+
+    // Hide 3rd item in 2 col layout
+    @media screen and (min-width: 700px) and (max-width: 1020px) {
+        > *:last-child {
+            display: none;
+        }
     }
 }
 

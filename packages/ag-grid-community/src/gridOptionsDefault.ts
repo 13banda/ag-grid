@@ -1,6 +1,9 @@
 import type { GridOptions } from './entities/gridOptions';
 
 // Leave untyped. so it can be inferred. Might be possible to type in the future with NoInfer<T>
+// Ideally we would not set all the false default values as this can save bundle size. However,
+// if we remove the false defaults then this will change the result of the api.getGridOption() method
+// when the user has not provided a value making this a breaking change.
 export const GRID_OPTION_DEFAULTS = {
     suppressContextMenu: false,
     preventDefaultOnContextMenu: false,
@@ -9,7 +12,11 @@ export const GRID_OPTION_DEFAULTS = {
     enableBrowserTooltips: false,
     tooltipTrigger: 'hover',
     tooltipShowDelay: 2000,
+    tooltipSwitchShowDelay: 200,
     tooltipHideDelay: 10000,
+    noteTrigger: 'hover',
+    noteShowDelay: 180,
+    noteHideDelay: 220,
     tooltipMouseTrack: false,
     tooltipShowMode: 'standard',
     tooltipInteraction: false,
@@ -45,18 +52,23 @@ export const GRID_OPTION_DEFAULTS = {
     undoRedoCellEditingLimit: 10,
     suppressCsvExport: false,
     suppressExcelExport: false,
+    suppressPdfExport: false,
     cacheQuickFilter: false,
     includeHiddenColumnsInQuickFilter: false,
     excludeChildrenWhenTreeDataFiltering: false,
     enableAdvancedFilter: false,
     includeHiddenColumnsInAdvancedFilter: false,
     enableCharts: false,
+    includeHiddenColumnsInCharts: true,
     masterDetail: false,
     keepDetailRows: false,
     keepDetailRowsCount: 10,
     detailRowAutoHeight: false,
     tabIndex: 0,
+    suppressInputClearButton: false,
+    enableInputAutoComplete: false,
     rowBuffer: 10,
+    stickyRowsMaxViewportRatio: 0.5,
     valueCache: false,
     valueCacheNeverExpires: false,
     enableCellExpressions: false,
@@ -96,6 +108,8 @@ export const GRID_OPTION_DEFAULTS = {
     suppressMaxRenderedRowRestriction: false,
     suppressRowVirtualisation: false,
     rowDragManaged: false,
+    refreshAfterGroupEdit: false,
+    rowDragInsertDelay: 500,
     suppressRowDrag: false,
     suppressMoveWhenRowDragging: false,
     rowDragEntireRow: false,
@@ -111,11 +125,13 @@ export const GRID_OPTION_DEFAULTS = {
     groupRemoveSingleChildren: false,
     groupRemoveLowestSingleChildren: false,
     groupHideOpenParents: false,
+    groupHideColumnsUntilExpanded: false,
     groupAllowUnbalanced: false,
     rowGroupPanelShow: 'never',
     suppressMakeColumnVisibleAfterUnGroup: false,
     treeData: false,
     rowGroupPanelSuppressSort: false,
+    pivotPanelSuppressSort: false,
     suppressGroupRowsSticky: false,
     rowModelType: 'clientSide',
     asyncTransactionWaitMillis: 50,
@@ -161,6 +177,8 @@ export const GRID_OPTION_DEFAULTS = {
     suppressMaintainUnsortedOrder: false,
     suppressRowHoverHighlight: false,
     suppressRowTransform: false,
+    suppressContentVisibilityAuto: true,
+    contentVisibilityAutoDelay: 1000,
     columnHoverHighlight: false,
     deltaSort: false,
     enableGroupEdit: false,
@@ -171,14 +189,16 @@ export const GRID_OPTION_DEFAULTS = {
     columnMenu: 'new',
     reactiveCustomComponents: true,
     suppressSetFilterByDefault: false,
+    enableFilterHandlers: false,
 } as const;
 /**
  * Used simply to type check the default grid options.
  * Done here to allow inference of the above type, for gridOptionsService.get to infer where defaults exist.
  */
-type AllValidKeys = Exclude<keyof typeof GRID_OPTION_DEFAULTS, keyof GridOptions> extends never ? true : false;
+type AllValidGridOptionsKeys =
+    Exclude<keyof typeof GRID_OPTION_DEFAULTS, keyof GridOptions> extends never ? true : false;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const allValidKeys: AllValidKeys = true;
+const allValidKeys: AllValidGridOptionsKeys = true;
 
 // validate each default value is the right type
 type AllTypesValid = {
@@ -190,6 +210,13 @@ type AllTypeValid = Exclude<AllTypesValid, 'V'> extends never ? 'V' : false;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const allValidValues: AllTypeValid = 'V';
 
-export type GridOptionOrDefault<K extends keyof GridOptions> = K extends keyof typeof GRID_OPTION_DEFAULTS
+type GridOptionDefaultsKeys = keyof typeof GRID_OPTION_DEFAULTS;
+
+export type GridOptionOrDefault<K extends keyof GridOptions> = K extends GridOptionDefaultsKeys
     ? NonNullable<GridOptions[K]>
     : GridOptions[K];
+
+type PartialGridOptionsWithDefaults = { [K in keyof GridOptions]: GridOptionOrDefault<K> };
+
+export type GridOptionsWithDefaults = Required<Pick<PartialGridOptionsWithDefaults, GridOptionDefaultsKeys>> &
+    Omit<PartialGridOptionsWithDefaults, GridOptionDefaultsKeys>;

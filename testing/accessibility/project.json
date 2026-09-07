@@ -1,0 +1,46 @@
+{
+  "name": "ag-grid-accessibility",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "testing/accessibility",
+  "projectType": "application",
+  "targets": {
+    "setup:playwright": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["{workspaceRoot}/scripts/ci/install-playwright.sh full chromium"],
+        "parallel": false
+      }
+    },
+    "setup": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["setup:playwright"],
+      "options": {
+        "commands": ["npm run download-examples", "mkdir -p e2e", "npm run generate-tests"],
+        "parallel": false,
+        "cwd": "testing/accessibility"
+      },
+      "configurations": {
+        "production": {
+          "commands": ["npm run download-examples-prod", "mkdir -p e2e", "npm run generate-tests"]
+        },
+        "staging": {},
+        "dev": {
+          "commands": ["npm run download-examples-local", "mkdir -p e2e", "npm run generate-tests"]
+        }
+      }
+    },
+    "test:e2e:accessibility": {
+      "executor": "nx:run-script",
+      "dependsOn": ["setup"],
+      "options": {
+        "script": "playwright test"
+      },
+      "configurations": {
+        "production": {},
+        "staging": {},
+        "dev": {}
+      }
+    }
+  },
+  "tags": ["accessibility", "testing"]
+}

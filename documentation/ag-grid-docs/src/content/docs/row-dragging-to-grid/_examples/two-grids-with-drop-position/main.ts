@@ -14,11 +14,16 @@ import {
     RowDragModule,
     RowStyleModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 // Register the required feature modules with the Grid
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
     RowApiModule,
@@ -26,7 +31,6 @@ ModuleRegistry.registerModules([
     RowDragModule,
     RowStyleModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let rowIdSequence = 100;
@@ -124,9 +128,9 @@ function addRecordToGrid(side: string, data: any) {
         return;
     }
 
-    let gridApi = side === 'left' ? leftApi : rightApi,
+    let api = side === 'left' ? leftApi : rightApi,
         // do nothing if row is already in the grid, otherwise we would have duplicates
-        rowAlreadyInGrid = !!gridApi!.getRowNode(data.id),
+        rowAlreadyInGrid = !!api!.getRowNode(data.id),
         transaction;
 
     if (rowAlreadyInGrid) {
@@ -138,7 +142,7 @@ function addRecordToGrid(side: string, data: any) {
         add: [data],
     };
 
-    gridApi!.applyTransaction(transaction);
+    api!.applyTransaction(transaction);
 }
 
 function onFactoryButtonClick(e: any) {
@@ -160,11 +164,11 @@ function binDrop(data: any) {
         remove: [data],
     };
 
-    [leftApi, rightApi].forEach((gridApi) => {
-        const rowsInGrid = !!gridApi!.getRowNode(data.id);
+    [leftApi, rightApi].forEach((api) => {
+        const rowsInGrid = !!api!.getRowNode(data.id);
 
         if (rowsInGrid) {
-            gridApi!.applyTransaction(transaction);
+            api!.applyTransaction(transaction);
         }
     });
 }
@@ -195,8 +199,8 @@ function addBinZone(params: GridReadyEvent) {
 }
 
 function addGridDropZone(params: GridReadyEvent, side: string) {
-    const gridApi = (side === 'Left' ? leftApi : rightApi)!;
-    const dropZone = gridApi.getRowDropZoneParams();
+    const api = (side === 'Left' ? leftApi : rightApi)!;
+    const dropZone = api.getRowDropZoneParams();
 
     params.api.addRowDropZone(dropZone);
 }

@@ -3,11 +3,16 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, NumberEditorModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, NumberEditorModule]);
 
 const columnDefs: ColDef[] = [
     {

@@ -1,8 +1,8 @@
 import * as cheerio from 'cheerio';
 import ts from 'typescript';
 
-import { _ALL_EVENTS } from '../_copiedFromCore/eventTypes';
-import { _ALL_GRID_OPTIONS, _FUNCTION_GRID_OPTIONS } from '../_copiedFromCore/propertyKeys';
+import { _GET_ALL_EVENTS } from '../_copiedFromCore/eventTypes';
+import { _FUNCTION_GRID_OPTIONS, _GET_ALL_GRID_OPTIONS } from '../_copiedFromCore/propertyKeys';
 import type { GridOptionsType, InlineGridStyles, ParsedBindings } from '../types';
 import {
     extractClassDeclarations,
@@ -29,7 +29,7 @@ import {
 } from './parser-utils';
 
 export const templatePlaceholder = 'GRID_TEMPLATE_PLACEHOLDER';
-const PROPERTIES: any = _ALL_GRID_OPTIONS;
+const PROPERTIES: any = _GET_ALL_GRID_OPTIONS();
 const FUNCTION_PROPERTIES: any = _FUNCTION_GRID_OPTIONS;
 
 function tsNodeIsDocumentContentLoaded(node) {
@@ -41,7 +41,7 @@ function tsNodeIsDocumentContentLoaded(node) {
                 node.arguments[0].text === 'DOMContentLoaded'
             );
         }
-    } catch (e) {
+    } catch {
         console.error('We found something which we do not understand', node);
         if (tsNodeIsFunctionCall(node)) {
             return (
@@ -223,7 +223,22 @@ function internalParser(
                 /gridOptions/g,
                 'params'
             );
-            bindings.data = { url, callback };
+
+            // extract the numbers from data.slice(0, 600) when this is contained in the callback
+            const matches = callback.match(/data\.slice\((\d+), (\d+)\)/);
+            let totalRows = undefined;
+            if (matches) {
+                const [_, start, end] = matches;
+                if (start !== '0') {
+                    console.warn(
+                        'The start index of the data slice is not 0, this may cause issues with the totalRows calculation for example generation',
+                        examplePath
+                    );
+                }
+                totalRows = end;
+            }
+
+            bindings.data = { url, callback, totalRows };
         },
     });
 
@@ -237,7 +252,7 @@ function internalParser(
 
     // all onXXX will be handled here
     // note: gridOptions = { onGridSizeChanged = function() {}  handled below
-    _ALL_EVENTS.forEach((eventName) => {
+    _GET_ALL_EVENTS().forEach((eventName) => {
         const onEventName = 'on' + eventName.replace(/^\w/, (w) => w.toUpperCase());
         registered.push(onEventName);
 
@@ -253,7 +268,7 @@ function internalParser(
         });
     });
 
-    _ALL_EVENTS.forEach((eventName) => {
+    _GET_ALL_EVENTS().forEach((eventName) => {
         const onEventName = 'on' + eventName.replace(/^\w/, (w) => w.toUpperCase());
         tsGridOptionsCollectors.push({
             // onGridReady is handled separately
@@ -354,6 +369,10 @@ function internalParser(
     };
 
     const tsConvertFunctionsIntoStringsStr = (property: any): string => {
+        // Handle shorthand property syntax: { valueFormatter } is equivalent to { valueFormatter: valueFormatter }
+        if (ts.isShorthandPropertyAssignment(property)) {
+            return `${property.name.text}: 'AG_LITERAL_${property.name.text}'`;
+        }
         if (ts.isIdentifier(property.initializer)) {
             return `${property.name.text}: 'AG_LITERAL_${property.initializer.escapedText}'`;
         } else if (ts.isFunctionLike(property.initializer)) {
@@ -563,10 +582,11 @@ export function parser(
     gridOptionsTypes: Record<string, GridOptionsType>
 ) {
     const typedBindings = internalParser(examplePath, srcFile, true, gridOptionsTypes, html, providedExamples);
-    const bindings = internalParser(examplePath, srcFile, false, gridOptionsTypes, html, providedExamples);
-    // We need to copy the imports from the typed bindings to the non-typed bindings
-    bindings.imports = typedBindings.imports;
-    return { bindings, typedBindings };
+    // The untyped pass used to be parsed separately, doubling the TypeScript and cheerio work per
+    // example. Its only consumers read `imports` (which was copied from the typed bindings anyway)
+    // and `exampleName` (identical in both passes), and neither mutates what it reads - so the
+    // typed bindings serve both roles.
+    return { bindings: typedBindings, typedBindings };
 }
 
 export default parser;

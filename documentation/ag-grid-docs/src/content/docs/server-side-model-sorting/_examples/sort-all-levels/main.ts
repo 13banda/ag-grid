@@ -1,10 +1,15 @@
 import type { GridApi, GridOptions, IServerSideDatasource, IServerSideGetRowsParams } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
 import { FakeServer } from './fakeServer';
 
-ModuleRegistry.registerModules([ServerSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ServerSideRowModelModule, RowGroupingModule]);
 
 let gridApi: GridApi<IOlympicData>;
 const gridOptions: GridOptions<IOlympicData> = {
@@ -38,7 +43,7 @@ function getServerSideDatasource(server: any): IServerSideDatasource {
             // get data for request from our fake server
             const response = server.getData(params.request);
 
-            // simulating real server call with a 500ms delay
+            // simulating real server call with a 1000ms delay
             setTimeout(() => {
                 if (response.success) {
                     // supply rows for requested block to grid

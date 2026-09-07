@@ -8,7 +8,8 @@ const pipe =
         fns.reduce((v, f) => f(v), x);
 
 const ROOT_PACKAGE_JSON = '../../package.json';
-const packageDirectories = require(ROOT_PACKAGE_JSON).workspaces.packages;
+const packageDirectories = require(ROOT_PACKAGE_JSON).workspaces.packages.filter((d) => !d.startsWith('external/'));
+const SKIPPED_DEPS = new Set(['ag-grid-testing', 'ag-test-utils']);
 
 if (process.argv.length < 4) {
     console.log('Usage: node scripts/deployments/versionModules.js [Grid Version] [Charts Version]');
@@ -17,10 +18,16 @@ if (process.argv.length < 4) {
     process.exit(1);
 }
 
-const [exec, scriptPath, gridNewVersion, chartsDependencyVersion] = process.argv;
+const [exec, scriptPath, gridNewVersion, chartsDependencyVersion, environment] = process.argv;
 
-if (!gridNewVersion || !chartsDependencyVersion) {
-    console.error('ERROR: Invalid grid or charts version supplied');
+if (!gridNewVersion || !chartsDependencyVersion || !environment) {
+    console.error('ERROR: Invalid grid or charts version, or missing environment supplied');
+    console.error('node scripts/deployments/versionModules.js <grid version> <charts version> <environment>');
+    process.exit(1);
+}
+
+if (!['production', 'archive', 'local'].some((test) => environment === test)) {
+    console.error('ERROR: Invalid environment supplied. Must be one of: production|archive|local');
     process.exit(1);
 }
 
@@ -35,14 +42,46 @@ function main() {
 }
 
 function createRootEnvFiles() {
-    console.log('Creating Root Env Files');
+    console.log('Updating Root Env Files');
 
-    const data = `# Production Build
-BUILD_GRID_VERSION=${gridNewVersion}
-BUILD_CHARTS_VERSION=${chartsDependencyVersion}
-`;
-    fs.writeFileSync('./.env.production', data, 'utf-8');
-    fs.writeFileSync('./.env.archive', data, 'utf-8');
+    const envPath = './.env';
+    const updates = {
+        BUILD_GRID_VERSION: gridNewVersion,
+        BUILD_CHARTS_VERSION: chartsDependencyVersion,
+        ENV: environment,
+    };
+
+    let lines = [];
+    if (fs.existsSync(envPath)) {
+        lines = fs.readFileSync(envPath, 'utf-8').split('\n');
+    }
+
+    // Update existing keys or track which ones need appending
+    const updatedKeys = new Set();
+    lines = lines.map((line) => {
+        const match = line.match(/^([A-Z_][A-Z0-9_]*)=/);
+        if (match && match[1] in updates) {
+            updatedKeys.add(match[1]);
+            return `${match[1]}=${updates[match[1]]}`;
+        }
+        return line;
+    });
+
+    // Append any keys not already present
+    for (const [key, value] of Object.entries(updates)) {
+        if (!updatedKeys.has(key)) {
+            lines.push(`${key}=${value}`);
+        }
+    }
+
+    // Ensure header comment
+    if (!lines[0]?.startsWith('# Production Build')) {
+        lines.unshift('# Production Build');
+    }
+
+    // Ensure trailing newline
+    const content = lines.join('\n').replace(/\n*$/, '\n');
+    fs.writeFileSync(envPath, content, 'utf-8');
 }
 
 function updateAngularProject(CWD, packageDirectory) {
@@ -78,10 +117,14 @@ function updateRootPackageJson() {
     const packageJson = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
     packageJson.version = gridNewVersion;
 
-    fs.writeFileSync(resolvedPath, JSON.stringify(packageJson, null, 2), 'utf8');
+    fs.writeFileSync(resolvedPath, JSON.stringify(packageJson, null, 2));
+    fs.appendFileSync(resolvedPath, '\n');
 }
 
 function updateFileWithNewVersions(currentFile) {
+    if (!fs.existsSync(currentFile)) {
+        return;
+    }
     const packageJson = JSON.parse(fs.readFileSync(currentFile, 'utf8'));
 
     const updatedPackageJson = pipe(
@@ -92,7 +135,8 @@ function updateFileWithNewVersions(currentFile) {
         updateOptionalDependencies
     )(packageJson);
 
-    fs.writeFileSync(currentFile, JSON.stringify(updatedPackageJson, null, 2), 'utf8');
+    fs.writeFileSync(currentFile, JSON.stringify(updatedPackageJson, null, 2));
+    fs.appendFileSync(currentFile, '\n');
 }
 
 /**
@@ -108,7 +152,7 @@ function updateVersionFile(currentFile) {
         const substitute = `$1 '${gridNewVersion}';`;
         const replacement = contents.replace(regex, substitute);
 
-        fs.writeFileSync(currentFile, replacement, 'utf8');
+        fs.writeFileSync(currentFile, replacement);
     });
 }
 
@@ -140,14 +184,14 @@ function updateDependency(fileContents, property, dependencyVersion, chartsDepen
     const dependencyContents = fileContents[property];
 
     const gridDependency = function (key) {
-        return key.startsWith('ag-grid') || key.startsWith('@ag-grid');
+        return key.startsWith('ag-grid') || key.startsWith('@ag-grid') || key === 'ag-stack';
     };
     const chartDependency = function (key) {
         return key.startsWith('ag-charts') || key.startsWith('@ag-charts');
     };
     Object.entries(dependencyContents)
         .filter(([key, value]) => gridDependency(key) || chartDependency(key))
-        .filter(([key, value]) => key !== 'ag-grid-testing')
+        .filter(([key, value]) => !SKIPPED_DEPS.has(key))
         .forEach(([key, value]) => {
             if (chartsDependencyVersion) {
                 dependencyContents[key] = chartDependency(key) ? chartsDependencyVersion : dependencyVersion;

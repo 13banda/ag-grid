@@ -1,11 +1,12 @@
+import { _escapeString } from 'ag-stack';
+
 import type { AgColumn, RowHeightCallbackParams, XmlElement } from 'ag-grid-community';
-import { _escapeString } from 'ag-grid-community';
 
 import { INCH_TO_EMU } from './excelConstants';
 import type { ExcelCalculatedImage } from './excelInterfaces';
 import { createXml, createXmlHeader } from './xmlFactory';
 
-export const pointsToPixel = (points: number): number => {
+const pointsToPixel = (points: number): number => {
     return Math.round((points * 96) / 72);
 };
 
@@ -37,8 +38,7 @@ export const getHeightFromProperty = (
     if (typeof height === 'number') {
         finalHeight = height;
     } else {
-        // eslint-disable-next-line @typescript-eslint/ban-types
-        const heightFunc = height as Function;
+        const heightFunc = height as (params: { rowIndex: number }) => number;
         finalHeight = heightFunc({ rowIndex });
     }
 
@@ -135,6 +135,10 @@ export const getExcelColumnName = (colIdx: number): string => {
     return getExcelColumnName(pos) + fromCharCode(startCode + tableIdx - 1);
 };
 
+export const sanitizeTableName = (name: string): string => {
+    return name.replaceAll('\n', '_x000a_');
+};
+
 export const replaceInvisibleCharacters = (str: string | null): string | null => {
     if (str == null) {
         return null;
@@ -166,7 +170,7 @@ export const buildSharedString = (strMap: Map<string, number>): XmlElement[] => 
 
         const child: XmlElement = {
             name: 't',
-            textNode: _escapeString(replaceInvisibleCharacters(textNode), false),
+            textNode: _escapeString(replaceInvisibleCharacters(textNode)),
         };
 
         // if we have leading or trailing spaces, instruct Excel not to trim them

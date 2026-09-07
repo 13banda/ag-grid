@@ -6,9 +6,9 @@ import type { PropertyType } from '../types';
 const TYPE_LINKS: Record<string, string> = {
     AgChartTheme: './integrated-charts-customisation/#custom-chart-themes',
     AgChartThemeName: './integrated-charts-customisation/#provided-themes',
-    AgChartThemeDefinition: 'https://ag-grid.com/charts/themes-api',
-    AgChartThemeOverrides: 'https://ag-grid.com/charts/themes-api/#reference-AgChartTheme-overrides',
-    AgChartThemePalette: 'https://ag-grid.com/charts/themes-api/#reference-AgChartTheme-palette',
+    AgChartThemeDefinition: 'https://www.ag-grid.com/charts/themes-api/',
+    AgChartThemeOverrides: 'https://www.ag-grid.com/charts/themes-api/#reference-AgChartTheme-overrides',
+    AgChartThemePalette: 'https://www.ag-grid.com/charts/themes-api/#reference-AgChartTheme-palette',
     AgCartesianChartOptions: './integrated-charts-customisation/#overriding-themes',
     AgCartesianAxesTheme: './integrated-charts-customisation/#overriding-themes',
     AgCartesianSeriesTheme: './integrated-charts-customisation/#overriding-themes',
@@ -29,7 +29,7 @@ const TYPE_LINKS: Record<string, string> = {
     ColGroupDef: './column-properties/#reference-columnGroups',
     AbstractColDef: './column-properties/',
     ColumnGroup: './column-object-group/',
-    ProvidedColumnGroup: './column-object-group#reference-ProvidedColumnGroup',
+    ProvidedColumnGroup: './column-object-group/#reference-ProvidedColumnGroup',
     Column: './column-object/',
     ColumnEventType: './column-events/',
     CreatePivotChartParams: './integrated-charts-api-pivot-chart/#pivot-chart-api',
@@ -61,6 +61,7 @@ const TYPE_LINKS: Record<string, string> = {
     ExcelSheetPageSetup: './excel-export-api/#excelsheetpagesetup',
     ExcelSheetMargin: './excel-export-api/#excelsheetmargin',
     ExcelTableConfig: './excel-export-api/#exceltableconfig',
+    PdfExportParams: './pdf-export-api/#pdfexportparams',
     GridApi: './grid-api/',
     GridOptions: './grid-options/',
     AgPublicEventType: './grid-events/',
@@ -80,6 +81,9 @@ const TYPE_LINKS: Record<string, string> = {
     IRowNode: './row-object/',
     ServerSideTransaction: './server-side-model-transactions/#transaction-api',
     Touch: 'https://developer.mozilla.org/en-US/docs/Web/API/Touch',
+    TData: './typescript-generics/#row-data-tdata',
+    TContext: './typescript-generics/#context-tcontext',
+    TValue: './typescript-generics/#cell-value-tvalue',
 } as const;
 
 export function getTypeLink(type: string | PropertyType | undefined) {

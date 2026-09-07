@@ -1,16 +1,14 @@
 import type { Path } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { createPolarPaths } from '../miniChartHelpers';
 import { MiniChartWithPolarAxes } from '../miniChartWithPolarAxes';
 
-export class MiniRadarArea extends MiniChartWithPolarAxes {
-    static chartType: ChartType = 'radarArea';
+export class MiniRadarAreaClass extends MiniChartWithPolarAxes {
     private readonly areas: Path[];
 
-    private data = [
+    private readonly data = [
         [8, 10, 5, 7, 4, 1, 5, 8],
         [1, 1, 2, 7, 7, 8, 10, 1],
         [4, 5, 9, 9, 4, 2, 3, 4],
@@ -37,3 +35,8 @@ export class MiniRadarArea extends MiniChartWithPolarAxes {
         });
     }
 }
+
+export const MiniRadarArea: MiniChartSelector = {
+    chartType: 'radarArea',
+    miniChart: MiniRadarAreaClass,
+};

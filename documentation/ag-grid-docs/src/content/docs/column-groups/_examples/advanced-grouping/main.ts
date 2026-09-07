@@ -4,16 +4,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    TextFilterModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, TextFilterModule, NumberFilterModule]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
     {
@@ -146,7 +146,6 @@ let gridApi: GridApi<IOlympicData>;
 const gridOptions: GridOptions<IOlympicData> = {
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
     defaultColGroupDef: { headerClass: headerClassFunc },
     defaultColDef: {
         headerClass: headerClassFunc,

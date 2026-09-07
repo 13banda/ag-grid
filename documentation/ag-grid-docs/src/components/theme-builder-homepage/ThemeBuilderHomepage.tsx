@@ -1,5 +1,5 @@
+import { ShadowDom } from '@ag-website-shared/components/ShadowDom';
 import { Snippet } from '@ag-website-shared/components/snippet/Snippet';
-import { ShadowDom } from '@components/ShadowDom';
 import { useDarkmode } from '@utils/hooks/useDarkmode';
 import React, { useMemo, useState } from 'react';
 
@@ -186,7 +186,11 @@ export const ThemeBuilderHomepage: React.FC<Props> = ({ gridHeight = null }) => 
                     className={`${styles.grid} ${gridHeight ? '' : styles.gridHeight}`}
                 >
                     <ShadowDom>
-                        <div style={{ height: '100%' }} data-ag-theme-mode={isDarkMode ? 'dark-blue' : 'light'}>
+                        <div
+                            className="ag-theme-mode"
+                            style={{ height: '100%' }}
+                            data-ag-theme-mode={isDarkMode ? 'dark-blue' : 'light'}
+                        >
                             <AgGridReact
                                 theme={theme}
                                 columnDefs={columnDefs}
@@ -197,7 +201,7 @@ export const ThemeBuilderHomepage: React.FC<Props> = ({ gridHeight = null }) => 
                     </ShadowDom>
                 </div>
 
-                <div className={`${styles.codeBlockWrapper} code-block-homepage`}>
+                <div className={styles.codeBlockWrapper}>
                     <div className={styles.windowControls}>
                         <div className={styles.dot}></div>
                         <div className={styles.dot}></div>

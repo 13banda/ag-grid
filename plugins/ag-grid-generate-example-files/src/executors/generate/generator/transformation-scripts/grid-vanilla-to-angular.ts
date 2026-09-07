@@ -7,12 +7,15 @@ import {
     addBindingImports,
     addGenericInterfaceImport,
     addLicenseManager,
+    convertFunctionToProperty,
     findLocaleImport,
+    getEnableAGTestIdLogic,
     getIntegratedDarkModeCode,
     getPropertyInterfaces,
     handleRowGenericInterface,
     isInstanceMethod,
     preferParamsApi,
+    removeCreateGridImport,
     removeFunctionKeyword,
     replaceGridReadyRowData,
 } from './parser-utils';
@@ -25,8 +28,7 @@ function getOnGridReadyCode(
     readyCode: string,
     data: { url: string; callback: string },
     rowDataType: string | undefined,
-    hasApi: boolean,
-    exampleName: string
+    hasApi: boolean
 ): string {
     const additionalLines = [];
 
@@ -47,7 +49,6 @@ function getOnGridReadyCode(
         );
         return `
         onGridReady(params: GridReadyEvent${gridReadyEventParam}) {
-            ${getIntegratedDarkModeCode(exampleName, true)} 
             ${hasApi ? 'this.gridApi = params.api;' : ''}${additional}
         }`;
     } else {
@@ -83,7 +84,10 @@ function addModuleImports(
         addBindingImports(bImports, imports, true);
     }
 
+    imports.push(getEnableAGTestIdLogic());
+
     if (bindings.moduleRegistration) {
+        imports.push('\n');
         imports.push(bindings.moduleRegistration);
     }
 
@@ -99,12 +103,12 @@ function getImports(
     const imports = ["import { Component } from '@angular/core';"];
 
     if (bindings.data) {
-        imports.push("import { HttpClient, HttpClientModule } from '@angular/common/http';");
+        imports.push("import { HttpClient } from '@angular/common/http';");
     }
 
     const localeImport = findLocaleImport(bindings.imports);
     if (localeImport) {
-        imports.push(`import { ${localeImport.imports[0]} } from '@ag-grid-community/locale';`);
+        imports.push(`import { ${localeImport.imports.join(', ')} } from '@ag-grid-community/locale';`);
     }
 
     addModuleImports(imports, bindings, exampleConfig, allStylesheets);
@@ -115,7 +119,7 @@ function getImports(
 
     addGenericInterfaceImport(imports, bindings.tData, bindings);
 
-    return imports;
+    return removeCreateGridImport(imports);
 }
 
 function getTemplate(bindings: ParsedBindings, exampleConfig: ExampleConfig, attributes: string[]): string {
@@ -152,7 +156,7 @@ export function vanillaToAngular(
         diParams.push('private http: HttpClient');
     }
 
-    const instanceMethods = bindings.instanceMethods.map(removeFunctionKeyword);
+    const instanceMethods = bindings.instanceMethods.map(convertFunctionToProperty);
 
     const eventHandlers = bindings.eventHandlers.map((event) => event.handler).map(removeFunctionKeyword);
     const externalEventHandlers = bindings.externalEventHandlers.map((handler) => removeFunctionKeyword(handler.body));
@@ -186,8 +190,10 @@ export function vanillaToAngular(
             propertyAttributes.push('[rowData]="rowData"');
         }
 
-        if (!propertyAssignments.find((item) => item.indexOf('rowData') >= 0)) {
-            propertyAssignments.push(`public rowData!: ${rowDataType}[];`);
+        if (
+            !propertyAssignments.find((item) => item.replace(/setGridOption\('rowData'/g, '').indexOf('rowData') >= 0)
+        ) {
+            propertyAssignments.push(`rowData!: ${rowDataType}[];`);
         }
 
         const componentForCheckBody = eventHandlers
@@ -197,41 +203,26 @@ export function vanillaToAngular(
             .join('\n\n');
 
         const hasGridApi = componentForCheckBody.includes('gridApi');
-        const gridReadyCode = getOnGridReadyCode(
-            bindings.onGridReady,
-            data,
-            rowDataType,
-            hasGridApi,
-            bindings.exampleName
-        );
+        const gridReadyCode = getOnGridReadyCode(bindings.onGridReady, data, rowDataType, hasGridApi);
         const additional = [];
-        let darkModeWithGridRef = undefined;
         if (gridReadyCode) {
             additional.push(gridReadyCode);
-        } else {
-            if (bindings.exampleName.includes('sparklines')) {
-                // TEMPORARY ONLY APPLY TO SPARKLINES EXAMPLES
+        }
 
-                darkModeWithGridRef = getIntegratedDarkModeCode(bindings.exampleName, true, 'grid?.api');
-                const angularImportIdx = imports.findIndex((i) => i.includes('Component'));
-                if (darkModeWithGridRef) {
-                    // wrap in useEffect
-                    darkModeWithGridRef = darkModeWithGridRef.replace(
-                        DARK_INTEGRATED_START,
-                        `${DARK_INTEGRATED_START} 
+        let darkModeWithGridRef = getIntegratedDarkModeCode(bindings.exampleName, true, 'grid?.api');
+        const angularImportIdx = imports.findIndex((i) => i.includes('Component'));
+        if (darkModeWithGridRef) {
+            darkModeWithGridRef = darkModeWithGridRef.replace(
+                DARK_INTEGRATED_START,
+                `${DARK_INTEGRATED_START} 
                         @ViewChild(AgGridAngular)
                         set agGrid(grid){
                             `
-                    );
-                    darkModeWithGridRef = darkModeWithGridRef.replace(DARK_INTEGRATED_END, `} ${DARK_INTEGRATED_END}`);
+            );
+            darkModeWithGridRef = darkModeWithGridRef.replace(DARK_INTEGRATED_END, `} ${DARK_INTEGRATED_END}`);
 
-                    if (!imports[angularImportIdx].includes('ViewChild')) {
-                        imports[angularImportIdx] = imports[angularImportIdx].replace(
-                            'Component',
-                            'Component, ViewChild'
-                        );
-                    }
-                }
+            if (!imports[angularImportIdx].includes('ViewChild')) {
+                imports[angularImportIdx] = imports[angularImportIdx].replace('Component', 'Component, ViewChild');
             }
         }
 
@@ -252,9 +243,6 @@ export function vanillaToAngular(
             .replace(/(?<!this.)gridApi(\??)(!?)/g, 'this.gridApi');
 
         const standaloneImports = ['AgGridAngular'];
-        if (bindings.data) {
-            standaloneImports.push('HttpClientModule');
-        }
 
         if (componentFileNames) {
             componentFileNames.forEach((filename) => {

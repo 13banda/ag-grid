@@ -1,8 +1,13 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, themeQuartz } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations, themeQuartz } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const myTheme = themeQuartz.withParams({
     // color and style of border around selection
@@ -13,6 +18,10 @@ const myTheme = themeQuartz.withParams({
     rangeSelectionBackgroundColor: 'rgb(255, 0, 128, 0.1)',
     // color used to indicate that data has been copied form the cell range
     rangeSelectionHighlightColor: 'rgb(60, 188, 0, 0.3)',
+
+    // alternating row colors will be visible through the semi-transparent
+    // selection background color
+    oddRowBackgroundColor: '#8881',
 });
 
 let gridApi: GridApi<IOlympicData>;

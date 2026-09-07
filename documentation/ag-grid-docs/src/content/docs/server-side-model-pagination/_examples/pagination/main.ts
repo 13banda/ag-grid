@@ -1,5 +1,5 @@
 import type { GridApi, GridOptions, IServerSideDatasource } from 'ag-grid-community';
-import { ModuleRegistry, PaginationModule, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, PaginationModule, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -9,13 +9,17 @@ import {
 
 import { FakeServer } from './fakeServer';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     PaginationModule,
     ColumnsToolPanelModule,
     ColumnMenuModule,
     ContextMenuModule,
     ServerSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicDataWithId>;

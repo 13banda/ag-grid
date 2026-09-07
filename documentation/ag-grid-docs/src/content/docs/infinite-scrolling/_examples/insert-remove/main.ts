@@ -17,17 +17,16 @@ import {
     RowApiModule,
     RowStyleModule,
     ScrollApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    RowApiModule,
-    ScrollApiModule,
-    RowStyleModule,
-    InfiniteRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, ScrollApiModule, RowStyleModule, InfiniteRowModelModule]);
 
 const valueFormatter = function (params: ValueFormatterParams) {
     if (typeof params.value === 'number') {

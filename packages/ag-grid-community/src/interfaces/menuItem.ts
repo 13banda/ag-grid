@@ -1,6 +1,7 @@
+import type { IComponent } from 'ag-stack';
+
 import type { IMenuActionParams } from './iCallbackParams';
 import type { AgGridCommon } from './iCommon';
-import type { IComponent } from './iComponent';
 
 export interface MenuItemLeafDef<TData = any, TContext = any> {
     /** Name of the menu item. */
@@ -35,6 +36,11 @@ export interface MenuItemDef<TData = any, TContext = any> extends MenuItemLeafDe
      * If this item is a sub menu, contains a list of menu item definitions */
     subMenu?: (MenuItemDef<TData, TContext> | string)[];
     /**
+     * The aria role for the subMenu
+     * @default 'menu'
+     */
+    subMenuRole?: 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog';
+    /**
      * Provide a custom menu item component.
      * See [Menu Item Component](https://www.ag-grid.com/javascript-data-grid/component-menu-item/#implementing-a-menu-item-component) for framework specific implementation details.
      */
@@ -58,8 +64,8 @@ export interface IMenuConfigParams {
     /** Suppress handling of mouse down events. */
     suppressMouseDown?: boolean;
     /**
-     * Suppress handling of mouseenter and mouseleave events, If `true`,
-     * The grid will no longer update the active status of the menu item or open sub menus.
+     * Suppress handling of mouseenter and mouseleave events. If `true`,
+     * the grid will no longer update the active status of the menu item or open sub menus.
      */
     suppressMouseOver?: boolean;
     /**
@@ -141,15 +147,19 @@ export interface IMenuItem extends BaseMenuItem {
 }
 
 export interface IMenuItemComp<TData = any, TContext = any>
-    extends IComponent<IMenuItemParams<TData, TContext>>,
-        IMenuItem {}
+    extends IComponent<IMenuItemParams<TData, TContext>>, IMenuItem {}
 
 export type DefaultMenuItem =
     | 'pinSubMenu'
     | 'pinLeft'
     | 'pinRight'
+    | 'pinRowSubMenu'
+    | 'pinTop'
+    | 'pinBottom'
+    | 'unpinRow'
     | 'clearPinned'
     | 'valueAggSubMenu'
+    | 'showValuesAsSubMenu'
     | 'autoSizeThis'
     | 'autoSizeAll'
     | 'rowGroup'
@@ -162,15 +172,37 @@ export type DefaultMenuItem =
     | 'copyWithGroupHeaders'
     | 'cut'
     | 'paste'
+    | 'note'
     | 'export'
     | 'csvExport'
     | 'excelExport'
+    | 'pdfExport'
     | 'separator'
     | 'pivotChart'
     | 'chartRange'
     | 'columnFilter'
     | 'columnChooser'
+    | 'calculatedColumn'
+    | 'editCalculatedColumn'
+    | 'removeCalculatedColumn'
+    | 'editColumnName'
     | 'sortAscending'
     | 'sortDescending'
-    | 'sortUnSort'
-    | 'separator';
+    | 'sortAbsoluteAscending'
+    | 'sortAbsoluteDescending'
+    | 'sortUnSort';
+
+/**
+ * Built-in menu items for the Columns Tool Panel and Column Chooser right-click menu.
+ * The concrete item shown for a token depends on the column's current state (e.g. `rowGroup`
+ * renders "Group by" or "Un-Group by").
+ */
+export type DefaultToolPanelItem = 'scrollIntoView' | 'rowGroup' | 'value' | 'pivot';
+
+/**
+ * The complete set of built-in menu item tokens usable with `columnMenuItems` / `getColumnMenuItems`
+ * across the column menu, Columns Tool Panel and Column Chooser. Tokens are resolved per surface and
+ * per column state, so a token whose action does not apply to the current column or grid state (e.g.
+ * `pivot` outside pivot mode) is not shown.
+ */
+export type DefaultColumnMenuItem = DefaultMenuItem | DefaultToolPanelItem;

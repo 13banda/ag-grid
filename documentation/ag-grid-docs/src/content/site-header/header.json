@@ -1,0 +1,74 @@
+{
+    "header": {
+        "items": [
+            {
+                "title": "AG Charts",
+                "url": "https://www.ag-grid.com/charts/",
+                "isCollapsed": true
+            },
+            {
+                "title": "AG Studio",
+                "url": "https://www.ag-grid.com/studio/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Bryntum Gantt",
+                "url": "https://www.ag-grid.com/campaigns/bryntum-gantt/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Bryntum Scheduler",
+                "url": "https://www.ag-grid.com/campaigns/bryntum-scheduler/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Bryntum Scheduler Pro",
+                "url": "https://www.ag-grid.com/campaigns/bryntum-scheduler-pro/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Bryntum Calendar",
+                "url": "https://www.ag-grid.com/campaigns/bryntum-calendar/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Bryntum Task Board",
+                "url": "https://www.ag-grid.com/campaigns/bryntum-task-board/",
+                "isCollapsed": true
+            },
+            {
+                "title": "Demos",
+                "path": "/example"
+            },
+            {
+                "title": "Theme Builder",
+                "path": "/theme-builder"
+            },
+            {
+                "title": "Docs",
+                "path": "./getting-started"
+            },
+            {
+                "title": "API",
+                "path": "./reference"
+            },
+            {
+                "title": "Community",
+                "path": "/community"
+            },
+            {
+                "title": "Pricing",
+                "path": "/license-pricing"
+            },
+            {
+                "title": "Contact Us",
+                "path": "/contact/"
+            },
+            {
+                "title": "GitHub",
+                "url": "https://github.com/ag-grid/ag-grid",
+                "icon": "github"
+            }
+        ]
+    }
+}

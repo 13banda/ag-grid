@@ -1,0 +1,259 @@
+name: Security
+
+on:
+    workflow_dispatch:
+      inputs:
+        notify:
+          description: 'Notify Slack channel'
+          type: boolean
+          default: false
+          required: true
+        force_jira_ticket:
+          description: 'Force create a Jira ticket even if the run is not scheduled'
+          type: boolean
+          default: false
+          required: true
+    schedule:
+        - cron: '0 0 * * 0' # Weekly at 0
+permissions:
+  contents: read
+
+env:
+    OUTPUT_DIR: test-results/
+    REPORT_FILE: report.json
+    SNYK_FILE: snyk.json
+    PREV_COMMIT_SHA_FILE: ./commit-sha.txt
+    REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+    SLACK_CHANNEL: '#ci-grid-gate'
+    AG_LIBRARY: grid
+
+jobs:
+    # TODO: Re-enable rulesync-integrity job once rulesync issues are resolved
+    # rulesync-integrity:
+    #     name: Rulesync Integrity Check
+    #     runs-on: ubuntu-latest
+    #     steps:
+    #         - name: Checkout
+    #           uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    #           with:
+    #               fetch-depth: 1
+    #
+    #         - name: Setup Node
+    #           uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    #           with:
+    #               node-version-file: '.nvmrc'
+    #               cache: 'yarn'
+    #
+    #         - name: Install dependencies
+    #           run: yarn install --frozen-lockfile
+    #
+    #         - name: Verify Rulesync Integrity (Claude Code)
+    #           id: rulesync-claudecode
+    #           run: ./external/ag-shared/scripts/setup-prompts/verify-rulesync.sh . claudecode
+    #
+    #         - name: Verify Rulesync Integrity (Codex CLI)
+    #           id: rulesync-codexcli
+    #           run: ./external/ag-shared/scripts/setup-prompts/verify-rulesync.sh . codexcli
+
+    determine-threshold:
+        runs-on: ubuntu-latest
+        outputs:
+            severity: ${{ steps.set-threshold.outputs.severity }}
+        steps:
+            - name: Set severity threshold based on trigger and day of week
+              id: set-threshold
+              env:
+                  EVENT_NAME: ${{ github.event_name }}
+              run: |
+                  if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+                    echo "Manual run: using 'high' severity threshold (critical + high)"
+                    echo "severity=high" >> "$GITHUB_OUTPUT"
+                  else
+                    DAY=$(date -u +%u)
+                    if [ "$DAY" -ge 6 ]; then
+                      echo "Weekend run: using 'high' severity threshold (critical + high)"
+                      echo "severity=high" >> "$GITHUB_OUTPUT"
+                    else
+                      echo "Weekday run: using 'critical' severity threshold (critical only)"
+                      echo "severity=critical" >> "$GITHUB_OUTPUT"
+                    fi
+                  fi
+
+    code-dependency-scan:
+        needs: [determine-threshold]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              id: checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+
+            - name: Snyk scan workspaces
+              id: snyk-scan-workspaces
+              uses: ./external/ag-shared/github/actions/snyk-scan-workspaces
+              continue-on-error: true
+              with:
+                  snyk_token: ${{ secrets.SNYK_TOKEN }}
+                  severity_threshold: ${{ needs.determine-threshold.outputs.severity }}
+                  remote_repo_url: ${{env.REPO_URL}}
+                  output_dir: ${{ env.OUTPUT_DIR }}
+                  report_file: ${{ env.REPORT_FILE }}
+                  snyk_file: ${{ env.SNYK_FILE }}
+
+            - name: Publish CTRF Report
+              uses: ctrf-io/github-test-reporter@e500b992f936420eb633c91644cf10d4d71df700 # v1.1.0
+              if: always()
+              with:
+                report-path: '${{ env.OUTPUT_DIR }}${{ env.REPORT_FILE }}'
+
+            - name: Persist scan results
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: code-dependency-scan
+                  path: ${{ env.OUTPUT_DIR }}
+
+            - name: Fail job if scan failed
+              shell: bash
+              if: success() && steps.snyk-scan-workspaces.outcome == 'failure'
+              run: |
+                  echo "Workflow failed, failing the build."
+                  exit 1
+
+    sast-code-scan:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              id: checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+
+            - name: Snyk code scan
+              id: snyk-code-scan
+              uses: ./external/ag-shared/github/actions/snyk-code-scan
+              continue-on-error: true
+              with:
+                  snyk_token: ${{ secrets.SNYK_TOKEN }}
+                  severity_threshold: high
+                  output_dir: ${{ env.OUTPUT_DIR }}
+                  report_file: ${{ env.REPORT_FILE }}
+
+            - name: Persist scan results
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: sast-code-scan
+                  path: ${{ env.OUTPUT_DIR }}
+
+            - name: Fail job if scan failed
+              shell: bash
+              if: success() && steps.snyk-code-scan.outcome == 'failure'
+              run: |
+                  echo "Workflow failed, failing the build."
+                  exit 1
+
+    combine-scan-results:
+      needs: [code-dependency-scan, sast-code-scan]
+      runs-on: ubuntu-latest
+      if: ${{ always() }}
+      steps:
+        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          with:
+            fetch-depth: 1
+
+        - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+          with:
+            path: ${{ env.OUTPUT_DIR }}
+
+        - name: Combine reports
+          uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+          if: ${{ github.event_name == 'schedule' || inputs.notify }}
+          with:
+            script: |
+              const fs = require('fs');
+              const path = require('path');
+              // read all json files nested under ${{ env.OUTPUT_DIR }}/**/${{ env.REPORT_FILE }} 
+              const files = fs.readdirSync('${{ env.OUTPUT_DIR }}', { withFileTypes: true })
+                .flatMap(dir => {
+                  if (dir.isDirectory()) {
+                    return fs.readdirSync(path.join('${{ env.OUTPUT_DIR }}', dir.name))
+                      .filter(file => file === '${{ env.REPORT_FILE }}')
+                      .map(file => path.join('${{ env.OUTPUT_DIR }}', dir.name, file));
+                  } 
+                  if (dir.isFile() && dir.name === '${{ env.REPORT_FILE }}') {
+                    return [path.join('${{ env.OUTPUT_DIR }}', dir.name)];
+                  }
+                  return [];
+                });
+              const report = { results: { summary: { failed: 0, passed: 0, skipped: 0 } } };
+              for (const file of files) {
+                  if (fs.existsSync(file)) {
+                    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+                    report.results.summary.failed += data.results.summary.failed || 0;
+                    report.results.summary.passed += data.results.summary.passed || 0;
+                    report.results.summary.skipped += data.results.summary.skipped || 0;
+                  }
+              }
+
+              fs.writeFileSync('${{ env.REPORT_FILE }}', JSON.stringify(report));
+
+        - name: Get previous run commit SHA
+          id: prev-commit-sha
+          uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          with:
+            restore-keys: |
+              security-prev-commit-
+              security-prev-commit-${{ github.ref }}
+            path: ${{ env.PREV_COMMIT_SHA_FILE }}
+            key: security-prev-commit-${{ github.ref }}-${{ github.sha }}
+
+        - name: Load files into environment
+          continue-on-error: true
+          run: |
+            if [ -f ${{ env.PREV_COMMIT_SHA_FILE }} ]; then
+            {
+               echo 'PREV_COMMIT_SHA<<EOF'
+               cat ${{ env.PREV_COMMIT_SHA_FILE }}
+               echo 'EOF'
+            } >> $GITHUB_ENV
+            else
+              echo 'PREV_COMMIT_SHA_FILE not found'
+            fi
+
+        - name: Slack Notification
+          if: ${{ github.event_name == 'schedule' || inputs.notify }}
+          continue-on-error: true
+          uses: ./external/ag-shared/github/actions/slack-integration
+          with:
+              AG_LIBRARY: ${{ env.AG_LIBRARY }}
+              CTRF_REPORT_FILE: ${{ env.REPORT_FILE }}
+              SLACK_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_OAUTH_TOKEN }}
+              SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+              PREV_COMMIT_SHA: ${{ env.PREV_COMMIT_SHA }}
+              CURRENT_COMMIT_SHA: ${{ github.sha }}
+              IS_SUCCESS: ${{ needs.code-dependency-scan.result != 'failure' && needs.sast-code-scan.result != 'failure' }}
+
+        - name: Create Jira Ticket
+          uses: ./.github/actions/jira-integration
+          continue-on-error: true
+          if: ${{ github.event_name == 'schedule' || inputs.force_jira_ticket }}
+          with:
+            JIRA_API_AUTH: ${{ secrets.JIRA_API_AUTH }}
+            JIRA_SUMMARY: "[NR] CI/CD workflow '${{ github.workflow }}' is failing."
+            CTRF_REPORT_FILE: ${{ env.REPORT_FILE }}
+            IS_SUCCESS: ${{ needs.code-dependency-scan.result != 'failure' && needs.sast-code-scan.result != 'failure' }}
+            PREV_COMMIT_SHA: ${{ env.PREV_COMMIT_SHA }}
+            CURRENT_COMMIT_SHA: ${{ github.sha }}
+
+        - name: Set commit SHA
+          id: set-commit-sha
+          run: echo ${{ github.sha }} > ${{ env.PREV_COMMIT_SHA_FILE }}
+
+        - name: Save Current Commit Hash
+          uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          with:
+            path: ${{ env.PREV_COMMIT_SHA_FILE }}
+            key: ${{ steps.prev-commit-sha.outputs.cache-primary-key }}
+

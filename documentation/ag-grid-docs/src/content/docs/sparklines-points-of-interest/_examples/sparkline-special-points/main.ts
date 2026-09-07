@@ -2,15 +2,21 @@ import type { AgSparklineOptions } from 'ag-charts-community';
 import { AgChartsCommunityModule } from 'ag-charts-community';
 
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
-import { SparklinesModule } from 'ag-grid-enterprise';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
+import { ClipboardModule, ContextMenuModule, SparklinesModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     SparklinesModule.with(AgChartsCommunityModule),
-    ValidationModule /* Development Only */,
+    ClipboardModule,
+    ContextMenuModule,
 ]);
 
 const palette = {

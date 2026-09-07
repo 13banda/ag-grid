@@ -2,12 +2,13 @@
 title: "Row Grouping - Expanding Groups"
 enterprise: true
 ---
+
 Configure the initial expanded group row state when using Tree Data.
 
 ## Expanding by Group Level
 
 When providing a hierarchy, all levels will default to a collapsed state. This can be configured by setting the `groupDefaultExpanded`
-grid option, providing a number will expand all groups down to that level, or providing -1 will expand all groups.
+grid option. Providing a number will expand all groups down to that level, or providing -1 will expand all groups.
 
 {% gridExampleRunner title="Group Default Expanded" name="group-default-expanded" /%}
 
@@ -69,8 +70,12 @@ In the example below, if you expand a group at the bottom, the grid will scroll 
 
 ## API
 
+{% note %}
+The row group expansion state can be saved and restored as part of [Grid State](./grid-state/).
+{% /note %}
+
 The grid exposes API methods to expand or collapse groups programmatically.
-{% apiDocumentation source="grid-api/api.json" section="rowExpansion" names=["setRowNodeExpanded", "expandAll", "collapseAll"] /%}
+{% apiDocumentation source="grid-api/api.json" section="rowExpansion" names=["setRowNodeExpanded", "expandAll", "collapseAll", "resetRowGroupExpansion"] /%}
 
 ### Expand Row Ancestors
 
@@ -89,7 +94,10 @@ const expandToRow = () => {
 }
 ```
 
+### Reset Group Expansion
 
-## Next Up
+After users have expanded or collapsed groups, `resetRowGroupExpansion()` discards all overrides and re-evaluates each group against the configured defaults (`groupDefaultExpanded` or `isGroupOpenByDefault`).
 
-Continue to the next section to learn about [Hierarchy Selection](./grouping-row-selection/).
+In the example below, the `isGroupOpenByDefault` callback expands the `Australia > 2004` path by default. Try expanding or collapsing groups, then click **Reset to Defaults** to restore the original expansion state.
+
+{% gridExampleRunner title="Reset Group Expansion" name="reset-group-expansion" /%}

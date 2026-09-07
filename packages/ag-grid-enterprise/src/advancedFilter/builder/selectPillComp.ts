@@ -1,34 +1,53 @@
-import type { RichSelectParams } from 'ag-grid-community';
-import {
-    AgInputTextFieldSelector,
-    _setAriaLabel,
-    _setAriaLabelledBy,
-    _stopPropagationForAgGrid,
-} from 'ag-grid-community';
+import { _getInnerWidth, _setAriaLabel, _setAriaLabelledBy } from 'ag-stack';
+
+import type { ElementParams, RichSelectParams } from 'ag-grid-community';
+import { AgInputTextFieldSelector, _stopPropagationForAgGrid } from 'ag-grid-community';
 
 import { AgRichSelect } from '../../widgets/agRichSelect';
 import type { AutocompleteEntry } from '../autocomplete/autocompleteParams';
 
-export interface SelectPillParams extends RichSelectParams<AutocompleteEntry> {
+interface SelectPillParams extends RichSelectParams<AutocompleteEntry> {
     getEditorParams: () => { values?: any[] };
     wrapperClassName: string;
     ariaLabel: string;
+    /** Caps how wide the picker may grow: wider than the builder itself and a dropdown reads as a second panel. */
+    eBuilder: HTMLElement;
+    maxPickerWidth?: number;
 }
 
+const SelectPillElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-picker-field ag-advanced-filter-builder-pill-wrapper',
+    role: 'presentation',
+    children: [
+        { tag: 'div', ref: 'eLabel' },
+        {
+            tag: 'div',
+            ref: 'eWrapper',
+            cls: 'ag-wrapper ag-advanced-filter-builder-pill ag-picker-collapsed',
+            children: [
+                {
+                    tag: 'div',
+                    ref: 'eDisplayField',
+                    cls: 'ag-picker-field-display ag-advanced-filter-builder-pill-display',
+                },
+                { tag: 'ag-input-text-field', ref: 'eInput', cls: 'ag-rich-select-field-input' },
+                {
+                    tag: 'span',
+                    ref: 'eDeselect',
+                    cls: 'ag-rich-select-deselect-button ag-picker-field-icon',
+                    role: 'presentation',
+                },
+                { tag: 'div', ref: 'eIcon', cls: 'ag-picker-field-icon', attrs: { 'aria-hidden': 'true' } },
+            ],
+        },
+    ],
+};
 export class SelectPillComp extends AgRichSelect<AutocompleteEntry> {
     constructor(private readonly params: SelectPillParams) {
         super({
             ...params,
-            template: /* html */ `
-                <div class="ag-picker-field ag-advanced-filter-builder-pill-wrapper" role="presentation">
-                    <div data-ref="eLabel"></div>
-                    <div data-ref="eWrapper" class="ag-wrapper ag-advanced-filter-builder-pill ag-picker-collapsed">
-                        <div data-ref="eDisplayField" class="ag-picker-field-display ag-advanced-filter-builder-pill-display"></div>
-                        <ag-input-text-field data-ref="eInput" class="ag-rich-select-field-input"></ag-input-text-field>
-                        <span data-ref="eDeselect" class="ag-rich-select-deselect-button ag-picker-field-icon" role="presentation"></span>
-                        <div data-ref="eIcon" class="ag-picker-field-icon" aria-hidden="true"></div>
-                    </div>
-                </div>`,
+            template: SelectPillElement,
             agComponents: [AgInputTextFieldSelector],
         });
     }
@@ -68,7 +87,29 @@ export class SelectPillComp extends AgRichSelect<AutocompleteEntry> {
             };
             this.value = value;
         }
-        return super.createPickerComponent();
+
+        const listComponent = super.createPickerComponent();
+        // Opening reseeds the picker's width from `minPickerWidth`, so both the cap and the arming are per-open.
+        const maxWidth = Math.min(this.params.maxPickerWidth ?? Infinity, _getInnerWidth(this.params.eBuilder));
+        listComponent.setContentWidthCallback((width) => this.growPickerToContent(width, maxWidth));
+        return listComponent;
+    }
+
+    /** The pill's width reflects the current value, not the options it lists, so size the picker from the rows. */
+    private growPickerToContent(width: number, maxWidth: number): boolean {
+        const ePicker = this.pickerComponent?.getGui();
+        if (!ePicker) {
+            return true; // nothing was measured, which is not the same as no room left
+        }
+
+        const target = Math.min(width, maxWidth);
+        // The seeded `min-width` is the floor, so reading it back is what keeps a narrower row from shrinking it.
+        if (target > parseFloat(ePicker.style.minWidth || '0')) {
+            ePicker.style.minWidth = `${target}px`;
+            this.alignPickerToComponent();
+        }
+
+        return target < maxWidth;
     }
 
     protected override onEnterKeyDown(event: KeyboardEvent): void {

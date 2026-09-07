@@ -1,5 +1,6 @@
-import { Markdoc, type Schema, nodes } from '@astrojs/markdoc/config';
+import { Markdoc, nodes } from '@astrojs/markdoc/config';
 import { agGridVersion } from '@constants';
+import type { Schema } from '@markdoc/markdoc';
 import { urlWithPrefix } from '@utils/urlWithPrefix';
 
 export const link: Schema = {
@@ -15,9 +16,10 @@ export const link: Schema = {
      * Transform markdoc links to add url prefix and framework to href
      */
     transform(node, config) {
-        const { framework } = config.variables;
+        const { framework } = config.variables ?? {};
         const children = node.transformChildren(config);
         const nodeAttributes = node.transformAttributes(config);
+        const hasCodeChild = node.children.some((child: { type: string }) => child.type === 'code');
 
         const hrefWithFramework = urlWithPrefix({ url: nodeAttributes.href, framework });
         // Replace markdoc variables, as markdoc does not parse attributes
@@ -27,6 +29,7 @@ export const link: Schema = {
             ...nodeAttributes,
             ...(nodeAttributes.isExternal ? { target: '_blank' } : undefined),
             href,
+            ...(hasCodeChild ? { class: 'meta-link' } : undefined),
         };
 
         return new Markdoc.Tag('a', attributes, children);

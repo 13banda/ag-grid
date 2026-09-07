@@ -1,3 +1,5 @@
+import type { AgGridCommon } from './iCommon';
+
 export interface ChartGroupsDef {
     // community chart groups
     columnGroup?: ('column' | 'stackedColumn' | 'normalizedColumn')[];
@@ -13,6 +15,7 @@ export interface ChartGroupsDef {
     statisticalGroup?: ('boxPlot' | 'histogram' | 'rangeBar' | 'rangeArea')[];
     hierarchicalGroup?: ('treemap' | 'sunburst')[];
     specializedGroup?: ('heatmap' | 'waterfall')[];
+    funnelGroup?: ('funnel' | 'coneFunnel' | 'pyramid')[];
 }
 
 export type ChartToolPanelName = 'settings' | 'data' | 'format';
@@ -117,12 +120,14 @@ export type ChartType =
     | 'rangeArea'
     | 'boxPlot'
     | 'treemap'
-    | 'sunburst'
     | 'heatmap'
     | 'waterfall'
     | 'columnLineCombo'
     | 'areaColumnCombo'
-    | 'customCombo';
+    | 'customCombo'
+    | 'funnel'
+    | 'coneFunnel'
+    | 'pyramid';
 
 export type ComboChartType = 'columnLineCombo' | 'areaColumnCombo' | 'customCombo';
 
@@ -136,3 +141,5 @@ export type DefaultChartMenuItem =
     | 'chartUnlink'
     | 'chartLink'
     | 'chartDownload';
+
+export interface GridChartContext<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {}

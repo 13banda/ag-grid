@@ -4,36 +4,32 @@ import type {
     AgChartThemeOverrides,
     AgChartThemePalette,
 } from 'ag-charts-types';
+import {
+    RefPlaceholder,
+    _clearElement,
+    _focusInto,
+    _getAbsoluteHeight,
+    _getAbsoluteWidth,
+    _removeFromParent,
+    _setDisplayed,
+} from 'ag-stack';
 
 import type {
     BeanCollection,
     ChartModel,
     ChartToolPanelName,
     ChartType,
-    Environment,
     FocusService,
     IAggFunc,
     PartialCellRange,
     PopupService,
     SeriesChartType,
+    SortModelItem,
     UpdateChartParams,
 } from 'ag-grid-community';
-import {
-    Component,
-    RefPlaceholder,
-    _clearElement,
-    _errMsg,
-    _focusGridInnerElement,
-    _focusInto,
-    _getAbsoluteHeight,
-    _getAbsoluteWidth,
-    _mergeDeep,
-    _removeFromParent,
-    _setDisplayed,
-    _warn,
-} from 'ag-grid-community';
+import { Component, _addGridCommonParams, _errMsg, _focusGridInnerElement, _mergeDeep } from 'ag-grid-community';
 
-import { AgDialog } from '../../widgets/agDialog';
+import { Dialog } from '../../widgets/dialog';
 import type { AgChartsExports } from '../agChartsExports';
 import type { CrossFilteringContext } from '../chartService';
 import { ChartController, DEFAULT_THEMES } from './chartController';
@@ -71,11 +67,13 @@ export interface GridChartParams {
     chartThemeOverrides?: AgChartThemeOverrides;
     unlinkChart?: boolean;
     crossFiltering?: boolean;
+    crossFilteringSort?: SortModelItem[] | boolean;
     crossFilteringContext: CrossFilteringContext;
     chartOptionsToRestore?: AgChartThemeOverrides;
     chartPaletteToRestore?: AgChartThemePalette;
     seriesChartTypes?: SeriesChartType[];
     crossFilteringResetCallback?: () => void;
+    useGroupColumnAsCategory?: boolean;
 }
 
 export class GridChartComp extends Component {
@@ -85,7 +83,6 @@ export class GridChartComp extends Component {
     private focusSvc: FocusService;
     private popupSvc: PopupService;
     private enterpriseChartProxyFactory?: EnterpriseChartProxyFactory;
-    private environment: Environment;
 
     public wireBeans(beans: BeanCollection): void {
         this.crossFilterService = beans.chartCrossFilterSvc as ChartCrossFilterService;
@@ -94,7 +91,6 @@ export class GridChartComp extends Component {
         this.focusSvc = beans.focusSvc;
         this.popupSvc = beans.popupSvc!;
         this.enterpriseChartProxyFactory = beans.enterpriseChartProxyFactory as EnterpriseChartProxyFactory;
-        this.environment = beans.environment;
     }
 
     private readonly eChart: HTMLElement = RefPlaceholder;
@@ -104,7 +100,7 @@ export class GridChartComp extends Component {
     private readonly eEmpty: HTMLElement = RefPlaceholder;
 
     private chartMenu: ChartMenu;
-    private chartDialog: AgDialog;
+    private chartDialog: Dialog;
 
     private chartController: ChartController;
     private chartOptionsService: ChartOptionsService;
@@ -117,7 +113,7 @@ export class GridChartComp extends Component {
     private readonly params: GridChartParams;
 
     // function to clean up the 'color-scheme-change' event listener
-    private onDestroyColorSchemeChangeListener: () => void;
+    private readonly onDestroyColorSchemeChangeListener: () => void;
 
     constructor(params: GridChartParams) {
         super(/* html */ `
@@ -141,10 +137,6 @@ export class GridChartComp extends Component {
             chartThemeName: this.getThemeName(),
         };
 
-        const isRtl = this.gos.get('enableRtl');
-
-        this.eWrapper.classList.add(isRtl ? 'ag-rtl' : 'ag-ltr');
-
         // only the chart controller interacts with the chart model
         const model = this.createBean(new ChartDataModel(modelParams));
         this.chartController = this.createManagedBean(new ChartController(model));
@@ -157,13 +149,6 @@ export class GridChartComp extends Component {
 
         if (this.params.insideDialog) {
             this.addDialog();
-        } else {
-            // don't add the theme if we're in a dialog, since dialogs already
-            // add a theme, and legacy themes don't like being applied twice
-            this.addManagedEventListeners({
-                gridStylesChanged: this.updateTheme.bind(this),
-            });
-            this.updateTheme();
         }
 
         this.addMenu();
@@ -178,10 +163,6 @@ export class GridChartComp extends Component {
 
         this.update();
         this.raiseChartCreatedEvent();
-    }
-
-    private updateTheme() {
-        this.environment.applyThemeClasses(this.getGui());
     }
 
     private createChart(): void {
@@ -200,41 +181,46 @@ export class GridChartComp extends Component {
             this.crossFilterService.filter(event, reset);
         };
 
-        const chartType = this.chartController.getChartType();
+        const { gos, chartController, beans, params, eChart } = this;
+        const chartType = chartController.getChartType();
         const chartProxyParams: ChartProxyParams = {
-            agChartsExports: this.beans.agChartsExports as AgChartsExports,
+            gridId: beans.context.getId(),
+            agChartsExports: beans.agChartsExports as AgChartsExports,
             chartType,
             chartInstance,
             getChartThemeName: this.getChartThemeName.bind(this),
             getChartThemes: this.getChartThemes.bind(this),
-            customChartThemes: this.gos.get('customChartThemes'),
+            customChartThemes: gos.get('customChartThemes'),
+            styleNonce: gos.get('styleNonce'),
             getGridOptionsChartThemeOverrides: () => this.getGridOptionsChartThemeOverrides(),
             getExtraPaddingDirections: () => this.chartMenu?.getExtraPaddingDirections() ?? [],
-            apiChartThemeOverrides: this.params.chartThemeOverrides,
-            crossFiltering: this.params.crossFiltering ?? false,
+            apiChartThemeOverrides: params.chartThemeOverrides,
+            crossFiltering: params.crossFiltering ?? false,
             crossFilterCallback,
-            parentElement: this.eChart,
-            grouping: this.chartController.isGrouping(),
-            chartThemeToRestore: this.params.chartThemeName,
-            chartOptionsToRestore: this.params.chartOptionsToRestore,
-            chartPaletteToRestore: this.params.chartPaletteToRestore,
-            seriesChartTypes: this.chartController.getSeriesChartTypes(),
+            parentElement: eChart,
+            grouping: chartController.isGrouping(),
+            chartThemeToRestore: params.chartThemeName,
+            chartOptionsToRestore: params.chartOptionsToRestore,
+            chartPaletteToRestore: params.chartPaletteToRestore,
+            seriesChartTypes: chartController.getSeriesChartTypes(),
             translate: (toTranslate: ChartTranslationKey) => this.chartTranslation.translate(toTranslate),
+            context: _addGridCommonParams(gos, {}),
+            enableRtl: gos.get('enableRtl'),
         };
 
         // ensure 'restoring' options are not reused when switching chart types
-        this.params.chartOptionsToRestore = undefined;
+        params.chartOptionsToRestore = undefined;
 
         // set local state used to detect when chart changes
         this.chartType = chartType;
 
         this.chartProxy = this.createChartProxy(chartProxyParams);
         if (!this.chartProxy) {
-            _warn(138, { chartType: chartProxyParams.chartType });
+            this.beans.log.warn(138, { chartType: chartProxyParams.chartType });
             return;
         }
 
-        this.chartController.setChartProxy(this.chartProxy);
+        chartController.setChartProxy(this.chartProxy);
         this.createMenuContext();
     }
 
@@ -316,7 +302,7 @@ export class GridChartComp extends Component {
             ? () => setTimeout(() => _focusInto(this.getGui()))
             : undefined;
 
-        this.chartDialog = new AgDialog({
+        this.chartDialog = new Dialog({
             resizable: true,
             movable: true,
             maximizable: true,
@@ -402,7 +388,7 @@ export class GridChartComp extends Component {
                       const targetChartType = updatedChartType;
                       const existingChartInstance = this.chartProxy.getChart();
                       const existingChartOptions = existingChartInstance?.getOptions();
-                      const existingAxes = existingChartInstance?.axes;
+                      const existingAxes = Object.values(existingChartInstance?.axes ?? {});
                       return this.chartOptionsService.getPersistedChartThemeOverrides(
                           existingChartOptions,
                           existingAxes,
@@ -413,7 +399,9 @@ export class GridChartComp extends Component {
                 : undefined;
 
         // recreate chart if chart type has changed
-        if (updatedChartType) this.createChart();
+        if (updatedChartType) {
+            this.createChart();
+        }
 
         // combine any provided theme overrides with any retained theme overrides from changing chart type
         if (persistedThemeOverrides && params?.chartThemeOverrides) {
@@ -445,7 +433,9 @@ export class GridChartComp extends Component {
         if (chartEmpty) {
             // We don't have enough data to reinstantiate the chart with the new chart type,
             // but we still want to persist any theme overrides for when the data is present
-            if (updatedOverrides) this.chartController.updateThemeOverrides(updatedOverrides);
+            if (updatedOverrides) {
+                this.chartController.updateThemeOverrides(updatedOverrides);
+            }
             return;
         }
 
@@ -464,9 +454,13 @@ export class GridChartComp extends Component {
         const [currentType, updatedChartType] = [this.chartController.getChartType(), updateParams?.chartType];
         const targetChartType = updatedChartType ? getCanonicalChartType(updatedChartType) : undefined;
         // If the grid chart component is out of sync with the existing chart instance type, return the correct chart type
-        if (this.chartType !== currentType) return targetChartType ?? currentType;
+        if (this.chartType !== currentType) {
+            return targetChartType ?? currentType;
+        }
         // If the target chart type is different to the current chart type, return the new chart type
-        if (targetChartType && currentType !== targetChartType) return targetChartType;
+        if (targetChartType && currentType !== targetChartType) {
+            return targetChartType;
+        }
         // Otherwise nothing has changed
         return null;
     }
@@ -500,12 +494,12 @@ export class GridChartComp extends Component {
         }
 
         if (pivotModeDisabled) {
-            this.eEmpty.innerText = this.chartTranslation.translate('pivotChartRequiresPivotMode');
+            this.eEmpty.textContent = this.chartTranslation.translate('pivotChartRequiresPivotMode');
             return true;
         }
 
         if (isEmptyChart) {
-            this.eEmpty.innerText = this.chartTranslation.translate('noDataToChart');
+            this.eEmpty.textContent = this.chartTranslation.translate('noDataToChart');
             return true;
         }
 
@@ -537,6 +531,10 @@ export class GridChartComp extends Component {
         this.chartProxy.crossFilteringReset();
     }
 
+    public setMaximized(maximized: boolean): void {
+        this.chartDialog?.setMaximized(maximized);
+    }
+
     private setActiveChartCellRange(focusEvent: FocusEvent): void {
         if (this.getGui().contains(focusEvent.relatedTarget as HTMLElement)) {
             return;
@@ -559,11 +557,11 @@ export class GridChartComp extends Component {
     private getAllKeysInObjects(objects: any[]): string[] {
         const allValues: any = {};
 
-        objects
-            .filter((obj) => obj != null)
-            .forEach((obj) => {
-                Object.keys(obj).forEach((key) => (allValues[key] = null));
-            });
+        for (const obj of objects.filter((obj) => obj != null)) {
+            for (const key of Object.keys(obj)) {
+                allValues[key] = null;
+            }
+        }
 
         return Object.keys(allValues);
     }
@@ -572,11 +570,11 @@ export class GridChartComp extends Component {
         const suppliedThemes = this.getChartThemes();
         const customChartThemes = this.gos.get('customChartThemes');
         if (customChartThemes) {
-            this.getAllKeysInObjects([customChartThemes]).forEach((customThemeName) => {
+            for (const customThemeName of this.getAllKeysInObjects([customChartThemes])) {
                 if (!suppliedThemes.includes(customThemeName)) {
-                    _warn(139, { customThemeName });
+                    this.beans.log.warn(139, { customThemeName });
                 }
-            });
+            }
         }
     }
 
@@ -626,7 +624,7 @@ export class GridChartComp extends Component {
         this.destroyBean(this.chartMenu);
 
         // don't want to invoke destroy() on the Dialog (prevents destroy loop)
-        if (this.chartDialog && this.chartDialog.isAlive()) {
+        if (this.chartDialog?.isAlive()) {
             this.destroyBean(this.chartDialog);
         }
 

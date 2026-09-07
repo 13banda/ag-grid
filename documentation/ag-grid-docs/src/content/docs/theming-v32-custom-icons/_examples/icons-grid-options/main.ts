@@ -5,8 +5,8 @@ import {
     NumberFilterModule,
     RowDragModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -16,6 +16,11 @@ import {
     PivotModule,
     SideBarModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowDragModule,
@@ -28,7 +33,6 @@ ModuleRegistry.registerModules([
     SideBarModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const myIcons = {
@@ -90,7 +94,6 @@ const gridOptions: GridOptions<IOlympicData> = {
         enableValue: true,
     },
     columnDefs: columnDefs,
-    rowData: null,
     sideBar: true,
     autoGroupColumnDef: {
         headerName: 'Athlete',

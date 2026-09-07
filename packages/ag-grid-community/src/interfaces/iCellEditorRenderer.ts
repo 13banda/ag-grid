@@ -1,9 +1,13 @@
-import type { AgGridCommon } from './iCommon';
-import type { IComponent } from './iComponent';
+import type { IComponent } from 'ag-stack';
 
-export interface ICellEditorRendererParams<TValue = any, TData = any, TContext = any>
-    extends AgGridCommon<TData, TContext> {
-    /** The value to be rendered by the renderer */
+import type { AgGridCommon } from './iCommon';
+
+export interface ICellEditorRendererParams<TValue = any, TData = any, TContext = any> extends AgGridCommon<
+    TData,
+    TContext
+> {
+    /** The value to be rendered by the renderer. May be `null` — for example on group rows or when the `field` is
+     *  absent from the row data; the renderer must handle this. */
     value: TValue[] | TValue | null;
     /** The value to be renderer by the renderer formatted by the editor */
     valueFormatted: string;

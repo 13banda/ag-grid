@@ -4,16 +4,16 @@ import {
     HighlightChangesModule,
     ModuleRegistry,
     RenderApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    RenderApiModule,
-    HighlightChangesModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RenderApiModule, HighlightChangesModule, ClientSideRowModelModule]);
 
 const gbpFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -30,6 +30,10 @@ const usdFormatter = new Intl.NumberFormat('en-US', {
     currency: 'USD',
     minimumFractionDigits: 2,
 });
+
+const currencyComparator = (a: any, b: any) => {
+    return a.amount - b.amount;
+};
 
 const currencyCellRenderer = (params: ICellRendererParams) => {
     switch (params.value.currency) {
@@ -50,12 +54,14 @@ const columnDefs: ColDef[] = [
         headerName: 'Price Local',
         field: 'price',
         cellRenderer: currencyCellRenderer,
+        comparator: currencyComparator,
         cellDataType: false,
     },
     {
         headerName: 'Report Price',
         field: 'price',
         cellRenderer: currencyCellRenderer,
+        comparator: currencyComparator,
         valueGetter: reportingCurrencyValueGetter,
         headerValueGetter: 'ctx.reportingCurrency',
     },

@@ -1,7 +1,8 @@
 import * as fs from 'fs';
+import path from 'path';
 import ts from 'typescript';
 
-import { _ALL_EVENTS } from './_copiedFromCore/eventTypes';
+import { _GET_ALL_EVENTS } from './_copiedFromCore/eventTypes';
 import { getFormatterForTS } from './formatAST';
 
 const { formatNode, findNode, getFullJsDoc, getJsDoc } = getFormatterForTS(ts);
@@ -12,7 +13,7 @@ function _getCallbackForEvent(eventName: string): string {
     }
     return 'on' + eventName[0].toUpperCase() + eventName.substring(1);
 }
-const EVENT_LOOKUP = new Set(_ALL_EVENTS.map((event) => _getCallbackForEvent(event)));
+const EVENT_LOOKUP = new Set(_GET_ALL_EVENTS().map((event) => _getCallbackForEvent(event)));
 
 function findAllInNodesTree(node) {
     const kind = ts.SyntaxKind[node.kind];
@@ -47,13 +48,13 @@ function toCamelCase(value) {
     return value[0].toLowerCase() + value.substring(1);
 }
 
-function silentFindNode(text: string, srcFile: ts.SourceFile): ts.Node | undefined {
+function silentFindNode(text: string, srcFile: ts.SourceFile, auxSrcFiles: AuxSrcFiles): ts.Node | undefined {
     let typeRef: ts.Node | undefined = undefined;
     try {
-        typeRef = findNode(text, srcFile);
+        typeRef = findInAllTrees(text, srcFile, auxSrcFiles);
     } catch {
         try {
-            typeRef = findNode(text, srcFile, 'TypeAliasDeclaration');
+            typeRef = findInAllTrees(text, srcFile, auxSrcFiles, 'TypeAliasDeclaration');
         } catch {
             // Do nothing
         }
@@ -61,74 +62,145 @@ function silentFindNode(text: string, srcFile: ts.SourceFile): ts.Node | undefin
     return typeRef;
 }
 
+/** Index of declaration names to nodes, keyed by `${kindToMatch}::${name}` */
+type DeclarationIndex = Map<string, ts.Node>;
+
+function buildDeclarationIndex(srcFiles: ts.SourceFile[]): DeclarationIndex {
+    const index: DeclarationIndex = new Map();
+    const indexKinds = new Set(['InterfaceDeclaration', 'TypeAliasDeclaration', 'EnumDeclaration', 'ClassDeclaration']);
+
+    for (const srcFile of srcFiles) {
+        const visit = (node: ts.Node) => {
+            const kind = ts.SyntaxKind[node.kind];
+            if (indexKinds.has(kind)) {
+                const name = (node as any).name?.escapedText;
+                if (name) {
+                    const key = `${kind}::${name}`;
+                    if (!index.has(key)) {
+                        index.set(key, node);
+                    }
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(srcFile);
+    }
+    return index;
+}
+
 function extractNestedTypes<T extends ts.Node>(
     node: T,
     srcFile: ts.SourceFile,
     includeQuestionMark: boolean,
     results: Record<string, any>,
-    visited: Set<ts.Node>
+    visited: Set<ts.Node>,
+    auxSrcFiles: ts.SourceFile[]
 ): void {
     if (visited.has(node)) {
         return;
     }
 
     if (ts.isTypeReferenceNode(node)) {
-        const typeRef = silentFindNode(node.typeName.getText(), srcFile);
+        const typeRef = silentFindNode(node.typeName.getText(), srcFile, auxSrcFiles);
         if (typeRef === undefined) {
+            // console.error('failed to find', node.typeName.getText());
             return;
         }
         visited.add(node);
-        extractNestedTypes(typeRef, srcFile, includeQuestionMark, results, visited);
+        extractNestedTypes(typeRef, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
         return;
     }
 
     if (ts.isTypeAliasDeclaration(node)) {
         visited.add(node);
-        extractNestedTypes(node.type, srcFile, includeQuestionMark, results, visited);
+        extractNestedTypes(node.type, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
         return;
     }
 
     if (ts.isInterfaceDeclaration(node)) {
         visited.add(node);
-        node.heritageClauses?.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited));
-        node.members.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited));
+        node.heritageClauses?.map((n) =>
+            extractNestedTypes(n, srcFile, includeQuestionMark, results, visited, auxSrcFiles)
+        );
+        node.members.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited, auxSrcFiles));
         return;
     }
 
     if (ts.isHeritageClause(node)) {
-        node.types.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited));
+        node.types.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited, auxSrcFiles));
         return;
     }
 
     if (ts.isUnionTypeNode(node)) {
-        node.types.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited));
+        node.types.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited, auxSrcFiles));
+        return;
+    }
+
+    if (ts.isArrayTypeNode(node)) {
+        extractNestedTypes(node.elementType, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
+        return;
+    }
+
+    if (ts.isParenthesizedTypeNode(node)) {
+        extractNestedTypes(node.type, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
         return;
     }
 
     if (ts.isExpressionWithTypeArguments(node)) {
-        extractNestedTypes(node.expression, srcFile, includeQuestionMark, results, visited);
+        extractNestedTypes(node.expression, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
         return;
     }
 
     if (ts.isPropertySignature(node)) {
         results[node.name.getText()] = getJsDoc(node);
-        node.type && extractNestedTypes(node.type, srcFile, includeQuestionMark, results, visited);
+        if (node.type) {
+            extractNestedTypes(node.type, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
+        }
         return;
     }
 
     if (ts.isIdentifier(node)) {
-        const ref = findNode(node.escapedText, srcFile);
-        extractNestedTypes(ref, srcFile, includeQuestionMark, results, visited);
+        const ref = silentFindNode(node.getText(), srcFile, auxSrcFiles);
+        if (ref) {
+            extractNestedTypes(ref, srcFile, includeQuestionMark, results, visited, auxSrcFiles);
+        }
         return;
     }
 
     if (ts.isTypeLiteralNode(node)) {
-        node.members.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited));
+        node.members.map((n) => extractNestedTypes(n, srcFile, includeQuestionMark, results, visited, auxSrcFiles));
         return;
     }
 }
 
-function extractTypesFromNode(node, srcFile, includeQuestionMark, extractNested = false) {
+/**
+ * Merges `newEntries` into `existing`, preserving the `meta` (JSDoc) from the existing entry
+ * when the incoming entry has none. This handles TypeScript function overloads where JSDoc
+ * is on the first overload signature but subsequent signatures have no JSDoc.
+ */
+function mergeMembersPreservingMeta(
+    existing: Record<string, any>,
+    newEntries: Record<string, any>
+): Record<string, any> {
+    const result = { ...existing };
+    for (const [key, value] of Object.entries(newEntries)) {
+        if (result[key] !== undefined && value?.meta == null && result[key]?.meta != null) {
+            // Overload without JSDoc: keep existing meta from the first overload
+            result[key] = { ...value, meta: result[key].meta };
+        } else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
+function extractTypesFromNode(
+    node,
+    srcFile: ts.SourceFile,
+    includeQuestionMark: boolean,
+    extractNested = false,
+    auxSrcFiles: AuxSrcFiles = []
+) {
     const nodeMembers = {};
     const kind = ts.SyntaxKind[node.kind];
 
@@ -153,7 +225,7 @@ function extractTypesFromNode(node, srcFile, includeQuestionMark, extractNested 
             };
             if (extractNested) {
                 const nested = {};
-                extractNestedTypes(node.type, srcFile, includeQuestionMark, nested, new Set());
+                extractNestedTypes(node.type, srcFile, includeQuestionMark, nested, new Set(), auxSrcFiles);
                 type.nested = nested;
             }
             nodeMembers[name] = { meta: getJsDoc(node), type };
@@ -180,17 +252,42 @@ function extractTypesFromNode(node, srcFile, includeQuestionMark, extractNested 
     return nodeMembers;
 }
 
-function parseFile(sourceFile) {
+const parseFileCache = new Map<string, ts.SourceFile>();
+
+function parseFile(sourceFile: string): ts.SourceFile {
+    const cached = parseFileCache.get(sourceFile);
+    if (cached) {
+        return cached;
+    }
     const src = fs.readFileSync(sourceFile, 'utf8');
-    return ts.createSourceFile('tempFile.ts', src, ts.ScriptTarget.Latest, true);
+    const result = ts.createSourceFile(sourceFile, src, ts.ScriptTarget.Latest, true);
+    parseFileCache.set(sourceFile, result);
+    return result;
 }
 
-export function getInterfaces(globs) {
+export function getInterfaces(globs: string[]) {
     let interfaces = {};
     const extensions = {};
     globs.forEach((file) => {
         const parsedFile = parseFile(file);
-        interfaces = { ...interfaces, ...extractInterfaces(parsedFile, extensions) };
+
+        // check for clashing interfaces
+        const allInterfaces = extractInterfaces(parsedFile, extensions);
+
+        Object.entries(allInterfaces).forEach(([k, v]) => {
+            if (interfaces[k]) {
+                // deep equality check
+                if (JSON.stringify(interfaces[k]) !== JSON.stringify(v)) {
+                    throw new Error(
+                        `Interface ${k} already exists in interfaces.AUTO.json and is different! ${JSON.stringify(interfaces[k])} vs ${JSON.stringify(v)}`
+                    );
+                } else {
+                    // console.warn(`Interface ${k} looks to be duplicated interfaces.AUTO.json.`);
+                }
+            }
+        });
+
+        interfaces = { ...interfaces, ...allInterfaces };
     });
 
     // Now that we have recorded all the interfaces we can apply the extension properties.
@@ -219,11 +316,11 @@ function getAncestors(extensions, child) {
     return ancestors;
 }
 
-function isBuiltinUtilityType(type) {
+function isBuiltinUtilityType(type: string): type is 'Required' | 'Omit' | 'Pick' | 'Readonly' | 'Optional' {
     return type === 'Required' || type === 'Omit' || type === 'Pick' || type === 'Readonly' || type === 'Optional';
 }
 
-function mergeAncestorProps(isDocStyle, parent, child, getProps) {
+function mergeAncestorProps(isDocStyle: boolean, parent, child, getProps) {
     const props = { ...getProps(child) };
     const mergedProps = props;
     // If the parent has a generic params lets apply the child's specific types
@@ -277,13 +374,26 @@ function mergeAncestorProps(isDocStyle, parent, child, getProps) {
     return mergedProps;
 }
 
-function mergeRespectingChildOverrides(parent, child) {
+function mergeRespectingChildOverrides(parent, child, pickFields = []) {
+    // only pick the fields that are in the pickFields array
+    let filteredParent = {};
+    if (pickFields.length > 0) {
+        pickFields.forEach((f) => {
+            if (parent[f]) {
+                filteredParent[f] = parent[f];
+            }
+        });
+    } else {
+        filteredParent = { ...parent };
+    }
+
     const merged = { ...child };
     // We want the child properties to be list first for better doc reading experience
     // Normal spread merge to get the correct order wipes out child overrides
     // Hence the manual approach to the merge here.
-    Object.entries(parent).forEach(([k, v]) => {
-        if (!merged[k]) {
+    Object.entries(filteredParent).forEach(([k, v]) => {
+        const optionalKey = k.endsWith('?') ? k.slice(0, -1) : `${k}?`;
+        if (!merged[k] && !merged[optionalKey]) {
             merged[k] = v;
         }
     });
@@ -302,8 +412,8 @@ function applyInheritance(extensions, interfaces, isDocStyle) {
         allAncestors.forEach((a) => {
             let extended = a.extends;
 
-            let extInt = undefined;
             const omitFields = [];
+            const pickFields = [];
             if (extended === 'Omit') {
                 // Omit: https://www.typescriptlang.org/docs/handbook/utility-types.html#omittype-keys
                 // Special logic to handle the removing of properties via the Omit utility when a type is defined via extension.
@@ -315,11 +425,20 @@ function applyInheritance(extensions, interfaces, isDocStyle) {
                         omitFields.push(typeName);
                     });
                 });
+            } else if (extended === 'Pick') {
+                extended = a.params[0].replace(/<.*>/, '');
+                a.params.slice(1).forEach((toPick) => {
+                    toPick.split('|').forEach((property) => {
+                        const typeName = property.replace(/'/g, '').trim();
+                        pickFields.push(typeName);
+                        pickFields.push(typeName + '?'); // Enable support for optional fields as their keys are suffixed with '?'
+                    });
+                });
             } else if (isBuiltinUtilityType(extended)) {
                 // Required: https://www.typescriptlang.org/docs/handbook/utility-types.html
                 extended = a.params[0];
             }
-            extInt = interfaces[extended];
+            const extInt = interfaces[extended];
 
             if (!extInt) {
                 //Check for type params
@@ -332,7 +451,8 @@ function applyInheritance(extensions, interfaces, isDocStyle) {
                 if (extInt) {
                     extendedInterface = mergeRespectingChildOverrides(
                         mergeAncestorProps(isDocStyle, a, extInt, (a) => a),
-                        extendedInterface
+                        extendedInterface,
+                        pickFields
                     );
                 }
                 omitFields.forEach((f) => {
@@ -342,13 +462,15 @@ function applyInheritance(extensions, interfaces, isDocStyle) {
                 if (extInt && extInt.type) {
                     extendedInterface.type = mergeRespectingChildOverrides(
                         mergeAncestorProps(isDocStyle, a, extInt, (a) => a.type),
-                        extendedInterface.type
+                        extendedInterface.type,
+                        pickFields
                     );
                 }
                 if (extInt && extInt.docs) {
                     extendedInterface.docs = mergeRespectingChildOverrides(
                         mergeAncestorProps(isDocStyle, a, extInt, (a) => a.docs),
-                        extendedInterface.docs
+                        extendedInterface.docs,
+                        pickFields
                     );
                 }
                 omitFields.forEach((f) => {
@@ -458,7 +580,7 @@ function extractInterfaces(srcFile, extension) {
 }
 
 /** Build the interface file in the format that can be used by <interface-documentation> */
-export function buildInterfaceProps(globs) {
+export function buildInterfaceProps(globs: string[]) {
     const interfaces = {
         _config_: {},
     };
@@ -474,7 +596,7 @@ export function buildInterfaceProps(globs) {
             let props: any = {};
             iNode.forEachChild((ch) => {
                 const prop = extractTypesFromNode(ch, parsedFile, true);
-                props = { ...props, ...prop };
+                props = mergeMembersPreservingMeta(props, prop);
             });
 
             const kind = ts.SyntaxKind[iNode.kind];
@@ -499,13 +621,77 @@ export function buildInterfaceProps(globs) {
     return interfaces;
 }
 
+function parseImportedDefinitions(
+    dir: string,
+    srcFile: ts.SourceFile,
+    definitions = new Map<string, ts.SourceFile>()
+): AuxSrcFiles {
+    srcFile.forEachChild((child) => {
+        if (ts.isImportDeclaration(child)) {
+            const modulePath = child.moduleSpecifier.getFullText().trim().replaceAll("'", '');
+            // only look at local imports for now
+            if (modulePath.startsWith('.') && !modulePath.endsWith('.css')) {
+                const absPath = require.resolve(path.resolve(dir, `${modulePath}.ts`));
+                if (definitions.has(absPath)) {
+                    return;
+                }
+                const parsed = parseFile(absPath);
+                definitions.set(absPath, parsed);
+                parseImportedDefinitions(path.dirname(absPath), parsed, definitions);
+                return;
+            }
+        }
+    });
+
+    const files = Array.from(definitions.values());
+    return files as AuxSrcFiles;
+}
+
+type AuxSrcFiles = ts.SourceFile[] & { _declarationIndex?: DeclarationIndex };
+
+function getOrBuildIndex(auxSrcFiles: AuxSrcFiles): DeclarationIndex {
+    if (!auxSrcFiles._declarationIndex) {
+        auxSrcFiles._declarationIndex = buildDeclarationIndex(auxSrcFiles);
+    }
+    return auxSrcFiles._declarationIndex;
+}
+
+function findInAllTrees(
+    typeName: string,
+    sourceFile: ts.SourceFile,
+    auxSrcFiles: AuxSrcFiles,
+    type = 'InterfaceDeclaration'
+): ts.TypeNode | undefined {
+    // Try primary file first
+    try {
+        return findNode(typeName, sourceFile, type);
+    } catch {
+        // not found in primary
+    }
+
+    // Use declaration index for O(1) lookup instead of linear scan through all files
+    if (auxSrcFiles.length > 0) {
+        const index = getOrBuildIndex(auxSrcFiles);
+        const node = index.get(`${type}::${typeName}`);
+        if (node) {
+            return node as ts.TypeNode;
+        }
+    }
+
+    throw `Unable to locate ${type} ${typeName} in AST parsed.`;
+}
+
 export function getGridOptions(gridOpsFile: string) {
     const srcFile = parseFile(gridOpsFile);
+    const otherTrees = parseImportedDefinitions(path.dirname(gridOpsFile), srcFile);
     const gridOptionsNode = findNode('GridOptions', srcFile);
 
     let gridOpsMembers = {};
     ts.forEachChild(gridOptionsNode, (n) => {
-        gridOpsMembers = { ...gridOpsMembers, ...extractTypesFromNode(n, srcFile, false, true) };
+        gridOpsMembers = mergeMembersPreservingMeta(
+            gridOpsMembers,
+            extractTypesFromNode(n, srcFile, false, true, otherTrees)
+        );
     });
 
     return gridOpsMembers;
@@ -522,7 +708,7 @@ export function getColumnOptions(colDefFile: string, filterFile: string) {
     let members = {};
     const addToMembers = (node, src) => {
         ts.forEachChild(node, (n) => {
-            members = { ...members, ...extractTypesFromNode(n, src, false) };
+            members = mergeMembersPreservingMeta(members, extractTypesFromNode(n, src, false));
         });
     };
     addToMembers(abstractColDefNode, srcFile);
@@ -555,7 +741,7 @@ export function getGridApi(gridApiFile: string) {
             }
         }
 
-        members = { ...members, ...typesFromNode };
+        members = mergeMembersPreservingMeta(members, typesFromNode);
     };
 
     const processedInterfaces = new Set<ts.InterfaceDeclaration>();
@@ -600,7 +786,7 @@ export function getRowNode(rowNodeFile: string) {
     let rowNodeMembers = {};
     const addToMembers = (node) => {
         ts.forEachChild(node, (n) => {
-            rowNodeMembers = { ...rowNodeMembers, ...extractTypesFromNode(n, srcFile, false) };
+            rowNodeMembers = mergeMembersPreservingMeta(rowNodeMembers, extractTypesFromNode(n, srcFile, false));
         });
     };
     addToMembers(baseRowNode);
@@ -616,7 +802,7 @@ export function getColumnTypes(columnFile: string, interfaces: string[]) {
 
     const addToMembers = (node) => {
         ts.forEachChild(node, (n) => {
-            members = { ...members, ...extractTypesFromNode(n, srcFile, false) };
+            members = mergeMembersPreservingMeta(members, extractTypesFromNode(n, srcFile, false));
         });
     };
 
@@ -625,5 +811,59 @@ export function getColumnTypes(columnFile: string, interfaces: string[]) {
         addToMembers(node);
     });
 
+    return members;
+}
+
+export function getThemeParams(themesFile: string, stackThemesFile: string) {
+    const srcFile = parseFile(themesFile);
+    const auxSrcFiles = parseImportedDefinitions(path.dirname(themesFile), srcFile);
+    const stackSrcFile = parseFile(stackThemesFile);
+    const stackAuxSrcFiles = parseImportedDefinitions(path.dirname(stackThemesFile), stackSrcFile);
+
+    let members = {};
+
+    const resolveAndCollect = (name: string) => {
+        let node = silentFindNode(name, srcFile, auxSrcFiles);
+        if (!node) {
+            node = silentFindNode(name, stackSrcFile, stackAuxSrcFiles);
+        }
+        if (node) {
+            collectMembers(node);
+        }
+    };
+
+    // Collect all properties from the type - we're running on the TS AST so we
+    // don't have the fully resolved type object available, we have to traverse
+    // the source to get properties, taking into account inheritance, aliases
+    // and intersections
+    const collectMembers = (node: ts.Node) => {
+        const nodeFile = node.getSourceFile();
+        if (ts.isTypeAliasDeclaration(node)) {
+            if (ts.isIntersectionTypeNode(node.type)) {
+                for (const t of node.type.types) {
+                    if (ts.isTypeReferenceNode(t)) {
+                        resolveAndCollect(t.typeName.getText(nodeFile));
+                    }
+                }
+            } else if (ts.isTypeReferenceNode(node.type)) {
+                resolveAndCollect(node.type.typeName.getText(nodeFile));
+            } else if (ts.isTypeLiteralNode(node.type)) {
+                node.type.members.forEach(
+                    (m) => (members = mergeMembersPreservingMeta(members, extractTypesFromNode(m, nodeFile, false)))
+                );
+            }
+        } else if (ts.isInterfaceDeclaration(node)) {
+            // Process parents first (e.g. CoreParams extends SharedThemeParams)
+            node.heritageClauses?.forEach((clause) => {
+                clause.types.forEach((t) => resolveAndCollect(formatNode(t.expression, nodeFile)));
+            });
+            ts.forEachChild(node, (n) => {
+                members = mergeMembersPreservingMeta(members, extractTypesFromNode(n, nodeFile, false));
+            });
+        }
+    };
+
+    resolveAndCollect('AllThemeParamsForAPIDocumentation');
+    resolveAndCollect('SharedThemeParams');
     return members;
 }

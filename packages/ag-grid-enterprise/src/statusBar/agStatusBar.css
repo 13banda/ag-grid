@@ -1,14 +1,16 @@
 .ag-status-bar {
     display: flex;
     justify-content: space-between;
-    overflow: hidden;
+    overflow: auto hidden;
+    scrollbar-width: thin;
     border-top: var(--ag-footer-row-border);
     padding-right: calc(var(--ag-spacing) * 4);
     padding-left: calc(var(--ag-spacing) * 4);
     line-height: 1.5;
 }
 
-.ag-status-panel {
+.ag-status-panel,
+:where(.ag-status-panel.ag-status-panel-aggregations .ag-status-name-value) {
     display: inline-flex;
 }
 
@@ -18,7 +20,13 @@
     margin-right: var(--ag-spacing);
     padding-top: var(--ag-widget-container-vertical-padding);
     padding-bottom: var(--ag-widget-container-vertical-padding);
-    font-weight: 500;
+    font-weight: var(--ag-status-bar-label-font-weight);
+    color: var(--ag-status-bar-label-color);
+}
+
+.ag-status-name-value-value {
+    font-weight: var(--ag-status-bar-value-font-weight);
+    color: var(--ag-status-bar-value-color);
 }
 
 .ag-status-bar-left {

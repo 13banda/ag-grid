@@ -2,19 +2,24 @@ import type {
     FirstDataRenderedEvent,
     GridApi,
     GridOptions,
-    ISetFilter,
     ISetFilterParams,
     KeyCreatorParams,
+    SetFilterHandler,
     ValueFormatterParams,
 } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, FiltersToolPanelModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -23,7 +28,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -95,28 +99,22 @@ function selectNothing() {
 }
 
 function setCountriesToFranceAustralia() {
-    gridApi!.getColumnFilterInstance<ISetFilter<{ name: string; code: string }>>('country').then((instance) => {
-        instance!.setFilterValues([
-            {
-                name: 'France',
-                code: 'FR',
-            },
-            {
-                name: 'Australia',
-                code: 'AU',
-            },
-        ]);
-        instance!.applyModel();
-        gridApi!.onFilterChanged();
-    });
+    const handler = gridApi!.getColumnFilterHandler<SetFilterHandler<{ name: string; code: string }>>('country');
+    handler!.setFilterValues([
+        {
+            name: 'France',
+            code: 'FR',
+        },
+        {
+            name: 'Australia',
+            code: 'AU',
+        },
+    ]);
 }
 
 function setCountriesToAll() {
-    gridApi!.getColumnFilterInstance<ISetFilter<{ name: string; code: string }>>('country').then((instance) => {
-        instance!.resetFilterValues();
-        instance!.applyModel();
-        gridApi!.onFilterChanged();
-    });
+    const handler = gridApi!.getColumnFilterHandler<SetFilterHandler<{ name: string; code: string }>>('country');
+    handler!.resetFilterValues();
 }
 
 function onFirstDataRendered(params: FirstDataRenderedEvent) {

@@ -19,12 +19,12 @@ export class ReactComponent implements IComponent<any>, WrappableInterface {
 
     protected key: string;
     protected ref?: (element: any) => void;
-    private portalKey: string;
+    private readonly portalKey: string;
     private oldPortal: ReactPortal | null = null;
     private reactElement: any;
     protected instanceCreated: AgPromise<boolean> | AgPromise<false>;
     private resolveInstanceCreated?: (value: boolean) => void;
-    private suppressFallbackMethods: boolean;
+    private readonly suppressFallbackMethods: boolean;
 
     constructor(
         reactComponent: any,
@@ -74,6 +74,10 @@ export class ReactComponent implements IComponent<any>, WrappableInterface {
         const eParentElement = document.createElement(componentWrappingElement || 'div');
 
         (eParentElement as HTMLElement).classList.add('ag-react-container');
+
+        if (this.componentType.requiresBlockWrapper) {
+            (eParentElement as HTMLElement).classList.add('ag-react-wrapper-block');
+        }
 
         /** @deprecated v21.2 */
         params.reactContainer = eParentElement;

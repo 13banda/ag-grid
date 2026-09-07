@@ -4,7 +4,7 @@ import type {
     GridOptions,
     IDateFilterParams,
     INumberFilterParams,
-    ISetFilter,
+    SetFilterHandler,
 } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
@@ -12,10 +12,15 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -25,7 +30,6 @@ ModuleRegistry.registerModules([
     TextFilterModule,
     NumberFilterModule,
     DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const dateFilterParams: IDateFilterParams = {
@@ -119,14 +123,15 @@ function destroyCountryFilter() {
 }
 
 function endingStan() {
-    gridApi!.getColumnFilterInstance<ISetFilter>('country').then((countryFilterComponent) => {
-        const countriesEndingWithStan = countryFilterComponent!.getFilterKeys().filter(function (value: any) {
+    const countriesEndingWithStan = gridApi!
+        .getColumnFilterHandler<SetFilterHandler>('country')!
+        .getFilterKeys()
+        .filter(function (value: any) {
             return value.indexOf('stan') === value.length - 4;
         });
 
-        gridApi!.setColumnFilterModel('country', { values: countriesEndingWithStan }).then(() => {
-            gridApi!.onFilterChanged();
-        });
+    gridApi!.setColumnFilterModel('country', { values: countriesEndingWithStan }).then(() => {
+        gridApi!.onFilterChanged();
     });
 }
 

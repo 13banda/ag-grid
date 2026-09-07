@@ -1,6 +1,9 @@
 {
     "_config_": {
-        "codeSrc": "grid-options.AUTO.json"
+        "codeSrc": "grid-options.AUTO.json",
+        "validate": true,
+        "onlyEvents": true,
+        "undocumentedProperties": {}
     },
     "accessories": {
         "meta": {
@@ -64,6 +67,39 @@
             }
         }
     },
+    "calculatedColumns": {
+        "meta": {
+            "displayName": "Calculated Columns",
+            "page": {
+                "name": "Calculated Columns",
+                "url": "./calculated-columns/"
+            }
+        },
+        "calculatedColumnCreated": {
+            "more": {
+                "name": "Calculated Columns Events",
+                "url": "./calculated-columns/#events"
+            }
+        },
+        "calculatedColumnExpressionChanged": {
+            "more": {
+                "name": "Calculated Columns Events",
+                "url": "./calculated-columns/#events"
+            }
+        },
+        "calculatedColumnRemoved": {
+            "more": {
+                "name": "Calculated Columns Events",
+                "url": "./calculated-columns/#events"
+            }
+        },
+        "calculatedColumnValidationStateChanged": {
+            "more": {
+                "name": "Calculated Columns Events",
+                "url": "./calculated-columns/#events"
+            }
+        }
+    },
     "components": {
         "meta": {
             "displayName": "Components",
@@ -90,13 +126,13 @@
         "rowSelected": {
             "more": {
                 "name": "Selection Events",
-                "url": "./row-selection-api-reference/#reference--rowSelected"
+                "url": "./row-selection-api-reference/#reference-selection-rowSelected"
             }
         },
         "selectionChanged": {
             "more": {
                 "name": "Selection Events",
-                "url": "./row-selection-api-reference/#reference--selectionChanged"
+                "url": "./row-selection-api-reference/#reference-selection-selectionChanged"
             }
         },
         "cellContextMenu": {},
@@ -109,13 +145,13 @@
         "fillStart": {
             "more": {
                 "name": "Fill Range Event",
-                "url": "./cell-selection-fill-handle/#reference--fillStart"
+                "url": "./cell-selection-fill-handle/#reference-selection-fillStart"
             }
         },
         "fillEnd": {
             "more": {
                 "name": "Fill Range Event",
-                "url": "./cell-selection-fill-handle/#reference--fillEnd"
+                "url": "./cell-selection-fill-handle/#reference-selection-fillEnd"
             }
         }
     },
@@ -206,6 +242,30 @@
                 "url": "./cell-editing-full-row/"
             }
         },
+        "batchEditingStarted": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch/#batch-editing-lifecycle"
+            }
+        },
+        "batchEditingStopped": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch/#batch-editing-lifecycle"
+            }
+        },
+        "bulkEditingStarted": {
+            "more": {
+                "name": "Bulk Cell Edit",
+                "url": "./cell-selection/#bulk-cell-edit"
+            }
+        },
+        "bulkEditingStopped": {
+            "more": {
+                "name": "Bulk Cell Edit",
+                "url": "./cell-selection/#bulk-cell-edit"
+            }
+        },
         "undoStarted": {
             "more": {
                 "name": "Undo / Redo Events",
@@ -269,6 +329,18 @@
                 "url": "./filter-api/#filter-events"
             }
         },
+        "filterUiChanged": {
+            "more": {
+                "name": "Filter Events",
+                "url": "./filter-api/#filter-events"
+            }
+        },
+        "floatingFilterUiChanged": {
+            "more": {
+                "name": "Filter Events",
+                "url": "./filter-api/#filter-events"
+            }
+        },
         "advancedFilterBuilderVisibleChanged": {
             "more": {
                 "name": "Advanced Filter",
@@ -297,31 +369,31 @@
         "rowDragEnter": {
             "more": {
                 "name": "Row Drag Events",
-                "url": "./row-dragging/#row-drag-events"
+                "url": "./row-dragging-unmanaged/#row-drag-events"
             }
         },
         "rowDragMove": {
             "more": {
                 "name": "Row Drag Events",
-                "url": "./row-dragging/#row-drag-events"
+                "url": "./row-dragging-unmanaged/#row-drag-events"
             }
         },
         "rowDragLeave": {
             "more": {
                 "name": "Row Drag Events",
-                "url": "./row-dragging/#row-drag-events"
+                "url": "./row-dragging-unmanaged/#row-drag-events"
             }
         },
         "rowDragEnd": {
             "more": {
                 "name": "Row Drag Events",
-                "url": "./row-dragging/#row-drag-events"
+                "url": "./row-dragging-unmanaged/#row-drag-events"
             }
         },
         "rowDragCancel": {
             "more": {
                 "name": "Row Drag Events",
-                "url": "./row-dragging/#row-drag-events"
+                "url": "./row-dragging-unmanaged/#row-drag-events"
             }
         }
     },
@@ -331,6 +403,12 @@
         },
         "columnVisible": {},
         "columnPinned": {},
+        "columnHeaderNameChanged": {
+            "more": {
+                "name": "Editable Header Name",
+                "url": "./column-headers/#editable-header-name"
+            }
+        },
         "columnResized": {},
         "columnMoved": {},
         "columnValueChanged": {},
@@ -345,7 +423,8 @@
         "columnHeaderMouseLeave": {},
         "columnHeaderClicked": {},
         "columnHeaderContextMenu": {},
-        "pivotMaxColumnsExceeded": {}
+        "pivotMaxColumnsExceeded": {},
+        "columnsReset": {}
     },
     "rowGrouping": {
         "meta": {
@@ -359,9 +438,30 @@
         "rowGroupOpened": {},
         "expandOrCollapseAll": {}
     },
-    "miscellaneous": {
+    "rowEvents": {
         "meta": {
-            "displayName": "Miscellaneous"
+            "displayName": "Row Size",
+            "page": {
+                "name": "Row Resizing",
+                "url": "./row-numbers/#row-resizing"
+            }
+        },
+        "rowResizeStarted": {
+            "more": {
+                "name": "Row Resizing",
+                "url": "./row-numbers/#row-resizing"
+            }
+        },
+        "rowResizeEnded": {
+            "more": {
+                "name": "Row Resizing",
+                "url": "./row-numbers/#row-resizing"
+            }
+        }
+    },
+    "gridLifecycle": {
+        "meta": {
+            "displayName": "Grid Lifecycle"
         },
         "gridReady": {
             "more": {
@@ -381,23 +481,49 @@
                 "url": "./grid-lifecycle/#first-data-rendered"
             }
         },
+        "modelUpdated": {},
+        "stateUpdated": {
+            "more": {
+                "name": "Grid State",
+                "url": "./grid-state/"
+            }
+        }
+    },
+    "viewport": {
+        "meta": {
+            "displayName": "Viewport"
+        },
         "gridSizeChanged": {
             "more": {
                 "name": "Grid Layout",
                 "url": "./grid-size/"
             }
         },
-        "modelUpdated": {},
         "virtualRowRemoved": {},
         "viewportChanged": {},
         "bodyScroll": {},
-        "bodyScrollEnd": {},
+        "bodyScrollEnd": {}
+    },
+    "dragAndDrop": {
+        "meta": {
+            "displayName": "Drag and Drop"
+        },
         "dragStarted": {},
         "dragStopped": {},
-        "stateUpdated": {
+        "dragCancelled": {}
+    },
+    "find": {
+        "meta": {
+            "displayName": "Find",
+            "page": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findChanged": {
             "more": {
-                "name": "Grid State",
-                "url": "./grid-state/"
+                "name": "Find",
+                "url": "./find/"
             }
         }
     },
@@ -468,7 +594,8 @@
                 "url": "./row-pinning/"
             }
         },
-        "pinnedRowDataChanged": {}
+        "pinnedRowDataChanged": {},
+        "pinnedRowsChanged": {}
     },
     "tooltips": {
         "meta": {

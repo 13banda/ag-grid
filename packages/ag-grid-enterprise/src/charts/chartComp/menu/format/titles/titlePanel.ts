@@ -1,8 +1,9 @@
-import type { AgInputTextFieldParams, BeanCollection } from 'ag-grid-community';
+import type { AgComponentSelectorType, AgInputTextFieldParams, BeanCollection } from 'ag-grid-community';
 import { AgInputTextField, Component } from 'ag-grid-community';
 
-import type { AgSliderParams } from '../../../../widgets/agSlider';
-import { AgSlider } from '../../../../widgets/agSlider';
+import type { AgSliderParams } from '../../../../../agStack/agSlider';
+import { AgSlider } from '../../../../../agStack/agSlider';
+import type { GridSlider } from '../../../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartOptionsProxy } from '../../../services/chartOptionsService';
 import type { ChartTranslationKey, ChartTranslationService } from '../../../services/chartTranslationService';
 import type { ChartMenuParamsFactory } from '../../chartMenuParamsFactory';
@@ -35,7 +36,7 @@ export class TitlePanel extends Component {
 
     protected hasTitle(): boolean {
         const title: any = this.chartOptions.getValue(this.key);
-        return title && title.enabled && title.text && title.text.length > 0;
+        return title?.enabled && title.text && title.text.length > 0;
     }
 
     private initFontPanel(): void {
@@ -53,12 +54,12 @@ export class TitlePanel extends Component {
         this.fontPanel = this.createManagedBean(new FontPanel(fontPanelParams));
 
         this.fontPanel.addItem(this.createBean(new AgInputTextField(this.getTextInputParams())), true);
-        this.fontPanel.addItem(this.createBean(new AgSlider(this.getSpacingSliderParams())));
+        this.fontPanel.addItem(this.createBean<GridSlider>(new AgSlider(this.getSpacingSliderParams())));
 
         this.getGui().appendChild(this.fontPanel.getGui());
     }
 
-    protected getTextInputParams(): AgInputTextFieldParams {
+    protected getTextInputParams(): AgInputTextFieldParams<AgComponentSelectorType> {
         return this.chartMenuUtils.addValueParams(`${this.key}.text`, {
             label: this.chartTranslation.translate('title'),
             labelAlignment: 'top',

@@ -9,7 +9,7 @@ import type {
     IServerSideGetRowsRequest,
     IsServerSideGroupOpenByDefaultParams,
 } from 'ag-grid-community';
-import { ModuleRegistry, TextFilterModule, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, TextFilterModule, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -19,6 +19,11 @@ import {
     TreeDataModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     TextFilterModule,
     ColumnsToolPanelModule,
@@ -27,7 +32,6 @@ ModuleRegistry.registerModules([
     TreeDataModule,
     ServerSideRowModelModule,
     ServerSideRowModelApiModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let fakeServer: {
@@ -83,7 +87,7 @@ let latestId = 100000;
 function addToSelected() {
     const selected = gridApi!.getSelectedNodes()[0];
     if (!selected) {
-        console.warn('No row was selected.');
+        console.log('No row was selected.');
         return;
     }
 
@@ -100,7 +104,7 @@ function addToSelected() {
 function updateSelected() {
     const selected = gridApi!.getSelectedNodes()[0];
     if (!selected) {
-        console.warn('No row was selected.');
+        console.log('No row was selected.');
         return;
     }
 
@@ -111,7 +115,7 @@ function updateSelected() {
 function deleteSelected() {
     const selected = gridApi!.getSelectedNodes()[0];
     if (!selected) {
-        console.warn('No row was selected.');
+        console.log('No row was selected.');
         return;
     }
 
@@ -122,7 +126,7 @@ function deleteSelected() {
 function moveSelected() {
     const selected = gridApi!.getSelectedNodes()[0];
     if (!selected) {
-        console.warn('No row was selected.');
+        console.log('No row was selected.');
         return;
     }
 

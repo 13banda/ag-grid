@@ -1,7 +1,12 @@
 import type { ColDef, ColGroupDef, ColSpanParams, GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const colSpan = function (params: ColSpanParams) {
     return params.data === 2 ? 3 : 1;
@@ -10,7 +15,7 @@ const colSpan = function (params: ColSpanParams) {
 const columnDefs: (ColDef | ColGroupDef)[] = [
     {
         headerName: 'A',
-        field: 'author',
+        colId: 'a',
         width: 300,
         colSpan: colSpan,
     },
@@ -19,12 +24,14 @@ const columnDefs: (ColDef | ColGroupDef)[] = [
         children: [
             {
                 headerName: 'B',
+                colId: 'b',
                 minWidth: 200,
                 maxWidth: 350,
                 flex: 2,
             },
             {
                 headerName: 'C',
+                colId: 'c',
                 flex: 1,
             },
         ],

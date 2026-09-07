@@ -3,13 +3,18 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TooltipModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CustomHeaderGroup } from './customHeaderGroup_typescript';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, TooltipModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, TooltipModule]);
 
 const columnDefs: ColGroupDef[] = [
     {
@@ -64,7 +69,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: columnDefs,
-    rowData: null,
     defaultColDef: {
         width: 100,
     },

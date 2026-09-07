@@ -1,44 +1,74 @@
-import type { IFilterOptionDef } from '../../../interfaces/iFilter';
-import type { LocaleTextFunc } from '../../../misc/locale/localeUtils';
-import { _dateToFormattedString, _parseDateTimeFromString } from '../../../utils/date';
-import type { OptionsFactory } from '../optionsFactory';
-import { SimpleFilterModelFormatter } from '../simpleFilterModelFormatter';
-import type { DateFilterModel, DateFilterParams } from './iDateFilter';
+import { _dateToFormattedString, _parseDateTimeFromString } from 'ag-stack';
 
-export class DateFilterModelFormatter extends SimpleFilterModelFormatter {
-    constructor(
-        private dateFilterParams: DateFilterParams,
-        getLocaleTextFunc: () => LocaleTextFunc,
-        optionsFactory: OptionsFactory
-    ) {
-        super(getLocaleTextFunc, optionsFactory);
+import type { AgColumn } from '../../../entities/agColumn';
+import type { SharedFilterParams } from '../../../interfaces/iFilter';
+import { translateFilterOptionKey } from '../../filterLocaleText';
+import { SCALAR_FILTER_TYPE_KEYS, SimpleFilterModelFormatter } from '../simpleFilterModelFormatter';
+import type { DateFilterModel, IDateFilterParams } from './iDateFilter';
+
+export class DateFilterModelFormatter extends SimpleFilterModelFormatter<
+    IDateFilterParams,
+    typeof SCALAR_FILTER_TYPE_KEYS,
+    Date
+> {
+    protected readonly filterTypeKeys = SCALAR_FILTER_TYPE_KEYS;
+    protected override formatValue(value: Date | null = null): string {
+        const { dataTypeSvc, valueSvc } = this.beans;
+        const column = (this.filterParams as SharedFilterParams).column as AgColumn;
+        const dateFormatFn = dataTypeSvc?.getDateFormatterFunction(column); // only exists for dateString.
+        // dateString's value formatter requires a string; date's wants the original Date.
+        const valueToFormat = dateFormatFn ? dateFormatFn(value ?? undefined) : value;
+        return valueSvc.formatValue(column, null, valueToFormat) ?? '';
     }
 
-    protected conditionToString(condition: DateFilterModel, options?: IFilterOptionDef): string {
+    protected conditionToString(
+        condition: DateFilterModel,
+        forToolPanel: boolean,
+        isRange: boolean,
+        customDisplayKey: string | undefined,
+        customDisplayName: string | undefined
+    ): string {
         const { type } = condition;
-        const { numberOfInputs } = options || {};
-        const isRange = type == 'inRange' || numberOfInputs === 2;
 
         const dateFrom = _parseDateTimeFromString(condition.dateFrom);
         const dateTo = _parseDateTimeFromString(condition.dateTo);
 
-        const format = this.dateFilterParams.inRangeFloatingFilterDateFormat;
+        const format = this.filterParams.inRangeFloatingFilterDateFormat;
+
+        const formatDate = forToolPanel
+            ? this.formatValue.bind(this)
+            : (value: Date) => _dateToFormattedString(value, format);
+
+        const formattedFrom = () => (dateFrom !== null ? formatDate(dateFrom) : 'null');
+        const formattedTo = () => (dateTo !== null ? formatDate(dateTo) : 'null');
+
+        if (dateFrom == null && dateTo == null) {
+            return translateFilterOptionKey(this, type);
+        }
+
+        if (forToolPanel) {
+            const valueForToolPanel = this.conditionForToolPanel(
+                type,
+                isRange,
+                formattedFrom,
+                formattedTo,
+                customDisplayKey,
+                customDisplayName
+            );
+            if (valueForToolPanel != null) {
+                return valueForToolPanel;
+            }
+        }
+
         if (isRange) {
-            const formattedFrom = dateFrom !== null ? _dateToFormattedString(dateFrom, format) : 'null';
-            const formattedTo = dateTo !== null ? _dateToFormattedString(dateTo, format) : 'null';
-            return `${formattedFrom}-${formattedTo}`;
+            return `${formattedFrom()}-${formattedTo()}`;
         }
 
         if (dateFrom != null) {
-            return _dateToFormattedString(dateFrom, format);
+            return formatDate(dateFrom);
         }
 
         // cater for when the type doesn't need a value
         return `${type}`;
-    }
-
-    public override updateParams(params: { dateFilterParams: DateFilterParams; optionsFactory: OptionsFactory }): void {
-        super.updateParams(params);
-        this.dateFilterParams = params.dateFilterParams;
     }
 }

@@ -1,13 +1,10 @@
 import type { Rect } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
-import type { ThemeTemplateParameters } from '../../miniChartsContainer';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChart } from '../miniChart';
 
-export class MiniHeatmap extends MiniChart {
-    static chartType: ChartType = 'heatmap';
+export class MiniHeatmapClass extends MiniChart {
     private readonly rects: Rect[];
 
     constructor(
@@ -15,7 +12,6 @@ export class MiniHeatmap extends MiniChart {
         agChartsExports: AgChartsExports,
         fills: string[],
         strokes: string[],
-        themeTemplate: ThemeTemplateParameters,
         isCustomTheme: boolean
     ) {
         super(container, agChartsExports, 'heatmapTooltip');
@@ -33,13 +29,13 @@ export class MiniHeatmap extends MiniChart {
         );
         const domain = data.map((_, index) => index);
 
-        const xScale = new _Scene.BandScale();
+        const xScale = new _Scene.CategoryScale();
         xScale.domain = domain;
         xScale.range = [padding, size - padding];
         xScale.paddingInner = 0.01;
         xScale.paddingOuter = 0.1;
 
-        const yScale = new _Scene.BandScale();
+        const yScale = new _Scene.CategoryScale();
         yScale.domain = domain;
         yScale.range = [padding, size - padding];
         yScale.paddingInner = 0.01;
@@ -67,7 +63,7 @@ export class MiniHeatmap extends MiniChart {
             return rects;
         }, [] as Rect[]);
 
-        this.updateColors(fills, strokes, themeTemplate, isCustomTheme);
+        this.updateColors(fills, strokes, isCustomTheme);
 
         const rectGroup = new _Scene.Group();
         rectGroup.setClipRect(new _Scene.BBox(padding, padding, size - padding, size - padding));
@@ -75,15 +71,13 @@ export class MiniHeatmap extends MiniChart {
         this.root.append(rectGroup);
     }
 
-    updateColors(fills: string[], strokes: string[], themeTemplate?: ThemeTemplateParameters, isCustomTheme?: boolean) {
+    updateColors(fills: string[], strokes: string[], isCustomTheme?: boolean) {
         const { _Theme, _Util } = this.agChartsExports;
-        const defaultColorRange = themeTemplate?.get(_Theme.themeSymbols.DEFAULT_DIVERGING_SERIES_COLOR_RANGE);
-        const defaultBackgroundColor = themeTemplate?.get(_Theme.themeSymbols.DEFAULT_BACKGROUND_COLOUR);
-        const backgroundFill =
-            (Array.isArray(defaultBackgroundColor) ? defaultBackgroundColor[0] : defaultBackgroundColor) ?? 'white';
 
-        const colorRange = isCustomTheme ? [fills[0], fills[1]] : defaultColorRange;
-        const stroke = isCustomTheme ? strokes[0] : backgroundFill;
+        const colorRange = isCustomTheme
+            ? [fills[0], fills[1]]
+            : _Theme.resolveOperation({ $palette: 'divergingColors' });
+        const stroke = isCustomTheme ? strokes[0] : _Theme.resolveOperation({ $ref: 'backgroundColor' });
 
         const fillFn = _Util.interpolateColor(colorRange[0], colorRange[1]);
         this.rects.forEach((rect, i) => {
@@ -92,3 +86,8 @@ export class MiniHeatmap extends MiniChart {
         });
     }
 }
+
+export const MiniHeatmap: MiniChartSelector = {
+    chartType: 'heatmap',
+    miniChart: MiniHeatmapClass,
+};

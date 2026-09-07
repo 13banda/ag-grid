@@ -3,20 +3,25 @@ import type { SelectAllMode } from '../entities/gridOptions';
 import type { RowNode } from '../entities/rowNode';
 import type { SelectionEventSourceType } from '../events';
 import type { IRowNode } from '../interfaces/iRowNode';
-import { _warn } from '../validation/logging';
+import { _isManualPinnedRow } from '../pinnedRowModel/pinnedRowUtils';
 
 export function setNodesSelected(
     beans: BeanCollection,
     params: { nodes: IRowNode[]; newValue: boolean; source?: SelectionEventSourceType }
 ) {
-    const allNodesValid = params.nodes.every((node) => {
-        if (node.rowPinned) {
-            _warn(59);
+    const nodes = params.nodes.filter((node): node is IRowNode => !!node);
+    if (!nodes.length) {
+        return;
+    }
+
+    const allNodesValid = nodes.every((node) => {
+        if (node.rowPinned && !_isManualPinnedRow(node as RowNode)) {
+            beans.log.warn(59);
             return false;
         }
 
         if (node.id === undefined) {
-            _warn(60);
+            beans.log.warn(60);
             return false;
         }
         return true;
@@ -26,9 +31,8 @@ export function setNodesSelected(
         return;
     }
 
-    const { nodes, source, newValue } = params;
-    const nodesAsRowNode = nodes as RowNode[];
-    beans.selectionSvc?.setNodesSelected({ nodes: nodesAsRowNode, source: source ?? 'api', newValue });
+    const { source, newValue } = params;
+    beans.selectionSvc?.setNodesSelected({ nodes: nodes as RowNode[], source: source ?? 'api', newValue });
 }
 
 export function selectAll(

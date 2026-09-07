@@ -2,7 +2,7 @@ import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { BeanCollection } from '../context/context';
 import type { AllEvents } from '../events';
-import { _warn } from '../validation/logging';
+import { _warnWithoutAttribution } from '../validation/logging';
 import type { GridApi } from './gridApi';
 import { gridApiFunctionsMap } from './gridApiFunctions';
 import type { ApiFunction, ApiFunctionName } from './iApiFunction';
@@ -72,7 +72,10 @@ export class ApiFunctionService extends BeanStub implements NamedBean {
                     beans,
                     fns: { [apiName]: fn },
                 } = this;
-                return fn ? fn(beans!, ...args) : this.apiNotFound(apiName);
+                if (!fn) {
+                    return this.apiNotFound(apiName);
+                }
+                return fn(beans, ...args);
             },
         };
     }
@@ -80,12 +83,13 @@ export class ApiFunctionService extends BeanStub implements NamedBean {
     private apiNotFound(fnName: ApiFunctionName): void {
         const { beans, gos, preDestroyLink } = this;
         if (!beans) {
-            _warn(26, { fnName, preDestroyLink });
-        } else {
-            const module = gridApiFunctionsMap[fnName];
-            if (gos.assertModuleRegistered(module, `api.${fnName}`)) {
-                _warn(27, { fnName, module });
-            }
+            // No grid context (grid destroyed) — genuinely unattributed.
+            _warnWithoutAttribution(26, { fnName, preDestroyLink });
+            return;
+        }
+        const module = gridApiFunctionsMap[fnName];
+        if (gos.assertModuleRegistered(module, `\`api.${fnName}\``)) {
+            beans.log.warn(27, { fnName, module });
         }
     }
 

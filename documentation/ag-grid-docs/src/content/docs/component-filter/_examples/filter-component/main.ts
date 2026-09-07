@@ -1,30 +1,37 @@
-import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
+import type { ColDef, DoesFilterPassParams, GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     CustomFilterModule,
     ModuleRegistry,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 import { PartialMatchFilter } from './partialMatchFilter_typescript';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    TextEditorModule,
-    CustomFilterModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, TextEditorModule, CustomFilterModule, ClientSideRowModelModule]);
+
+function doesFilterPass({ model, node, handlerParams }: DoesFilterPassParams<any, any, string>): boolean {
+    const value = handlerParams.getValue(node).toString().toLowerCase();
+    return model
+        .toLowerCase()
+        .split(' ')
+        .every((filterWord) => value.indexOf(filterWord) >= 0);
+}
 
 const columnDefs: ColDef[] = [
     { field: 'row' },
     {
         field: 'name',
-        filter: PartialMatchFilter,
+        filter: { component: PartialMatchFilter, doesFilterPass: doesFilterPass },
     },
 ];
 
@@ -39,6 +46,7 @@ const gridOptions: GridOptions = {
     },
     columnDefs: columnDefs,
     rowData: getData(),
+    enableFilterHandlers: true,
 };
 
 function onClicked() {

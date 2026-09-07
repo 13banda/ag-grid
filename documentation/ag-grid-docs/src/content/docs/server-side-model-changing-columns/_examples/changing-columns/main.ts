@@ -6,7 +6,7 @@ import type {
     IServerSideGetRowsParams,
     SetFilterValuesFuncParams,
 } from 'ag-grid-community';
-import { ModuleRegistry, NumberFilterModule, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, NumberFilterModule, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -18,6 +18,11 @@ import {
 
 import { FakeServer } from './fakeServer';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     NumberFilterModule,
     ColumnsToolPanelModule,
@@ -26,7 +31,6 @@ ModuleRegistry.registerModules([
     RowGroupingModule,
     ServerSideRowModelModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const colDefCountry: ColDef = { field: 'country', rowGroup: true };

@@ -3,10 +3,15 @@ import {
     CellStyleModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     CellStyleModule,
@@ -14,7 +19,6 @@ ModuleRegistry.registerModules([
     ExcelExportModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -49,7 +53,7 @@ const gridOptions: GridOptions = {
         { company: 'Twitter', url: 'https://www.twitter.com' },
         { company: 'StackOverflow', url: 'https://stackoverflow.com/' },
         { company: 'Reddit', url: 'https://www.reddit.com' },
-        { company: 'Github', url: 'https://www.github.com' },
+        { company: 'GitHub', url: 'https://www.github.com' },
         { company: 'Microsoft', url: 'https://www.microsoft.com' },
         { company: 'Gizmodo', url: 'https://www.gizmodo.com' },
         { company: 'LinkedIN', url: 'https://www.linkedin.com' },

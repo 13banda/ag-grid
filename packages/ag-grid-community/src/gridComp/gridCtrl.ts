@@ -1,57 +1,109 @@
+import {
+    Direction,
+    _findTabbableParent,
+    _focusInto,
+    _focusIntoTabbableFirst,
+    _getActiveDomElement,
+    _last,
+    _observeIntersection,
+    _observeResize,
+} from 'ag-stack';
+
 import { BeanStub } from '../context/beanStub';
-import { _stampTopLevelGridCompWithGridInstance } from '../gridBodyComp/mouseEventUtils';
-import { _getActiveDomElement } from '../gridOptionsUtils';
+import { isHeaderPosition } from '../headerRendering/headerUtils';
+import type { GridContainerName, TabToNextGridContainerTarget } from '../interfaces/iCallbackParams';
 import type { FocusableContainer } from '../interfaces/iFocusableContainer';
-import type { IWatermark } from '../interfaces/iWatermark';
 import type { LayoutView } from '../styling/layoutFeature';
 import { LayoutFeature } from '../styling/layoutFeature';
-import { _last } from '../utils/array';
-import { _observeResize } from '../utils/dom';
-import { _findTabbableParent, _focusInto, _isHeaderFocusSuppressed } from '../utils/focus';
-import type { ComponentSelector } from '../widgets/component';
+import { _isCellFocusSuppressed, _isHeaderFocusSuppressed, _runWithContainerFocusAllowed } from '../utils/gridFocus';
+import { _consoleWarn } from '../utils/log';
+import type { Component, ComponentSelector } from '../widgets/component';
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IGridComp extends LayoutView {
-    setRtlClass(cssClass: string): void;
     destroyGridUi(): void;
     forceFocusOutOfContainer(up: boolean): void;
+    focusNextElementOutsideContainer(up: boolean, eExcludeContainers: HTMLElement[]): boolean;
     getFocusableContainers(): FocusableContainer[];
     setCursor(value: string | null): void;
     setUserSelect(value: string | null): void;
 }
 
 export interface OptionalGridComponents {
-    paginationSelector?: ComponentSelector;
-    gridHeaderDropZonesSelector?: ComponentSelector;
-    sideBarSelector?: ComponentSelector;
-    statusBarSelector?: ComponentSelector;
-    watermarkSelector?: ComponentSelector;
+    paginationSelector?: ComponentSelector<Component>;
+    gridHeaderDropZonesSelector?: ComponentSelector<Component>;
+    sideBarSelector?: ComponentSelector<Component>;
+    statusBarSelector?: ComponentSelector<Component>;
+    toolbarSelector?: ComponentSelector<Component & FocusableContainer>;
+    watermarkSelector?: ComponentSelector<Component>;
 }
 
+const focusContainer = (comp: FocusableContainer, up?: boolean): boolean => {
+    return _runWithContainerFocusAllowed(comp, () => _focusIntoTabbableFirst(comp.getGui(), up, true));
+};
+
+const getGridContainerName = (container?: FocusableContainer): GridContainerName => {
+    return container?.getFocusableContainerName() ?? 'external';
+};
+
+const getDefaultTabToNextGridContainerTargetName = (target: TabToNextGridContainerTarget | null): GridContainerName => {
+    if (target == null) {
+        return 'external';
+    }
+
+    return typeof target === 'string' ? target : 'gridBody';
+};
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class GridCtrl extends BeanStub {
     private view: IGridComp;
-    private eGridHostDiv: HTMLElement;
     private eGui: HTMLElement;
 
-    private additionalFocusableContainers: Set<FocusableContainer> = new Set();
+    private readonly additionalFocusableContainers: Set<FocusableContainer> = new Set();
 
-    public setComp(view: IGridComp, eGridDiv: HTMLElement, eGui: HTMLElement): void {
+    public setComp(view: IGridComp, eGui: HTMLElement, eAriaDescription: HTMLElement): void {
         this.view = view;
-        this.eGridHostDiv = eGridDiv;
         this.eGui = eGui;
 
-        this.eGui.setAttribute('grid-id', this.beans.context.getGridId());
+        this.eGui.setAttribute('grid-id', this.beans.context.getId());
 
-        const { dragAndDrop, ctrlsSvc } = this.beans;
+        const { dragAndDrop, ctrlsSvc, ariaAnnounce } = this.beans;
 
         dragAndDrop?.registerGridDropTarget(() => this.eGui, this);
 
-        _stampTopLevelGridCompWithGridInstance(this.gos, eGridDiv);
+        ariaAnnounce.setDescriptionContainer(eAriaDescription);
 
         this.createManagedBean(new LayoutFeature(this.view));
 
-        this.view.setRtlClass(this.gos.get('enableRtl') ? 'ag-rtl' : 'ag-ltr');
+        // enableContentVisibilityAuto takes precedence; the deprecated suppressContentVisibilityAuto
+        // is only consulted when the former is unset (suppress=false is equivalent to enable=true).
+        const contentVisibilityAutoEnabled =
+            this.gos.get('enableContentVisibilityAuto') ?? this.gos.get('suppressContentVisibilityAuto') === false;
+        if (contentVisibilityAutoEnabled) {
+            const [removeListener] = this.addManagedEventListeners({
+                firstDataRendered: () => {
+                    removeListener();
+                    const timer = setTimeout(() => {
+                        const cleanup = _observeIntersection(
+                            this.beans,
+                            eGui,
+                            (change) => {
+                                if (!change.isIntersecting) {
+                                    eGui.style.setProperty('content-visibility', 'auto');
+                                } else {
+                                    eGui.style.removeProperty('content-visibility');
+                                }
+                            },
+                            { rootMargin: '200px' }
+                        );
+                        this.addDestroyFunc(() => cleanup());
+                    }, this.gos.get('contentVisibilityAutoDelay'));
+                    this.addDestroyFunc(() => clearTimeout(timer));
+                },
+            });
+        }
 
-        const unsubscribeFromResize = _observeResize(this.beans, this.eGridHostDiv, this.onGridSizeChanged.bind(this));
+        const unsubscribeFromResize = _observeResize(this.beans, this.eGui, this.onGridSizeChanged.bind(this));
         this.addDestroyFunc(() => unsubscribeFromResize());
 
         ctrlsSvc.register('gridCtrl', this);
@@ -65,20 +117,22 @@ export class GridCtrl extends BeanStub {
 
     public getOptionalSelectors(): OptionalGridComponents {
         const beans = this.beans;
+
         return {
             paginationSelector: beans.pagination?.getPaginationSelector(),
-            gridHeaderDropZonesSelector: beans.registry.getSelector('AG-GRID-HEADER-DROP-ZONES'),
+            gridHeaderDropZonesSelector: beans.registry?.getSelector('AG-GRID-HEADER-DROP-ZONES'),
             sideBarSelector: beans.sideBar?.getSelector(),
             statusBarSelector: beans.registry?.getSelector('AG-STATUS-BAR'),
-            watermarkSelector: (beans.licenseManager as IWatermark)?.getWatermarkSelector(),
+            toolbarSelector: beans.registry?.getSelector('AG-TOOLBAR'),
+            watermarkSelector: beans.licenseManager?.getWatermarkSelector(),
         };
     }
 
     private onGridSizeChanged(): void {
         this.eventSvc.dispatchEvent({
             type: 'gridSizeChanged',
-            clientWidth: this.eGridHostDiv.clientWidth,
-            clientHeight: this.eGridHostDiv.clientHeight,
+            clientWidth: this.eGui.clientWidth,
+            clientHeight: this.eGui.clientHeight,
         });
     }
 
@@ -90,65 +144,131 @@ export class GridCtrl extends BeanStub {
         return this.eGui;
     }
 
-    public setResizeCursor(on: boolean): void {
-        this.view.setCursor(on ? 'ew-resize' : null);
+    public setResizeCursor(direction: Direction | false, isColumn: boolean = false): void {
+        const { view } = this;
+
+        if (direction === false) {
+            view.setCursor(null);
+        } else if (isColumn) {
+            view.setCursor(direction === Direction.Horizontal ? 'col-resize' : 'row-resize');
+        } else {
+            view.setCursor(direction === Direction.Horizontal ? 'ew-resize' : 'ns-resize');
+        }
     }
 
     public disableUserSelect(on: boolean): void {
         this.view.setUserSelect(on ? 'none' : null);
     }
 
-    public focusNextInnerContainer(backwards: boolean): boolean {
+    public focusNextInnerContainer(backwards: boolean): boolean | undefined {
         const focusableContainers = this.getFocusableContainers();
         const { indexWithFocus, nextIndex } = this.getNextFocusableIndex(focusableContainers, backwards);
+        const resolvedNextIndex = indexWithFocus === -1 ? (backwards ? focusableContainers.length - 1 : 0) : nextIndex;
+        const {
+            gos,
+            beans: { focusSvc, navigation },
+        } = this;
+        const userCallbackFunction = gos.getCallback('tabToNextGridContainer');
 
-        if (nextIndex < 0 || nextIndex >= focusableContainers.length) {
-            return false;
-        }
+        if (userCallbackFunction) {
+            const defaultTarget = focusSvc.getDefaultTabToNextGridContainerTarget({
+                backwards,
+                focusableContainers,
+                nextIndex: resolvedNextIndex,
+            });
 
-        if (nextIndex === 0) {
-            if (indexWithFocus > 0) {
-                const { visibleCols, focusSvc } = this.beans;
-                const allColumns = visibleCols.allCols;
-                const lastColumn = _last(allColumns);
-                if (focusSvc.focusGridView(lastColumn, true)) {
-                    return true;
+            const nextContainerName = getGridContainerName(focusableContainers[resolvedNextIndex]);
+            const nextContainer =
+                defaultTarget == null && nextContainerName === 'gridBody'
+                    ? 'gridBody'
+                    : getDefaultTabToNextGridContainerTargetName(defaultTarget);
+
+            const userResult = userCallbackFunction({
+                backwards,
+                previousContainer: getGridContainerName(focusableContainers[indexWithFocus]),
+                nextContainer,
+                defaultTarget,
+            });
+
+            if (userResult !== undefined) {
+                if (typeof userResult === 'boolean') {
+                    return userResult;
                 }
+
+                if (typeof userResult === 'string') {
+                    if (userResult === 'gridBody') {
+                        return this.focusGridBodyDefault(backwards) || undefined;
+                    }
+
+                    const targetContainer = focusableContainers.find(
+                        (container) => container.getFocusableContainerName() === userResult
+                    );
+                    if (!targetContainer) {
+                        _consoleWarn(`tabToNextGridContainer - ${userResult} container not found`);
+                        return undefined;
+                    }
+
+                    return focusContainer(targetContainer, backwards) ? true : undefined;
+                }
+
+                if (isHeaderPosition(userResult)) {
+                    return focusSvc.focusHeaderPosition({ headerPosition: userResult }) || undefined;
+                }
+
+                navigation?.ensureCellVisible(userResult);
+                focusSvc.setFocusedCell({ ...userResult, forceBrowserFocus: true });
+                return focusSvc.isCellFocused(userResult) || undefined;
             }
-            return false;
         }
 
-        return this.focusContainer(focusableContainers[nextIndex], backwards);
+        return (
+            this.focusNextInnerContainerDefault({
+                backwards,
+                focusableContainers,
+                indexWithFocus,
+                nextIndex: resolvedNextIndex,
+            }) || undefined
+        );
     }
 
     public focusInnerElement(fromBottom?: boolean): boolean {
-        const userCallbackFunction = this.gos.getCallback('focusGridInnerElement');
-        if (userCallbackFunction && userCallbackFunction({ fromBottom: !!fromBottom })) {
+        const {
+            gos,
+            beans,
+            beans: { focusSvc, visibleCols },
+        } = this;
+        const userCallbackFunction = gos.getCallback('focusGridInnerElement');
+        if (userCallbackFunction?.({ fromBottom: !!fromBottom })) {
             return true;
         }
 
         const focusableContainers = this.getFocusableContainers();
-        const { focusSvc, visibleCols } = this.beans;
-        const allColumns = visibleCols.allCols;
 
         if (fromBottom) {
-            if (focusableContainers.length > 1) {
-                return this.focusContainer(_last(focusableContainers), true);
-            }
-
-            const lastColumn = _last(allColumns);
-            if (focusSvc.focusGridView(lastColumn, true)) {
+            if (
+                this.focusNextInnerContainerDefault({
+                    backwards: true,
+                    focusableContainers,
+                    indexWithFocus: focusableContainers.length,
+                    nextIndex: focusableContainers.length - 1,
+                })
+            ) {
                 return true;
             }
+
+            // preserve previous bottom-entry fallback for async row model timing.
+            return focusSvc.focusGridView({ column: _last(visibleCols.allCols), backwards: true });
         }
 
-        if (this.gos.get('headerHeight') === 0 || _isHeaderFocusSuppressed(this.beans)) {
-            if (focusSvc.focusGridView(allColumns[0])) {
+        const allColumns = visibleCols.allCols;
+
+        if (gos.get('headerHeight') === 0 || _isHeaderFocusSuppressed(beans)) {
+            if (focusSvc.focusGridView({ column: allColumns[0], backwards: fromBottom })) {
                 return true;
             }
 
             for (let i = 1; i < focusableContainers.length; i++) {
-                if (_focusInto(focusableContainers[i].getGui())) {
+                if (_focusInto(focusableContainers[i].getGui(), fromBottom)) {
                     return true;
                 }
             }
@@ -162,6 +282,17 @@ export class GridCtrl extends BeanStub {
         this.view.forceFocusOutOfContainer(up);
     }
 
+    public focusNextElementOutsideContainer(up = false): boolean {
+        const eExcludeContainers = [...this.additionalFocusableContainers].map((container) => container.getGui());
+        return this.view.focusNextElementOutsideContainer(up, eExcludeContainers);
+    }
+
+    public isFocusInsideGridBody(): boolean {
+        const focusableContainers = this.getFocusableContainers();
+        const { indexWithFocus } = this.getNextFocusableIndex(focusableContainers);
+        return focusableContainers[indexWithFocus]?.getFocusableContainerName() === 'gridBody';
+    }
+
     public addFocusableContainer(container: FocusableContainer): void {
         this.additionalFocusableContainers.add(container);
     }
@@ -172,17 +303,27 @@ export class GridCtrl extends BeanStub {
 
     public allowFocusForNextCoreContainer(up?: boolean): void {
         const coreContainers = this.view.getFocusableContainers();
-        const { nextIndex, indexWithFocus } = this.getNextFocusableIndex(coreContainers, up);
-        if (indexWithFocus === -1 || nextIndex < 0 || nextIndex >= coreContainers.length) {
-            return;
+        const { indexWithFocus, nextIndex } = this.getNextFocusableIndex(coreContainers, up);
+
+        // browser default tabbing can focus unmanaged scrollable elements and lose focus context.
+        // move focus to the next reachable core container first; if none can take focus, push focus out.
+        if (
+            !this.focusNextInnerContainerDefault({
+                backwards: !!up,
+                focusableContainers: coreContainers,
+                indexWithFocus,
+                nextIndex,
+            })
+        ) {
+            this.forceFocusOutOfContainer(up);
         }
-        const comp = coreContainers[nextIndex];
-        comp.setAllowFocus?.(true);
-        // we're letting the browser handle the focus here, so need to wait for focus to move into the container before disabling focus again.
-        // can't do this via event, as the container may not have anything focusable. In which case, the focus will just go out of the grid.
-        setTimeout(() => {
-            comp.setAllowFocus?.(false);
-        });
+    }
+
+    public isFocusable(): boolean {
+        const beans = this.beans;
+        return (
+            !_isCellFocusSuppressed(beans) || !_isHeaderFocusSuppressed(beans) || !!beans.sideBar?.comp?.isDisplayed()
+        );
     }
 
     private getNextFocusableIndex(
@@ -194,18 +335,62 @@ export class GridCtrl extends BeanStub {
     } {
         const activeEl = _getActiveDomElement(this.beans);
         const indexWithFocus = focusableContainers.findIndex((container) => container.getGui().contains(activeEl));
-        const nextIndex = indexWithFocus + (backwards ? -1 : 1);
-        return {
-            indexWithFocus,
-            nextIndex,
-        };
+
+        return { indexWithFocus, nextIndex: indexWithFocus + (backwards ? -1 : 1) };
     }
 
-    private focusContainer(comp: FocusableContainer, up?: boolean): boolean {
-        comp.setAllowFocus?.(true);
-        const result = _focusInto(comp.getGui(), up);
-        comp.setAllowFocus?.(false);
-        return result;
+    private focusGridBodyDefault(backwards: boolean): boolean {
+        const {
+            gos,
+            beans,
+            beans: {
+                focusSvc,
+                visibleCols: { allCols },
+            },
+        } = this;
+        if (backwards) {
+            return focusSvc.focusGridView({ column: _last(allCols), backwards: true });
+        }
+
+        if (gos.get('headerHeight') === 0 || _isHeaderFocusSuppressed(beans)) {
+            return focusSvc.focusGridView({ column: allCols[0] });
+        }
+
+        return focusSvc.focusFirstHeader();
+    }
+
+    private focusNextInnerContainerDefault(params: {
+        backwards: boolean;
+        focusableContainers: FocusableContainer[];
+        indexWithFocus: number;
+        nextIndex: number;
+    }): boolean {
+        const { backwards, focusableContainers, indexWithFocus } = params;
+        const step = backwards ? -1 : 1;
+
+        // walk container order in tab direction and focus the first target that can accept focus.
+        for (let index = params.nextIndex; index >= 0 && index < focusableContainers.length; index += step) {
+            const container = focusableContainers[index];
+            const containerName = container.getFocusableContainerName();
+
+            // grid body transitions should restore a real grid target, not focus structural wrappers.
+            if (containerName === 'gridBody') {
+                const enteringGridBody =
+                    indexWithFocus === -1 || (backwards ? indexWithFocus > index : indexWithFocus < index);
+                if (enteringGridBody) {
+                    if (this.focusGridBodyDefault(backwards)) {
+                        return true;
+                    }
+                    continue;
+                }
+            }
+
+            if (focusContainer(container, backwards)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private getFocusableContainers(): FocusableContainer[] {

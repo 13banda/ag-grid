@@ -1,27 +1,54 @@
-import type { GetCellValueParams } from '../api/gridApi';
+import { _toString } from 'ag-stack';
+
 import type { BeanCollection } from '../context/context';
-import { _missing } from '../utils/generic';
-import { _escapeString } from '../utils/string';
+import { _resolvePivotColumnForRow } from '../entities/agColumn';
+import type { Column } from '../interfaces/iColumn';
+import type { CellValueResolveFrom } from '../interfaces/iEditService';
+import type { IRowNode } from '../interfaces/iRowNode';
+
+export interface GetCellValueParams<TValue = any> {
+    /** The row to read from */
+    rowNode: IRowNode;
+    /** The column to read (field name, `colId`, or `Column` object) */
+    colKey: string | Column<TValue>;
+    /** If `true`, returns the formatted string (via the column's `valueFormatter`) instead of the raw value. */
+    useFormatter?: boolean;
+    /**
+     * Controls which base value is returned.
+     * - `'edit'` (default): Live editor value if the cell is being edited, then any pending batch value, then committed data.
+     * - `'batch'`: Pending batch values but excluding live editor typing.
+     * - `'data'`: Committed data only, ignoring all edit state.
+     */
+    from?: CellValueResolveFrom;
+    /**
+     * If `true`, applies the Show Values As transform (e.g. a percentage of a total) on top of the `from` base.
+     * Columns without an active mode return the base value unchanged.
+     */
+    transformValues?: boolean;
+}
 
 export function expireValueCache(beans: BeanCollection): void {
     beans.valueCache?.expire();
 }
 
 export function getCellValue<TValue = any>(beans: BeanCollection, params: GetCellValueParams<TValue>): any {
-    const { colKey, rowNode, useFormatter } = params;
+    const { colKey, rowNode, useFormatter, from = 'edit', transformValues } = params;
 
-    const column = beans.colModel.getColDefCol(colKey) ?? beans.colModel.getCol(colKey);
-    if (_missing(column)) {
+    const column = beans.colModel.getCol(colKey);
+    if (!column) {
         return null;
     }
-
-    const value = beans.valueSvc.getValueForDisplay(column, rowNode);
-
+    // API accepts an arbitrary node, so a pivot result column may be read on a leaf — redirect to the
+    // underlying value column (display/selection paths never hit this, see ValueService.getValue).
+    const result = beans.valueSvc.getValueForDisplay({
+        column: _resolvePivotColumnForRow(column, rowNode),
+        node: rowNode,
+        includeValueFormatted: useFormatter,
+        from,
+        transformValues,
+    });
     if (useFormatter) {
-        const formattedValue = beans.valueSvc.formatValue(column, rowNode, value);
-        // Match the logic in the default cell renderer insertValueWithoutCellRenderer if no formatter is used
-        return formattedValue ?? _escapeString(value, true);
+        return result.valueFormatted ?? _toString(result.value);
     }
-
-    return value;
+    return result.value;
 }

@@ -1,0 +1,193 @@
+import type {
+    AgComponentSelector,
+    AgCoreBeanCollection,
+    BaseEvents,
+    BaseProperties,
+    IPropertiesService,
+} from 'ag-stack';
+import {
+    _addOrRemoveAttribute,
+    _getActiveDomElement,
+    _isBrowserFirefox,
+    _isBrowserSafari,
+    _parseDateTimeFromString,
+    _serialiseDate,
+} from 'ag-stack';
+
+import type { AgInputTextFieldParams } from './agInputTextField';
+import { AgInputTextField } from './agInputTextField';
+import type { AgWidgetSelectorType } from './agWidgetSelectorType';
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface AgInputDateFieldParams<
+    TComponentSelectorType extends string,
+> extends AgInputTextFieldParams<TComponentSelectorType> {
+    min?: string;
+    max?: string;
+    step?: number;
+    includeTime?: boolean;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export class AgInputDateField<
+    TBeanCollection extends AgCoreBeanCollection<TProperties, TGlobalEvents, TCommon, TPropertiesService>,
+    TProperties extends BaseProperties,
+    TGlobalEvents extends BaseEvents,
+    TCommon,
+    TPropertiesService extends IPropertiesService<TProperties, TCommon>,
+    TComponentSelectorType extends string,
+> extends AgInputTextField<
+    TBeanCollection,
+    TProperties,
+    TGlobalEvents,
+    TCommon,
+    TPropertiesService,
+    TComponentSelectorType,
+    AgInputDateFieldParams<TComponentSelectorType>
+> {
+    private min?: string;
+    private max?: string;
+    private step?: number;
+    private includeTime: boolean = false;
+
+    constructor(config?: AgInputDateFieldParams<TComponentSelectorType>) {
+        super(config, 'ag-date-field', 'date');
+    }
+
+    public override postConstruct() {
+        super.postConstruct();
+
+        // ensures that the input element is focussed when a clear button is clicked,
+        // unless using safari as there is no clear button and focus does not work properly
+        const usingSafari = _isBrowserSafari();
+        this.addManagedListeners(this.eInput, {
+            wheel: this.onWheel.bind(this),
+            mousedown: () => {
+                if (this.isDisabled() || usingSafari) {
+                    return;
+                }
+                this.eInput.focus();
+            },
+        });
+        const { includeTime, min, max, step } = this.config;
+        if (includeTime != null) {
+            this.setIncludeTime(includeTime);
+        }
+        if (typeof min === 'string') {
+            this.setMin(min);
+        }
+        if (typeof max === 'string') {
+            this.setMax(max);
+        }
+        if (typeof step === 'number') {
+            this.setStep(step);
+        } else {
+            this.eInput.step = 'any';
+        }
+    }
+
+    private onWheel(e: WheelEvent) {
+        // Prevent default scroll events from incrementing / decrementing the input, since its inconsistent between browsers
+        if (_getActiveDomElement(this.beans) === this.eInput) {
+            e.preventDefault();
+        }
+    }
+
+    public setMin(minDate: Date | string | undefined): this {
+        const min =
+            minDate instanceof Date ? (_serialiseDate(minDate ?? null, !!this.includeTime) ?? undefined) : minDate;
+        if (this.min === min) {
+            return this;
+        }
+
+        this.min = min;
+
+        _addOrRemoveAttribute(this.eInput, 'min', min);
+
+        return this;
+    }
+
+    public setMax(maxDate: Date | string | undefined): this {
+        const max =
+            maxDate instanceof Date ? (_serialiseDate(maxDate ?? null, !!this.includeTime) ?? undefined) : maxDate;
+        if (this.max === max) {
+            return this;
+        }
+
+        this.max = max;
+
+        _addOrRemoveAttribute(this.eInput, 'max', max);
+
+        return this;
+    }
+
+    public setStep(step?: number): this {
+        if (this.step === step) {
+            return this;
+        }
+
+        this.step = step;
+
+        _addOrRemoveAttribute(this.eInput, 'step', step);
+
+        return this;
+    }
+
+    public setIncludeTime(includeTime: boolean): this {
+        if (this.includeTime === includeTime) {
+            return this;
+        }
+
+        this.includeTime = includeTime;
+
+        super.setInputType(includeTime ? 'datetime-local' : 'date');
+        if (includeTime) {
+            this.setStep(1);
+        }
+
+        return this;
+    }
+
+    /** Commits a partially-typed segment before a stop reads the value. A focus-loss stop already blurred. */
+    public flushPendingSegment(): void {
+        if (_isBrowserFirefox() && _getActiveDomElement(this.beans) === this.eInput) {
+            flushFirefoxSegment(this.eInput);
+        }
+    }
+
+    public getDate(): Date | undefined {
+        if (!this.eInput.validity.valid) {
+            return undefined;
+        }
+        return _parseDateTimeFromString(this.getValue()) ?? undefined;
+    }
+
+    public setDate(date: Date | undefined, silent?: boolean): void {
+        this.setValue(_serialiseDate(date ?? null, this.includeTime), silent);
+    }
+}
+
+const swallowEvent = (e: Event) => e.stopImmediatePropagation();
+
+/**
+ * Firefox alone withholds a pending segment from input.value until blur, so flush by blur+refocus. Only
+ * the bubbling pair is swallowed, and it must be: it would otherwise reach stopEditingWhenCellsLoseFocus
+ * with a null relatedTarget and end the edit. `blur`/`focus` need no guard — they reach no ancestor.
+ */
+const flushFirefoxSegment = (eInput: HTMLInputElement): void => {
+    eInput.addEventListener('focusout', swallowEvent, true);
+    eInput.addEventListener('focusin', swallowEvent, true);
+    try {
+        eInput.blur();
+        eInput.focus({ preventScroll: true });
+    } finally {
+        eInput.removeEventListener('focusout', swallowEvent, true);
+        eInput.removeEventListener('focusin', swallowEvent, true);
+    }
+};
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const AgInputDateFieldSelector: AgComponentSelector<AgWidgetSelectorType> = {
+    selector: 'AG-INPUT-DATE-FIELD',
+    component: AgInputDateField,
+};

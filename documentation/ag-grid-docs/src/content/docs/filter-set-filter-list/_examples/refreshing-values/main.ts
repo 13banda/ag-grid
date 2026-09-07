@@ -2,11 +2,11 @@ import type {
     FirstDataRenderedEvent,
     GridApi,
     GridOptions,
-    ISetFilter,
     ISetFilterParams,
+    SetFilterHandler,
     SetFilterValuesFuncParams,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -17,6 +17,11 @@ import {
 
 import { getData } from './data';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
@@ -24,7 +29,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const list1 = ['Elephant', 'Lion', 'Monkey'];
@@ -87,11 +91,9 @@ function useList1() {
         valuesArray.push(value);
     });
 
-    gridApi!.getColumnFilterInstance<ISetFilter>('array').then((filter) => {
-        filter!.refreshFilterValues();
+    gridApi!.getColumnFilterHandler<SetFilterHandler>('array')!.refreshFilterValues();
 
-        valuesCallbackList = list1;
-    });
+    valuesCallbackList = list1;
 }
 
 function useList2() {
@@ -101,11 +103,9 @@ function useList2() {
         valuesArray.push(value);
     });
 
-    gridApi!.getColumnFilterInstance<ISetFilter>('array').then((filter) => {
-        filter!.refreshFilterValues();
+    gridApi!.getColumnFilterHandler<SetFilterHandler>('array')!.refreshFilterValues();
 
-        valuesCallbackList = list2;
-    })!;
+    valuesCallbackList = list2;
 }
 
 // setup the grid after the page has finished loading

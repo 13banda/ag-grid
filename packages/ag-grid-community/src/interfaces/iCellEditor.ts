@@ -1,9 +1,12 @@
+import type { IPopupComponent } from 'ag-stack';
+
 import type { ColDef } from '../entities/colDef';
 import type { Column } from '../interfaces/iColumn';
 import type { GetCellsParams } from './iCellsParams';
 import type { AgGridCommon } from './iCommon';
-import type { IPopupComponent } from './iPopupComponent';
-import type { IRowNode } from './iRowNode';
+import type { EditState } from './iEditModelService';
+import type { IRowNode, RowPinnedType } from './iRowNode';
+import type { RowPosition } from './iRowPosition';
 
 export interface BaseCellEditor {
     /** Optional: Gets called once after initialised. If you return true, the editor will not be
@@ -28,11 +31,44 @@ export interface BaseCellEditor {
      * Optional: If doing full line edit, then gets called when focus is leaving the editor
      */
     focusOut?(): void;
+
+    /**
+     * Optional: Returns the element to use for validation feedback.
+     *
+     * Called by the grid in two contexts:
+     * - `tooltip: true` → used as the anchor for validation tooltips.
+     * - `tooltip: false` → receives the `invalid` CSS class for visual feedback.
+     *
+     * If omitted, the grid falls back to the cell element for inline editors.
+     * Popup editors that do not implement this will not show validation styles or tooltips.
+     *
+     * @param tooltip - Whether the element is for a tooltip or direct styling.
+     * @returns An HTML element for feedback, or `null`/`undefined` to use default behavior.
+     */
+    getValidationElement?(tooltip: boolean): HTMLElement;
+
+    /**
+     * Optional: The error messages associated with the Editor.
+     * Each error should be a non-empty, user-facing message.
+     */
+    getValidationErrors?(): string[] | null;
+}
+
+/**
+ * Internal protocol implemented by built-in cell editors that support in-place value
+ * updates (via `setDataValue(..., 'edit')`). Not part of the public `ICellEditor` API.
+ * Custom editors opt in by implementing `agSetEditValue`; without it the grid falls
+ * back to `refresh()` or editor recreation.
+ */
+export interface AgBaseCellEditor<TValue = any> extends ICellEditor<TValue> {
+    agSetEditValue(value: TValue | null | undefined): void;
+    /** Commit any buffered input to the value before the grid reads it on stop (e.g. a Firefox date segment). */
+    agFlushInput?(): void;
 }
 
 export interface ICellEditor<TValue = any> extends BaseCellEditor {
     /**
-     * Return the final value - called by the grid once after editing is complete
+     * Mandatory - Return the final value. Called by the grid once after editing is complete.
      */
     getValue(): TValue | null | undefined;
 
@@ -62,8 +98,19 @@ export interface ICellEditor<TValue = any> extends BaseCellEditor {
     getPopupPosition?(): 'over' | 'under' | undefined;
 }
 
-export interface ICellEditorParams<TData = any, TValue = any, TContext = any> extends AgGridCommon<TData, TContext> {
-    /** Current value of the cell */
+export interface IErrorValidationParams<TData = any, TValue = any, TContext = any> {
+    /** The value being validated. May be `null` or `undefined` — for example if the editor was cleared; the callback must handle this. */
+    value: TValue | null | undefined;
+    /** Errors produced by the Provided Editor's built-in constraints, or `null` when there are none. Include these in the callback result to retain the built-in validation. */
+    internalErrors: string[] | null;
+    cellEditorParams: ICellEditorParams<TData, TValue, TContext>;
+}
+
+export interface ICellEditorParamsShared<TData = any, TValue = any, TContext = any> extends AgGridCommon<
+    TData,
+    TContext
+> {
+    /** Current value of the cell. May be `null` or `undefined` — for example on group rows or when the `field` is absent from the row data; the callback must handle this. */
     value: TValue | null | undefined;
     /** Key value of key that started the edit, eg 'Enter' or 'F2' - non-printable
      *  characters appear here */
@@ -86,21 +133,41 @@ export interface ICellEditorParams<TData = any, TValue = any, TContext = any> ex
     onKeyDown: (event: KeyboardEvent) => void;
     /** Callback to tell grid to stop editing the current cell. Call with input parameter
      * true to prevent focus from moving to the next cell after editing stops in case the
-     * grid property `enterNavigatesVerticallyAfterEdit=true` */
-    stopEditing: (suppressNavigateAfterEdit?: boolean) => void;
+     * grid property `enterNavigatesVerticallyAfterEdit=true`. Pass the originating keydown
+     * event when committing from a key press so that `enterNavigatesVerticallyAfterEdit`
+     * can move focus in the correct direction. */
+    stopEditing: (suppressNavigateAfterEdit?: boolean, event?: KeyboardEvent) => void;
     /** A reference to the DOM element representing the grid cell that your component
      *  will live inside. Useful if you want to add event listeners or classes at this level.
      *  This is the DOM element that gets browser focus when selecting cells. */
     eGridCell: HTMLElement;
+
+    /**
+     * Optional validation callback that will override the `getValidationErrors()` of Provided Editors.
+     * Use this to return your own custom errors.
+     * @returns An array of non-empty, user-facing error messages, or `null` if the editor is valid.
+     */
+    getValidationErrors?: (params: IErrorValidationParams<TData, TValue, TContext>) => string[] | null;
+
+    /**
+     * Runs the Editor Validation.
+     */
+    validate(): void;
+}
+
+export interface ICellEditorParams<TData = any, TValue = any, TContext = any> extends ICellEditorParamsShared<
+    TData,
+    TValue,
+    TContext
+> {
     /** Utility function to parse a value using the column's `colDef.valueParser` */
     parseValue: (value: string) => TValue | null | undefined;
-    /** Utility function to format a value using the column's `colDef.valueFormatter` */
+    /** Utility function to format a value using the column's `colDef.valueFormatter`. The `value` argument may be `null` or `undefined`; callers should handle this. */
     formatValue: (value: TValue | null | undefined) => string;
 }
 
 export interface ICellEditorComp<TData = any, TValue = any, TContext = any>
-    extends ICellEditor<TValue>,
-        IPopupComponent<ICellEditorParams<TData, TValue, TContext>> {}
+    extends ICellEditor<TValue>, IPopupComponent<ICellEditorParams<TData, TValue, TContext>> {}
 
 /** This is only used internally within the grid */
 export interface DefaultProvidedCellEditorParams {
@@ -108,3 +175,45 @@ export interface DefaultProvidedCellEditorParams {
 }
 
 export interface GetCellEditorInstancesParams<TData = any> extends GetCellsParams<TData> {}
+
+export interface EditingCellPosition extends RowPosition {
+    /** Column id */
+    colId: string;
+
+    /**
+     * Column instance.
+     * @deprecated Use `colId` instead.
+     */
+    column?: Column;
+
+    /**
+     * Column instance.
+     * @deprecated Use `colId` instead.
+     */
+    colKey?: string | Column;
+
+    /** New pending value, use `null` to delete cell content */
+    newValue?: any;
+
+    /** Existing value, used only when retrieving current editing state, ignored when setting new editing state. */
+    oldValue?: any;
+
+    /** Current editing state */
+    state?: EditState;
+}
+
+export interface ICellEditorValidationError extends RowPosition {
+    column: Column;
+    messages: string[] | null;
+}
+
+export interface StartEditingCellParams {
+    /** The row index of the row to start editing */
+    rowIndex: number;
+    /** The column key of the row to start editing */
+    colKey: string | Column;
+    /** Set to `'top'` or `'bottom'` to start editing a pinned row */
+    rowPinned?: RowPinnedType;
+    /** The key to pass to the cell editor */
+    key?: string;
+}

@@ -1,5 +1,10 @@
 import type { ColDef, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, themeQuartz } from 'ag-grid-community';
+import { AllCommunityModule, ModuleRegistry, createGrid, enableDevValidations, themeQuartz } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -24,11 +29,19 @@ const gridOptions: GridOptions<IOlympicData> = {
     theme: myTheme,
     columnDefs,
     rowData,
+    rowSelection: { mode: 'multiRow' },
     defaultColDef: {
         editable: true,
         flex: 1,
         minWidth: 100,
         filter: true,
+    },
+    onFirstDataRendered: (params) => {
+        params.api.forEachNode((node) => {
+            if (node.rowIndex === 2 || node.rowIndex === 3 || node.rowIndex === 4) {
+                node.setSelected(true);
+            }
+        });
     },
 };
 

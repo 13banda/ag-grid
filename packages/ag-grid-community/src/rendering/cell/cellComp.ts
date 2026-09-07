@@ -1,41 +1,51 @@
+import type { AgComponentPopupPositionParams } from 'ag-stack';
+import {
+    CssClassManager,
+    _addStylesToElement,
+    _clearElement,
+    _getActiveDomElement,
+    _missing,
+    _removeFromParent,
+    _toString,
+} from 'ag-stack';
+
 import type { BeanCollection } from '../../context/context';
+import type { RowDragComp } from '../../dragAndDrop/rowDragComp';
 import type { PopupEditorWrapper } from '../../edit/cellEditors/popupEditorWrapper';
 import type { AgColumn } from '../../entities/agColumn';
 import type { CellStyle } from '../../entities/colDef';
 import type { RowNode } from '../../entities/rowNode';
-import { _getActiveDomElement } from '../../gridOptionsUtils';
 import type { ICellEditorComp, ICellEditorParams } from '../../interfaces/iCellEditor';
-import type { PopupPositionParams } from '../../interfaces/iPopup';
+import type { PopupPositionParams } from '../../interfaces/iPopupPositionParams';
 import type { UserCompDetails } from '../../interfaces/iUserCompDetails';
-import { _getLocaleTextFunc } from '../../misc/locale/localeUtils';
 import type { CheckboxSelectionComponent } from '../../selection/checkboxSelectionComponent';
-import { _setAriaRole } from '../../utils/aria';
-import { _addStylesToElement, _clearElement, _removeFromParent } from '../../utils/dom';
-import { _missing } from '../../utils/generic';
-import { _escapeString } from '../../utils/string';
-import { _warn } from '../../validation/logging';
+import { _createElement } from '../../utils/element';
 import { Component } from '../../widgets/component';
 import type { ICellRendererComp } from './../cellRenderers/iCellRenderer';
 import type { DndSourceComp } from './../dndSourceComp';
 import type { CellCtrl, ICellComp } from './cellCtrl';
 
 export class CellComp extends Component {
+    private readonly eCell: HTMLElement;
     private eCellWrapper: HTMLElement | undefined;
     private eCellValue: HTMLElement | undefined;
 
+    private readonly cellCssManager: CssClassManager;
+
     private readonly column: AgColumn;
     private readonly rowNode: RowNode;
-    private eRow: HTMLElement;
+    private readonly eRow: HTMLElement;
 
     private includeSelection: boolean;
     private includeRowDrag: boolean;
     private includeDndSource: boolean;
 
-    private forceWrapper: boolean;
+    private readonly forceWrapper: boolean;
 
     private checkboxSelectionComp: CheckboxSelectionComponent | undefined;
     private dndSourceComp: DndSourceComp | undefined;
-    private rowDraggingComp: Component | undefined;
+    private rowDraggingComp: RowDragComp | undefined;
+    private rowResizerElement: HTMLElement | null = null;
 
     private hideEditorPopup: ((...args: any[]) => any) | null | undefined;
     private cellEditorPopupWrapper: PopupEditorWrapper | undefined;
@@ -62,35 +72,58 @@ export class CellComp extends Component {
         public readonly cellCtrl: CellCtrl,
         printLayout: boolean,
         eRow: HTMLElement,
-        editingRow: boolean
+        editingCell: boolean
     ) {
         super();
         this.beans = beans;
+        this.gos = beans.gos;
         this.column = cellCtrl.column;
         this.rowNode = cellCtrl.rowNode;
         this.eRow = eRow;
 
-        const cellDiv = document.createElement('div');
-        cellDiv.setAttribute('comp-id', `${this.getCompId()}`);
-        this.setTemplateFromElement(cellDiv);
+        const cellDiv = _createElement({
+            tag: 'div',
+            role: cellCtrl.getCellAriaRole() as any,
+            attrs: {
+                'comp-id': `${this.getCompId()}`,
+                'col-id': cellCtrl.column.colIdSanitised,
+            },
+        });
 
-        const eGui = this.getGui();
+        this.eCell = cellDiv;
+
+        let wrapperDiv: HTMLElement | undefined;
+
+        // if doing a cell span, need to wrap the cell in a container with background-color to avoid
+        // transparent cells displaying row lines
+        if (cellCtrl.isCellSpanning()) {
+            wrapperDiv = _createElement({
+                tag: 'div',
+                cls: 'ag-spanned-cell-wrapper',
+                role: 'presentation',
+            });
+            wrapperDiv.appendChild(cellDiv);
+
+            this.setTemplateFromElement(wrapperDiv);
+        } else {
+            this.setTemplateFromElement(cellDiv);
+        }
+
+        this.cellCssManager = new CssClassManager(() => cellDiv);
 
         this.forceWrapper = cellCtrl.isForceWrapper();
 
         this.refreshWrapper(false);
 
-        _setAriaRole(eGui, cellCtrl.getCellAriaRole());
-        eGui.setAttribute('col-id', cellCtrl.colIdSanitised);
-
         const compProxy: ICellComp = {
-            addOrRemoveCssClass: (cssClassName, on) => this.addOrRemoveCssClass(cssClassName, on),
-            setUserStyles: (styles: CellStyle) => _addStylesToElement(eGui, styles),
-            getFocusableElement: () => this.getFocusableElement(),
+            toggleCss: (cssClassName, on) => this.cellCssManager.toggleCss(cssClassName, on),
+            setUserStyles: (styles: CellStyle) => _addStylesToElement(cellDiv, styles),
+            getFocusableElement: () => cellDiv,
 
             setIncludeSelection: (include) => (this.includeSelection = include),
             setIncludeRowDrag: (include) => (this.includeRowDrag = include),
             setIncludeDndSource: (include) => (this.includeDndSource = include),
+            setRowResizerElement: (element) => this.setRowResizerElement(element),
 
             setRenderDetails: (compDetails, valueToDisplay, force) =>
                 this.setRenderDetails(compDetails, valueToDisplay, force),
@@ -99,23 +132,27 @@ export class CellComp extends Component {
             getCellEditor: () => this.cellEditor || null,
             getCellRenderer: () => this.cellRenderer || null,
             getParentOfValue: () => this.getParentOfValue(),
+            refreshEditStyles: (editing, isPopup) => this.refreshEditStyles(editing, isPopup),
         };
 
-        cellCtrl.setComp(compProxy, this.getGui(), this.eCellWrapper, printLayout, editingRow, undefined);
+        cellCtrl.setComp(compProxy, cellDiv, wrapperDiv, this.eCellWrapper, printLayout, editingCell, undefined);
     }
 
     private getParentOfValue(): HTMLElement {
-        if (this.eCellValue) {
-            // if not editing, and using wrapper, then value goes in eCellValue
-            return this.eCellValue;
-        }
-        if (this.eCellWrapper) {
-            // if editing, and using wrapper, value (cell editor) goes in eCellWrapper
-            return this.eCellWrapper;
-        }
-
+        // if not editing, and using wrapper, then value goes in eCellValue
+        // if editing, and using wrapper, value (cell editor) goes in eCellWrapper
         // if editing or rendering, and not using wrapper, value (or comp) is directly inside cell
-        return this.getGui();
+        return this.eCellValue ?? this.eCellWrapper ?? this.eCell;
+    }
+
+    private setRowResizerElement(element: HTMLElement | null): void {
+        if (this.rowResizerElement) {
+            _removeFromParent(this.rowResizerElement);
+        }
+        this.rowResizerElement = element;
+        if (element) {
+            this.eCell.appendChild(element);
+        }
     }
 
     private setRenderDetails(
@@ -141,12 +178,23 @@ export class CellComp extends Component {
             const neverRefresh = forceNewCellRendererInstance || controlWrapperChanged;
             const cellRendererRefreshSuccessful = neverRefresh ? false : this.refreshCellRenderer(compDetails);
             if (!cellRendererRefreshSuccessful) {
-                this.destroyRenderer();
+                if (!this.firstRender) {
+                    this.destroyRenderer();
+                }
                 this.createCellRendererInstance(compDetails);
             }
         } else {
-            this.destroyRenderer();
+            if (!this.firstRender) {
+                this.destroyRenderer();
+            }
             this.insertValueWithoutCellRenderer(valueToDisplay);
+        }
+
+        this.rowDraggingComp?.refreshVisibility();
+
+        // re-append row resizer if it was cleared from eCell (e.g. when no eCellWrapper exists)
+        if (this.rowResizerElement && !this.rowResizerElement.parentElement) {
+            this.eCell.appendChild(this.rowResizerElement);
         }
     }
 
@@ -163,9 +211,10 @@ export class CellComp extends Component {
     }
 
     private removeControls(): void {
-        this.checkboxSelectionComp = this.beans.context.destroyBean(this.checkboxSelectionComp);
-        this.dndSourceComp = this.beans.context.destroyBean(this.dndSourceComp);
-        this.rowDraggingComp = this.beans.context.destroyBean(this.rowDraggingComp);
+        const context = this.beans.context;
+        this.checkboxSelectionComp = context.destroyBean(this.checkboxSelectionComp);
+        this.dndSourceComp = context.destroyBean(this.dndSourceComp);
+        this.rowDraggingComp = context.destroyBean(this.rowDraggingComp);
     }
 
     // returns true if wrapper was changed
@@ -175,32 +224,27 @@ export class CellComp extends Component {
 
         const putWrapperIn = usingWrapper && this.eCellWrapper == null;
         if (putWrapperIn) {
-            const wrapperDiv = document.createElement('div');
-            wrapperDiv.setAttribute('role', 'presentation');
-            wrapperDiv.setAttribute('class', 'ag-cell-wrapper');
-            this.eCellWrapper = wrapperDiv;
-            this.getGui().appendChild(this.eCellWrapper);
+            this.eCellWrapper = _createElement({ tag: 'div', cls: 'ag-cell-wrapper', role: 'presentation' });
+            this.eCell.appendChild(this.eCellWrapper);
         }
         const takeWrapperOut = !usingWrapper && this.eCellWrapper != null;
         if (takeWrapperOut) {
-            _removeFromParent(this.eCellWrapper!);
+            _removeFromParent(this.eCellWrapper);
             this.eCellWrapper = undefined;
         }
 
-        this.addOrRemoveCssClass('ag-cell-value', !usingWrapper);
+        this.cellCssManager.toggleCss('ag-cell-value', !usingWrapper);
 
         const usingCellValue = !editing && usingWrapper;
         const putCellValueIn = usingCellValue && this.eCellValue == null;
         if (putCellValueIn) {
-            const cellSpan = document.createElement('span');
-            cellSpan.setAttribute('role', 'presentation');
-            cellSpan.setAttribute('class', 'ag-cell-value');
-            this.eCellValue = cellSpan;
+            const cls = this.cellCtrl.getCellValueClass();
+            this.eCellValue = _createElement({ tag: 'span', cls, role: 'presentation' });
             this.eCellWrapper!.appendChild(this.eCellValue);
         }
         const takeCellValueOut = !usingCellValue && this.eCellValue != null;
         if (takeCellValueOut) {
-            _removeFromParent(this.eCellValue!);
+            _removeFromParent(this.eCellValue);
             this.eCellValue = undefined;
         }
 
@@ -210,43 +254,34 @@ export class CellComp extends Component {
             this.removeControls();
         }
 
-        if (!editing) {
-            if (providingControls) {
-                this.addControls();
-            }
+        if (!editing && providingControls) {
+            this.addControls();
         }
 
         return templateChanged;
     }
 
     private addControls(): void {
-        if (this.includeRowDrag) {
-            if (this.rowDraggingComp == null) {
-                this.rowDraggingComp = this.cellCtrl.createRowDragComp();
-                if (this.rowDraggingComp) {
-                    // put the checkbox in before the value
-                    this.eCellWrapper!.insertBefore(this.rowDraggingComp.getGui(), this.eCellValue!);
-                }
+        const { cellCtrl, eCellWrapper, eCellValue, includeRowDrag, includeDndSource, includeSelection } = this;
+        const insertBefore = (comp: Component | undefined) => {
+            if (comp) {
+                eCellWrapper!.insertBefore(comp.getGui(), eCellValue!);
             }
+        };
+
+        if (includeRowDrag && this.rowDraggingComp == null) {
+            this.rowDraggingComp = cellCtrl.createRowDragComp();
+            insertBefore(this.rowDraggingComp);
         }
 
-        if (this.includeDndSource) {
-            if (this.dndSourceComp == null) {
-                this.dndSourceComp = this.cellCtrl.createDndSource();
-                if (this.dndSourceComp) {
-                    // put the checkbox in before the value
-                    this.eCellWrapper!.insertBefore(this.dndSourceComp.getGui(), this.eCellValue!);
-                }
-            }
+        if (includeDndSource && this.dndSourceComp == null) {
+            this.dndSourceComp = cellCtrl.createDndSource();
+            insertBefore(this.dndSourceComp);
         }
 
-        if (this.includeSelection) {
-            if (this.checkboxSelectionComp == null) {
-                this.checkboxSelectionComp = this.cellCtrl.createSelectionCheckbox();
-                if (this.checkboxSelectionComp) {
-                    this.eCellWrapper!.insertBefore(this.checkboxSelectionComp.getGui(), this.eCellValue!);
-                }
-            }
+        if (includeSelection && this.checkboxSelectionComp == null) {
+            this.checkboxSelectionComp = cellCtrl.createSelectionCheckbox();
+            insertBefore(this.checkboxSelectionComp);
         }
     }
 
@@ -256,14 +291,14 @@ export class CellComp extends Component {
         const cellEditorPromise = compDetails.newAgStackInstance();
 
         const { params } = compDetails;
-        cellEditorPromise.then((c) => this.afterCellEditorCreated(versionCopy, c!, params, popup, position));
+        cellEditorPromise.then((c) => this.afterCellEditorCreated(versionCopy, c, params, popup, position));
 
         // if we don't do this, and editor component is async, then there will be a period
         // when the component isn't present and keyboard navigation won't work - so example
         // of user hitting tab quickly (more quickly than renderers getting created) won't work
         const cellEditorAsync = _missing(this.cellEditor);
         if (cellEditorAsync && params.cellStartedEdit) {
-            this.cellCtrl.focusCell(true);
+            this.cellCtrl.focusCell({ forceBrowserFocus: true });
         }
     }
 
@@ -271,44 +306,53 @@ export class CellComp extends Component {
         const eParent = this.getParentOfValue();
         _clearElement(eParent);
 
-        const escapedValue = valueToDisplay != null ? _escapeString(valueToDisplay, true) : null;
+        const escapedValue = _toString(valueToDisplay);
         if (escapedValue != null) {
             eParent.textContent = escapedValue;
         }
     }
 
-    private destroyEditorAndRenderer(): void {
-        this.destroyRenderer();
-        this.destroyEditor();
-    }
-
-    private destroyRenderer(): void {
+    private destroyRenderer(resetTooltip = true): void {
         const { context } = this.beans;
         this.cellRenderer = context.destroyBean(this.cellRenderer);
         _removeFromParent(this.cellRendererGui);
         this.cellRendererGui = null;
         this.rendererVersion++;
+
+        if (!resetTooltip) {
+            return;
+        }
+
+        this.cellCtrl.resetCellRendererTooltip();
     }
 
     private destroyEditor(): void {
         const { context } = this.beans;
 
-        if (this.hideEditorPopup) {
-            this.hideEditorPopup();
+        // if leaving editor & editor is focused, move focus to the cell
+        const recoverFocus =
+            this.cellEditorPopupWrapper?.getGui().contains(_getActiveDomElement(this.beans)) ||
+            this.cellCtrl.hasBrowserFocus();
+        if (recoverFocus) {
+            this.eCell.focus({ preventScroll: true });
         }
+
+        this.hideEditorPopup?.();
+
         this.hideEditorPopup = undefined;
 
         this.cellEditor = context.destroyBean(this.cellEditor);
         this.cellEditorPopupWrapper = context.destroyBean(this.cellEditorPopupWrapper);
 
         _removeFromParent(this.cellEditorGui);
+        this.cellCtrl.disableEditorTooltipFeature();
         this.cellEditorGui = null;
 
         this.editorVersion++;
     }
 
     private refreshCellRenderer(compClassAndParams: UserCompDetails): boolean {
-        if (this.cellRenderer == null || this.cellRenderer.refresh == null) {
+        if (this.cellRenderer?.refresh == null) {
             return false;
         }
 
@@ -329,17 +373,9 @@ export class CellComp extends Component {
     }
 
     private createCellRendererInstance(compDetails: UserCompDetails): void {
-        // never use task service if animation frame service is turned off.
-        // and lastly we never use it if doing auto-height, as the auto-height service checks the
-        // row height directly after the cell is created, it doesn't wait around for the tasks to complete
-        const suppressAnimationFrame = this.beans.gos.get('suppressAnimationFrame');
-        const useTaskService = !suppressAnimationFrame && this.beans.animationFrameSvc;
-
         const displayComponentVersionCopy = this.rendererVersion;
 
-        const { componentClass } = compDetails;
-
-        const createCellRendererFunc = () => {
+        const createCellRendererFunc = (details: UserCompDetails) => (_?: boolean) => {
             const staleTask = this.rendererVersion !== displayComponentVersionCopy || !this.isAlive();
             if (staleTask) {
                 return;
@@ -347,20 +383,45 @@ export class CellComp extends Component {
 
             // this can return null in the event that the user has switched from a renderer component to nothing, for example
             // when using a cellRendererSelect to return a component or null depending on row data etc
-            const componentPromise = compDetails.newAgStackInstance();
-            const callback = this.afterCellRendererCreated.bind(this, displayComponentVersionCopy, componentClass);
-            if (componentPromise) {
-                componentPromise.then(callback);
-            }
+            const componentPromise = details.newAgStackInstance();
+            const callback = this.afterCellRendererCreated.bind(
+                this,
+                displayComponentVersionCopy,
+                details.componentClass
+            );
+            componentPromise?.then(callback);
         };
-
         // we only use task service when rendering for first time, which means it is not used when doing edits.
         // if we changed this (always use task service) would make sense, however it would break tests, possibly
         // test of users.
-        if (useTaskService && this.firstRender) {
-            this.beans.animationFrameSvc!.createTask(createCellRendererFunc, this.rowNode.rowIndex!, 'createTasksP2');
+        const { animationFrameSvc } = this.beans;
+
+        let createTask: ((details: UserCompDetails, isDeferred?: boolean) => void) | undefined;
+        if (animationFrameSvc?.active && this.firstRender) {
+            createTask = (details, isDeferred = false) => {
+                animationFrameSvc.createTask(
+                    createCellRendererFunc(details),
+                    this.rowNode.rowIndex!,
+                    'p2',
+                    details.componentFromFramework,
+                    isDeferred
+                );
+            };
         } else {
-            createCellRendererFunc();
+            createTask = (details: UserCompDetails) => createCellRendererFunc(details)();
+        }
+        if (compDetails.params?.deferRender && !this.cellCtrl.rowNode.group) {
+            // show loading cell and then pass the task to the animationFrameSvc
+            const { loadingComp, onReady } = this.cellCtrl.getDeferLoadingCellRenderer();
+
+            if (loadingComp) {
+                // Render the loading component and setup the task to create the actual cell renderer
+                // Still use the animationFrameSvc (if active) to ensure the loading component is rendered after group rows
+                createTask(loadingComp);
+                onReady.then(() => createTask!(compDetails, true));
+            }
+        } else {
+            createTask(compDetails);
         }
     }
 
@@ -378,12 +439,13 @@ export class CellComp extends Component {
 
         this.cellRenderer = cellRenderer;
         this.cellRendererClass = cellRendererClass;
-        this.cellRendererGui = this.cellRenderer.getGui();
+        const cellGui = cellRenderer.getGui();
+        this.cellRendererGui = cellGui;
 
-        if (this.cellRendererGui != null) {
+        if (cellGui != null) {
             const eParent = this.getParentOfValue();
             _clearElement(eParent);
-            eParent.appendChild(this.cellRendererGui);
+            eParent.appendChild(cellGui);
         }
     }
 
@@ -398,29 +460,30 @@ export class CellComp extends Component {
         // if versionMismatch, then user cancelled the edit, then started the edit again, and this
         //   is the first editor which is now stale.
         const staleComp = requestVersion !== this.editorVersion;
+        const { context } = this.beans;
 
         if (staleComp) {
-            this.beans.context.destroyBean(cellEditor);
+            context.destroyBean(cellEditor);
             return;
         }
 
-        const editingCancelledByUserComp = cellEditor.isCancelBeforeStart && cellEditor.isCancelBeforeStart();
+        const editingCancelledByUserComp = cellEditor.isCancelBeforeStart?.();
         if (editingCancelledByUserComp) {
-            this.beans.context.destroyBean(cellEditor);
+            context.destroyBean(cellEditor);
             this.cellCtrl.stopEditing(true);
             return;
         }
 
         if (!cellEditor.getGui) {
-            _warn(97, { colId: this.column.getId() });
-            this.beans.context.destroyBean(cellEditor);
+            this.beans.log.warn(97, { colId: this.column.getId() });
+            context.destroyBean(cellEditor);
             return;
         }
 
         this.cellEditor = cellEditor;
         this.cellEditorGui = cellEditor.getGui();
 
-        const cellEditorInPopup = popup || (cellEditor.isPopup !== undefined && cellEditor.isPopup());
+        const cellEditorInPopup = popup || cellEditor.isPopup?.();
         if (cellEditorInPopup) {
             this.addPopupCellEditor(params, position);
         } else {
@@ -429,33 +492,31 @@ export class CellComp extends Component {
 
         this.refreshEditStyles(true, cellEditorInPopup);
 
-        if (cellEditor.afterGuiAttached) {
-            cellEditor.afterGuiAttached();
-        }
-
-        this.cellCtrl.cellEditorAttached();
+        cellEditor.afterGuiAttached?.();
+        this.cellCtrl.enableEditorTooltipFeature(cellEditor);
+        this.beans.editSvc?.onEditorAttached(this.cellCtrl);
     }
 
-    private refreshEditStyles(editing: boolean, isPopup?: boolean): void {
-        this.addOrRemoveCssClass('ag-cell-inline-editing', editing && !isPopup);
-        this.addOrRemoveCssClass('ag-cell-popup-editing', editing && !!isPopup);
-        this.addOrRemoveCssClass('ag-cell-not-inline-editing', !editing || !!isPopup);
-
-        this.cellCtrl.setInlineEditingCss();
+    public refreshEditStyles(editing: boolean, isPopup?: boolean): void {
+        const { cellCssManager } = this;
+        cellCssManager.toggleCss('ag-cell-inline-editing', editing && !isPopup);
+        cellCssManager.toggleCss('ag-cell-popup-editing', editing && !!isPopup);
+        cellCssManager.toggleCss('ag-cell-not-inline-editing', !editing || !!isPopup);
     }
 
     private addInCellEditor(): void {
-        const eGui = this.getGui();
+        const { eCell } = this;
 
         // if focus is inside the cell, we move focus to the cell itself
         // before removing it's contents, otherwise errors could be thrown.
-        if (eGui.contains(_getActiveDomElement(this.beans))) {
-            eGui.focus();
+        if (eCell.contains(_getActiveDomElement(this.beans))) {
+            eCell.focus();
         }
 
         this.destroyRenderer();
         this.refreshWrapper(true);
-        this.clearParentOfValue();
+        // clear the parent of value element
+        _clearElement(this.getParentOfValue());
         if (this.cellEditorGui) {
             const eParent = this.getParentOfValue();
             eParent.appendChild(this.cellEditorGui);
@@ -463,56 +524,56 @@ export class CellComp extends Component {
     }
 
     private addPopupCellEditor(params: ICellEditorParams, position?: 'over' | 'under'): void {
-        if (this.beans.gos.get('editType') === 'fullRow') {
+        const { gos, context, popupSvc, editSvc } = this.beans;
+        if (gos.get('editType') === 'fullRow') {
             //popup cellEditor does not work with fullRowEdit
-            _warn(98);
+            this.beans.log.warn(98);
         }
-
-        const cellEditor = this.cellEditor!;
 
         // if a popup, then we wrap in a popup editor and return the popup
-        this.cellEditorPopupWrapper = this.beans.context.createBean(
-            this.beans.editSvc!.createPopupEditorWrapper(params)
-        );
-        const ePopupGui = this.cellEditorPopupWrapper.getGui();
-        if (this.cellEditorGui) {
-            ePopupGui.appendChild(this.cellEditorGui);
+        const cellEditorPopupWrapper = (this.cellEditorPopupWrapper = context.createBean(
+            editSvc!.createPopupEditorWrapper(params)
+        ));
+
+        const { cellEditor, cellEditorGui, eCell, rowNode, column, cellCtrl } = this;
+        const ePopupGui = cellEditorPopupWrapper.getGui();
+
+        if (cellEditorGui) {
+            ePopupGui.appendChild(cellEditorGui);
         }
 
-        const popupSvc = this.beans.popupSvc!;
-
-        const useModelPopup = this.beans.gos.get('stopEditingWhenCellsLoseFocus');
+        const useModelPopup = gos.get('stopEditingWhenCellsLoseFocus');
 
         // see if position provided by colDef, if not then check old way of method on cellComp
         const positionToUse: 'over' | 'under' | undefined =
-            position != null ? position : cellEditor.getPopupPosition?.() ?? 'over';
-        const isRtl = this.beans.gos.get('enableRtl');
+            position != null ? position : (cellEditor!.getPopupPosition?.() ?? 'over');
+        const isRtl = gos.get('enableRtl');
 
-        const positionParams: PopupPositionParams & { type: string; eventSource: HTMLElement } = {
+        const positionParams: AgComponentPopupPositionParams<PopupPositionParams> = {
             ePopup: ePopupGui,
-            column: this.column,
-            rowNode: this.rowNode,
+            additionalParams: {
+                column,
+                rowNode,
+            },
             type: 'popupCellEditor',
-            eventSource: this.getGui(),
+            eventSource: eCell,
             position: positionToUse,
             alignSide: isRtl ? 'right' : 'left',
             keepWithinBounds: true,
         };
 
-        const positionCallback = popupSvc.positionPopupByComponent.bind(popupSvc, positionParams);
+        const positionCallback = popupSvc!.positionPopupByComponent.bind(popupSvc, positionParams);
 
-        const translate = _getLocaleTextFunc(this.beans.localeSvc);
-
-        const addPopupRes = popupSvc.addPopup({
+        const addPopupRes = popupSvc!.addPopup({
             modal: useModelPopup,
             eChild: ePopupGui,
             closeOnEsc: true,
-            closedCallback: () => {
-                this.cellCtrl.onPopupEditorClosed();
+            closedCallback: (e) => {
+                editSvc!.onPopupEditorClosed(cellCtrl, e);
             },
-            anchorToElement: this.getGui(),
+            anchorToElement: eCell,
             positionCallback,
-            ariaLabel: translate('ariaLabelCellEditor', 'Cell Editor'),
+            ariaOwns: eCell,
         });
         if (addPopupRes) {
             this.hideEditorPopup = addPopupRes.hideFunc;
@@ -520,7 +581,7 @@ export class CellComp extends Component {
     }
 
     public detach(): void {
-        this.eRow.removeChild(this.getGui());
+        this.getGui().remove();
     }
 
     // if the row is also getting destroyed, then we don't need to remove from dom,
@@ -530,23 +591,10 @@ export class CellComp extends Component {
     //
     // note - this is NOT called by context, as we don't wire / unwire the CellComp for performance reasons.
     public override destroy(): void {
-        this.cellCtrl.stopEditing();
-
-        this.destroyEditorAndRenderer();
+        this.destroyRenderer(false);
+        this.destroyEditor();
         this.removeControls();
 
         super.destroy();
-    }
-
-    private clearParentOfValue(): void {
-        const eGui = this.getGui();
-
-        // if focus is inside the cell, we move focus to the cell itself
-        // before removing it's contents, otherwise errors could be thrown.
-        if (eGui.contains(_getActiveDomElement(this.beans))) {
-            eGui.focus({ preventScroll: true });
-        }
-
-        _clearElement(this.getParentOfValue());
     }
 }

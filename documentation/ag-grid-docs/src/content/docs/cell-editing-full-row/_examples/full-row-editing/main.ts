@@ -5,12 +5,17 @@ import {
     ModuleRegistry,
     SelectEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule } from 'ag-grid-enterprise';
 
 import { NumericCellEditor } from './numericCellEditor_typescript';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -20,7 +25,6 @@ ModuleRegistry.registerModules([
     SelectEditorModule,
     TextEditorModule,
     CustomEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

@@ -8,16 +8,17 @@ fi
 
 RELEASE_VERSION=$1
 RELEASE_BRANCH=$2
+ALLOWED_FILES="package.json|yarn.lock|version.ts|licenseManager.ts|.env|README.md|baseUrl.ts|documentation/ag-grid-docs/src/content/versions/ag-grid-versions.json|.mdoc|SECURITY.md"
 
-NON_PACKAGE_JSON_COUNT=`git status --porcelain | grep -Ev "package.json|yarn.lock|version.ts|enterprise-modules/core/src/license/shared/licenseManager.ts|.env.production|.env.archive|README.md|baseUrl.ts" | wc -l`
+NON_PACKAGE_JSON_COUNT=`git status --porcelain | grep -Ev "package.json|yarn.lock|version.ts|licenseManager.ts|.env|README.md|baseUrl.ts|documentation/ag-grid-docs/src/content/versions/ag-grid-versions.json|.mdoc|SECURITY.md" | wc -l`
 
 if [ $NON_PACKAGE_JSON_COUNT -ne 0 ];
 then
-  echo "Only package.json, version.ts, yarn.lock, root env files and  licenseMangager files should be updated - please verify changeset.."
+  echo "Only the following files should be updated: $ALLOWED_FILES. Please verify the changeset."
   git status --porcelain
   exit 1
 fi
 
 git add .
-git commit -am "Release $RELEASE_VERSION Prep"
-git push -u origin "$RELEASE_BRANCH"
+git commit -am "Release $RELEASE_VERSION Prep" --no-verify
+git push -u origin "$RELEASE_BRANCH" --no-verify

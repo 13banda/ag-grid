@@ -3,15 +3,16 @@ import {
     ClientSideRowModelModule,
     ColumnAutoSizeModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    ColumnAutoSizeModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnAutoSizeModule, ClientSideRowModelModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', width: 150, suppressSizeToFit: true },
@@ -26,7 +27,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: columnDefs,
-    rowData: null,
     autoSizeStrategy: {
         type: 'fitGridWidth',
         defaultMinWidth: 100,

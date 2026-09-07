@@ -51,12 +51,17 @@
 .ag-menu-separator-part::after {
     content: '';
     display: block;
-    border-top: solid 1px var(--ag-menu-separator-color);
+    border-top: solid var(--ag-border-width) var(--ag-menu-separator-color);
 }
 
 .ag-menu-option-active,
 .ag-compact-menu-option-active {
     background-color: var(--ag-row-hover-color);
+}
+
+:where(.ag-menu-list-no-focus-ring) .ag-menu-option:focus-visible,
+:where(.ag-menu-list-no-focus-ring) .ag-compact-menu-option:focus-visible {
+    box-shadow: none;
 }
 
 .ag-menu-option-part,

@@ -1,0 +1,140 @@
+import { _getTabIndex } from 'ag-stack';
+
+import type { BeanStub } from '../../context/beanStub';
+import type { BeanCollection } from '../../context/context';
+import type { AgColumn } from '../../entities/agColumn';
+import { _getRowById } from '../../entities/positionUtils';
+import type { Column } from '../../interfaces/iColumn';
+import type { IRowNode, RowPinnedType } from '../../interfaces/iRowNode';
+import type { CellCtrl } from '../../rendering/cell/cellCtrl';
+import type { RowCtrl } from '../../rendering/row/rowCtrl';
+
+type ResolveRowControllerType = {
+    rowIndex?: number | null;
+    rowId?: string | null;
+    rowCtrl?: RowCtrl | null;
+    rowNode?: IRowNode | null;
+    rowPinned?: RowPinnedType;
+};
+
+type ResolveCellControllerType = {
+    colId?: string | null;
+    columnId?: string | null;
+    column?: string | Column | AgColumn | null;
+    cellCtrl?: CellCtrl | null;
+    rowPinned?: RowPinnedType;
+};
+
+type ResolveControllerType = ResolveRowControllerType & ResolveCellControllerType;
+
+export function _getRowCtrl(beans: BeanCollection, inputs: ResolveRowControllerType = {}): RowCtrl | undefined {
+    const { rowIndex, rowId, rowCtrl, rowPinned } = inputs;
+
+    if (rowCtrl) {
+        return rowCtrl;
+    }
+
+    const { rowModel, rowRenderer } = beans;
+
+    let { rowNode } = inputs;
+    if (!rowNode) {
+        if (rowId) {
+            rowNode = _getRowById(beans, rowId, rowPinned);
+        } else if (rowIndex != null) {
+            rowNode = rowModel.getRow(rowIndex);
+        }
+    }
+
+    return rowNode ? rowRenderer.getRowCtrlByNode(rowNode) : undefined;
+}
+
+export function _getCellCtrl(beans: BeanCollection, inputs: ResolveControllerType = {}): CellCtrl | undefined {
+    const { cellCtrl, colId, columnId, column } = inputs;
+
+    if (cellCtrl) {
+        return cellCtrl;
+    }
+
+    const actualColumn = beans.colModel.getCol(colId ?? columnId ?? _getColId(column))!;
+
+    const rowCtrl = inputs.rowCtrl ?? _getRowCtrl(beans, inputs);
+    const result = rowCtrl?.getCellCtrl(actualColumn) ?? undefined;
+
+    if (result) {
+        // if we found a cellCtrl, return it
+        return result;
+    }
+
+    const rowNode = inputs.rowNode ?? rowCtrl?.rowNode;
+
+    if (rowNode) {
+        // can occur in spannedRow settings
+
+        return beans.rowRenderer.getCellCtrls([rowNode], [actualColumn])?.[0];
+    }
+
+    return undefined;
+}
+
+function _stopEditing(beans: BeanCollection): void {
+    const { editSvc } = beans;
+    if (editSvc?.isBatchEditing()) {
+        editSvc.stopBatchEditors(false);
+    } else {
+        editSvc?.stopEditing(undefined, { source: 'api' });
+    }
+}
+
+export function _addStopEditingWhenGridLosesFocus(
+    bean: BeanStub,
+    beans: BeanCollection,
+    viewports: HTMLElement[]
+): void {
+    const { gos, popupSvc } = beans;
+
+    if (!gos.get('stopEditingWhenCellsLoseFocus')) {
+        return;
+    }
+
+    const focusOutListener = (event: FocusEvent): void => {
+        // this is the element the focus is moving to
+        const elementWithFocus = event.relatedTarget as HTMLElement;
+
+        if (_getTabIndex(elementWithFocus) === null) {
+            _stopEditing(beans);
+            return;
+        }
+
+        let clickInsideGrid =
+            // see if click came from inside the viewports
+            viewports.some((viewport) => viewport.contains(elementWithFocus)) &&
+            // and also that it's not from a detail grid
+            gos.isElementInThisInstance(elementWithFocus);
+
+        if (!clickInsideGrid) {
+            clickInsideGrid =
+                !!popupSvc &&
+                (popupSvc.getActivePopups().some((popup) => popup.contains(elementWithFocus)) ||
+                    popupSvc.isElementWithinCustomPopup(elementWithFocus));
+        }
+
+        if (!clickInsideGrid) {
+            _stopEditing(beans);
+        }
+    };
+
+    for (const viewport of viewports) {
+        bean.addManagedElementListeners(viewport, { focusout: focusOutListener });
+    }
+}
+
+export function _getColId(column?: Column | string | null): string | undefined {
+    if (!column) {
+        return undefined;
+    }
+
+    if (typeof column === 'string') {
+        return column;
+    }
+    return column.getColId();
+}

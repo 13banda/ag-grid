@@ -4,16 +4,16 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    TextFilterModule,
-    ClientSideRowModelModule,
-    NumberFilterModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, NumberFilterModule]);
 
 const originalColumnDefs: ColDef[] = [
     { field: 'athlete' },
@@ -60,6 +60,10 @@ const gridOptions: GridOptions = {
         {
             athlete: 'Robert Clarke',
             age: undefined,
+        },
+        {
+            athlete: 'Kirsten Flipkens',
+            age: '',
         },
     ],
 };

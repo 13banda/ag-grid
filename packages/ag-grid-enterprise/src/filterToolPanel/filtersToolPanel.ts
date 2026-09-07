@@ -1,24 +1,34 @@
+import { RefPlaceholder } from 'ag-stack';
+
 import type {
     ColDef,
     ColGroupDef,
+    ElementParams,
     FiltersToolPanelState,
     IFiltersToolPanel,
     IToolPanelComp,
     IToolPanelFiltersCompParams,
     IToolPanelParams,
 } from 'ag-grid-community';
-import { Component, RefPlaceholder } from 'ag-grid-community';
+import { Component } from 'ag-grid-community';
 
 import type { AgFiltersToolPanelHeader } from './agFiltersToolPanelHeader';
 import { AgFiltersToolPanelHeaderSelector } from './agFiltersToolPanelHeader';
 import type { AgFiltersToolPanelList } from './agFiltersToolPanelList';
 import { AgFiltersToolPanelListSelector } from './agFiltersToolPanelList';
-import { filtersToolPanelCSS } from './filtersToolPanel.css-GENERATED';
+import filtersToolPanelCSS from './filtersToolPanel.css';
 
 export interface ToolPanelFiltersCompParams<TData = any, TContext = any>
-    extends IToolPanelParams<TData, TContext, FiltersToolPanelState>,
-        IToolPanelFiltersCompParams {}
+    extends IToolPanelParams<TData, TContext, FiltersToolPanelState>, IToolPanelFiltersCompParams {}
 
+const FiltersToolPanelElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-filter-toolpanel',
+    children: [
+        { tag: 'ag-filters-tool-panel-header', ref: 'filtersToolPanelHeaderPanel' },
+        { tag: 'ag-filters-tool-panel-list', ref: 'filtersToolPanelListPanel' },
+    ],
+};
 export class FiltersToolPanel extends Component implements IFiltersToolPanel, IToolPanelComp {
     private readonly filtersToolPanelHeaderPanel: AgFiltersToolPanelHeader = RefPlaceholder;
     private readonly filtersToolPanelListPanel: AgFiltersToolPanelList = RefPlaceholder;
@@ -28,30 +38,26 @@ export class FiltersToolPanel extends Component implements IFiltersToolPanel, IT
     private listenerDestroyFuncs: (() => void)[] = [];
 
     constructor() {
-        super(
-            /* html */ `<div class="ag-filter-toolpanel">
-            <ag-filters-tool-panel-header data-ref="filtersToolPanelHeaderPanel"></ag-filters-tool-panel-header>
-            <ag-filters-tool-panel-list data-ref="filtersToolPanelListPanel"></ag-filters-tool-panel-list>
-         </div>`,
-            [AgFiltersToolPanelHeaderSelector, AgFiltersToolPanelListSelector]
-        );
+        super(FiltersToolPanelElement, [AgFiltersToolPanelHeaderSelector, AgFiltersToolPanelListSelector]);
         this.registerCSS(filtersToolPanelCSS);
     }
 
     public init(params: ToolPanelFiltersCompParams): void {
         // if initialised is true, means this is a refresh
         if (this.initialised) {
-            this.listenerDestroyFuncs.forEach((func) => func());
+            for (const func of this.listenerDestroyFuncs) {
+                func();
+            }
             this.listenerDestroyFuncs = [];
         }
 
         this.initialised = true;
 
-        const defaultParams: Partial<ToolPanelFiltersCompParams> = this.gos.addGridCommonParams({
+        const defaultParams: IToolPanelFiltersCompParams = {
             suppressExpandAll: false,
             suppressFilterSearch: false,
             suppressSyncLayoutWithGrid: false,
-        });
+        };
         const newParams = {
             ...defaultParams,
             ...params,
@@ -62,8 +68,7 @@ export class FiltersToolPanel extends Component implements IFiltersToolPanel, IT
         filtersToolPanelHeaderPanel.init(newParams);
         filtersToolPanelListPanel.init(newParams);
 
-        const hideExpand = newParams.suppressExpandAll;
-        const hideSearch = newParams.suppressFilterSearch;
+        const { suppressExpandAll: hideExpand, suppressFilterSearch: hideSearch } = newParams;
 
         if (hideExpand && hideSearch) {
             filtersToolPanelHeaderPanel.setDisplayed(false);

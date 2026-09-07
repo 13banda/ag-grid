@@ -1,6 +1,15 @@
 {
     "_config_": {
-        "codeSrc": "grid-api.AUTO.json"
+        "codeSrc": "grid-api.AUTO.json",
+        "validate": true,
+        "undocumentedProperties": {
+            "flushAllAnimationFrames": "Not recommended for users so not documented",
+            "flushServerSideAsyncTransactions": "Not recommended for users to not documented",
+            "dispatchEvent": "This is for internal use, purposefully undocumented",
+            "sortChanged": "Bug in the undocumentedProperties check, this is not an api method",
+            "filterChanged": "Bug in the undocumentedProperties check, this is not an api method",
+            "getColumnDef": "Duplicate, users can just use getColumnDefs."
+        }
     },
     "gridOptions": {
         "meta": {
@@ -130,7 +139,23 @@
             }
         },
         "getProvidedColumnGroup": {},
-        "setColumnGroupOpened": {}
+        "setColumnGroupOpened": {},
+        "getDisplayNameForColumnGroup": {},
+        "getAllDisplayedColumnGroups": {},
+        "getCenterDisplayedColumnGroups": {},
+        "getLeftDisplayedColumnGroups": {},
+        "getRightDisplayedColumnGroups": {}
+    },
+    "colHover": {
+        "meta": {
+            "displayName": "Column Hover"
+        },
+        "isColumnHovered": {
+            "more": {
+                "name": "Column Hover",
+                "url": "./row-styles/#highlighting-rows-and-columns"
+            }
+        }
     },
     "Visibility and Display": {
         "meta": {
@@ -138,19 +163,13 @@
         },
         "setColumnsVisible": {},
         "getDisplayNameForColumn": {},
-        "getDisplayNameForColumnGroup": {},
         "getDisplayedColAfter": {},
         "getDisplayedColBefore": {},
         "getAllDisplayedVirtualColumns": {},
         "getAllDisplayedColumns": {},
         "getDisplayedCenterColumns": {},
         "getDisplayedLeftColumns": {},
-        "getDisplayedRightColumns": {},
-        "getAllDisplayedColumnGroups": {},
-        "getCenterDisplayedColumnGroups": {},
-        "getLeftDisplayedColumnGroups": {},
-        "getRightDisplayedColumnGroups": {},
-        "isColumnHovered": {}
+        "getDisplayedRightColumns": {}
     },
     "pinned": {
         "meta": {
@@ -163,7 +182,8 @@
         "getPinnedTopRowCount": {},
         "getPinnedBottomRowCount": {},
         "getPinnedTopRow": {},
-        "getPinnedBottomRow": {}
+        "getPinnedBottomRow": {},
+        "forEachPinnedRow": {}
     },
     "rowNodes": {
         "meta": {
@@ -179,8 +199,7 @@
             "more": {
                 "name": "Iterating Rows",
                 "url": "./accessing-data/#iterating-rows"
-            },
-            "description": "Iterates through each node (row) in the grid and calls the callback for each node. This works similar to the `forEach` method on a JavaScript array. This is called for every node, ignoring any filtering or sorting applied within the grid. If using the [Infinite Row Model](./infinite-scrolling/), then this gets called for each page loaded in the page cache."
+            }
         },
         "forEachNodeAfterFilter": {
             "more": {
@@ -313,6 +332,12 @@
             }
         },
         "refreshHeader": {},
+        "refreshFormulas": {
+            "more": {
+                "name": "Formula Caching",
+                "url": "./formulas/#caching"
+            }
+        },
         "flashCells": {
             "more": {
                 "name": "Flashing Cells",
@@ -360,8 +385,14 @@
         "isAnyFilterPresent": {},
         "getColumnFilterInstance": {
             "more": {
-                "name": "Accessing Individual Filter Component Instances",
-                "url": "./filter-api/#accessing-individual-filter-component-instances"
+                "name": "Accessing Individual Filters",
+                "url": "./filter-api/#accessing-individual-filters"
+            }
+        },
+        "getColumnFilterHandler": {
+            "more": {
+                "name": "Accessing Individual Filters",
+                "url": "./filter-api/#accessing-individual-filters"
             }
         },
         "getFilterModel": {
@@ -395,6 +426,12 @@
             }
         },
         "destroyFilter": {},
+        "doFilterAction": {
+            "more": {
+                "name": "Applying the UI Model",
+                "url": "./filter-applying/#applying-the-ui-model"
+            }
+        },
         "getAdvancedFilterModel": {
             "more": {
                 "name": "Advanced Filter",
@@ -445,6 +482,39 @@
         },
         "setFocusedHeader": {}
     },
+    "batch-editing": {
+        "meta": {
+            "displayName": "Editing: Batch",
+            "page": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch/"
+            }
+        },
+        "startBatchEdit": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch"
+            }
+        },
+        "commitBatchEdit": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch"
+            }
+        },
+        "cancelBatchEdit": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch"
+            }
+        },
+        "isBatchEditing": {
+            "more": {
+                "name": "Batch Editing",
+                "url": "./cell-editing-batch"
+            }
+        }
+    },
     "editing": {
         "meta": {
             "displayName": "Editing",
@@ -465,7 +535,19 @@
                 "url": "./cell-editing-start-stop/#editing-api"
             }
         },
+        "isEditing": {
+            "more": {
+                "name": "Editing API",
+                "url": "./cell-editing-start-stop/#editing-api"
+            }
+        },
         "getEditingCells": {
+            "more": {
+                "name": "Editing API",
+                "url": "./cell-editing-start-stop/#editing-api"
+            }
+        },
+        "getEditRowValues": {
             "more": {
                 "name": "Editing API",
                 "url": "./cell-editing-start-stop/#editing-api"
@@ -479,6 +561,18 @@
             "interfaceHierarchyOverrides": {
                 "exclude": ["ICellEditor"],
                 "include": []
+            }
+        },
+        "validateEdit": {
+            "more": {
+                "name": "Edit Validation",
+                "url": "./cell-editing-validation"
+            }
+        },
+        "getEditValidationErrors": {
+            "more": {
+                "name": "Edit Validation",
+                "url": "./cell-editing-validation"
             }
         }
     },
@@ -526,6 +620,33 @@
                 "name": "Excel Export - Multiple Sheets",
                 "url": "./excel-export-multiple-sheets/"
             }
+        },
+        "exportDataAsPdf": {
+            "more": {
+                "name": "Enabling PDF Export",
+                "url": "./pdf-export/#enabling-pdf-export"
+            }
+        },
+        "getDataAsPdf": {
+            "more": {
+                "name": "PDF Export",
+                "url": "./pdf-export/"
+            }
+        }
+    },
+    "ai-toolkit": {
+        "meta": {
+            "displayName": "AI Toolkit",
+            "page": {
+                "name": "AI Toolkit",
+                "url": "./ai-toolkit/"
+            }
+        },
+        "getStructuredSchema": {
+            "more": {
+                "name": "AI Toolkit",
+                "url": "./ai-toolkit/"
+            }
         }
     },
     "events": {
@@ -562,10 +683,26 @@
     "rowExpansion": {
         "meta": {
             "displayName": "Row Expand and Collapse",
-            "description": "See [Row Grouping](./grouping-opening-groups/) or [Tree Data](./tree-data-opening-groups/) for more information"
+            "description": "See [Row Grouping](./grouping-opening-groups/), [Master Detail](./master-detail/) or [Tree Data](./tree-data-opening-groups/) for more information"
         },
-        "expandAll": {},
-        "collapseAll": {},
+        "expandAll": {
+            "more": {
+                "name": "Expanding Groups",
+                "url": "./grouping-opening-groups/#api"
+            }
+        },
+        "collapseAll": {
+            "more": {
+                "name": "Expanding Groups",
+                "url": "./grouping-opening-groups/#api"
+            }
+        },
+        "resetRowGroupExpansion": {
+            "more": {
+                "name": "Reset Group Expansion",
+                "url": "./grouping-opening-groups/#reset-group-expansion"
+            }
+        },
         "setRowNodeExpanded": {
             "more": {
                 "name": "Expand to a Row",
@@ -643,6 +780,18 @@
                 ],
                 "include": []
             }
+        },
+        "setRowDropPositionIndicator": {
+            "more": {
+                "name": "Row Drag and Drop Usage",
+                "url": "./row-dragging"
+            }
+        },
+        "getRowDropPositionIndicator": {
+            "more": {
+                "name": "Row Drag and Drop Usage",
+                "url": "./row-dragging"
+            }
         }
     },
     "rendering": {
@@ -678,24 +827,9 @@
         "meta": {
             "displayName": "Scrolling"
         },
-        "ensureIndexVisible": {
-            "more": {
-                "name": "firstDataRendered event",
-                "url": "./grid-events/#reference-miscellaneous-firstDataRendered"
-            }
-        },
-        "ensureNodeVisible": {
-            "more": {
-                "name": "firstDataRendered event",
-                "url": "./grid-events/#reference-miscellaneous-firstDataRendered"
-            }
-        },
-        "ensureColumnVisible": {
-            "more": {
-                "name": "firstDataRendered event",
-                "url": "./grid-events/#reference-miscellaneous-firstDataRendered"
-            }
-        },
+        "ensureIndexVisible": {},
+        "ensureNodeVisible": {},
+        "ensureColumnVisible": {},
         "getHorizontalPixelRange": {},
         "getVerticalPixelRange": {}
     },
@@ -721,8 +855,18 @@
                 "url": "./overlays/"
             }
         },
-        "showNoRowsOverlay": {},
-        "hideOverlay": {}
+        "showNoRowsOverlay": {
+            "page": {
+                "name": "Active Overlay",
+                "url": "./overlays-active/"
+            }
+        },
+        "hideOverlay": {
+            "page": {
+                "name": "Active Overlay",
+                "url": "./overlays-active/"
+            }
+        }
     },
     "clipboard": {
         "meta": {
@@ -823,11 +967,17 @@
         },
         "showColumnChooser": {
             "more": {
+                "name": "Column Chooser API",
+                "url": "./column-chooser/#column-chooser-api"
+            }
+        },
+        "showColumnFilter": {
+            "more": {
                 "name": "Column Menu API",
                 "url": "./column-menu/#column-menu-api--events"
             }
         },
-        "showColumnFilter": {
+        "hideColumnFilter": {
             "more": {
                 "name": "Column Menu API",
                 "url": "./column-menu/#column-menu-api--events"
@@ -841,12 +991,12 @@
         },
         "showContextMenu": {},
         "hidePopupMenu": {
-            "description": "Hides any visible [context menu](./context-menu/) or [column menu](./column-menu/)."
+            "description": "Hides any visible [Context Menu](./context-menu/) or [Column Menu](./column-menu/)."
         },
         "hideColumnChooser": {
             "more": {
-                "name": "Column Menu API",
-                "url": "./column-menu/#column-menu-api--events"
+                "name": "Column Chooser API",
+                "url": "./column-chooser/#column-chooser-api"
             }
         },
         "getSideBar": {
@@ -911,6 +1061,12 @@
             "more": {
                 "name": "Tool Panel Expand / Collapse Column Groups",
                 "url": "./tool-panel-columns/#expand--collapse-column-groups"
+            }
+        },
+        "getToolbarItemInstance": {
+            "more": {
+                "name": "Toolbar",
+                "url": "./toolbar/"
             }
         },
         "getStatusPanel": {
@@ -1021,18 +1177,33 @@
             }
         }
     },
-    "miscellaneous": {
+    "gridState": {
         "meta": {
-            "displayName": "Miscellaneous"
-        },
-        "getState": {
-            "more": {
+            "displayName": "Grid State",
+            "page": {
                 "name": "Grid State",
                 "url": "./grid-state/"
             }
         },
+        "getState": {
+            "more": {
+                "name": "Saving and Restoring State",
+                "url": "./grid-state/#saving-and-restoring-state"
+            }
+        },
+        "setState": {
+            "more": {
+                "name": "Setting State",
+                "url": "./grid-state/#setting-state"
+            }
+        }
+    },
+    "miscellaneous": {
+        "meta": {
+            "displayName": "Miscellaneous"
+        },
         "getCellValue": {
-            "description": "Gets the cell value for the given column and `rowNode` (row). Will return the cell value or the formatted value depending on the value of `params.useFormatter`."
+            "description": "Gets the cell value for the given column and `rowNode` (row). Will return the cell value or the formatted value depending on the value of `params.useFormatter`. The `params.from` option controls which value is resolved, including `'transformed'` to read the displayed [Show Values As](./aggregation-show-values-as/) value."
         },
         "expireValueCache": {
             "more": {
@@ -1050,6 +1221,8 @@
             "description": "Sets an ARIA property in the grid panel (element with `role=\"grid\"`), and removes an ARIA property when the value is null.<br /><br />Example:<br />`api.setGridAriaProperty('label', 'my grid')` will set `aria-label=\"my grid\"`.<br />`api.setGridAriaProperty('label', null)` will remove the `aria-label` attribute from the grid element."
         },
         "getGridId": {},
+        "getGridElement": {},
+        "isModuleRegistered": {},
         "isAnimationFrameQueueEmpty": {}
     },
     "data": {
@@ -1080,7 +1253,13 @@
                 "url": "./data-update-single-row-cell/#sort--filter--group-refresh"
             }
         },
-        "isRowDataEmpty": {}
+        "isRowDataEmpty": {},
+        "resetRowHeights": {
+            "more": {
+                "name": "Changing Row Height",
+                "url": "./row-height/#changing-row-height"
+            }
+        }
     },
     "serverSideRowModel": {
         "meta": {
@@ -1140,6 +1319,102 @@
                 "url": "./server-side-model-configuration/#debug-info"
             }
         },
-        "isLastRowIndexKnown": {}
+        "isLastRowIndexKnown": {},
+        "resetRowHeights": {
+            "more": {
+                "name": "Changing Row Height",
+                "url": "./row-height/#changing-row-height"
+            }
+        }
+    },
+    "find": {
+        "meta": {
+            "displayName": "Find",
+            "page": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findNext": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findPrevious": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findGetTotalMatches": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findGoTo": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findClearActive": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findGetActiveMatch": {
+            "more": {
+                "name": "Find",
+                "url": "./find/"
+            }
+        },
+        "findGetNumMatches": {
+            "more": {
+                "name": "Using Find with Cell Components",
+                "url": "./find/#using-find-with-cell-components"
+            }
+        },
+        "findGetParts": {
+            "more": {
+                "name": "Using Find with Cell Components",
+                "url": "./find/#using-find-with-cell-components"
+            }
+        },
+        "findRefresh": {
+            "more": {
+                "name": "Content to Search",
+                "url": "./find/#content-to-search"
+            }
+        }
+    },
+    "notes": {
+        "meta": {
+            "displayName": "Notes",
+            "page": {
+                "name": "Notes",
+                "url": "./notes/"
+            }
+        },
+        "getNote": {
+            "more": {
+                "name": "Notes API",
+                "url": "./notes/#api-reference"
+            }
+        },
+        "setNote": {
+            "more": {
+                "name": "Notes API",
+                "url": "./notes/#api-reference"
+            }
+        },
+        "refreshNotes": {
+            "more": {
+                "name": "Notes API",
+                "url": "./notes/#api-reference"
+            }
+        }
     }
 }

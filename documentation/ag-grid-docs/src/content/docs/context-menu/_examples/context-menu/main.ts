@@ -1,7 +1,13 @@
 import { AgChartsEnterpriseModule } from 'ag-charts-enterprise';
 
-import type { GetContextMenuItemsParams, GridApi, GridOptions, MenuItemDef } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import type { DefaultMenuItem, GetContextMenuItemsParams, GridApi, GridOptions, MenuItemDef } from 'ag-grid-community';
+import {
+    ClientSideRowModelModule,
+    ModuleRegistry,
+    TooltipModule,
+    createGrid,
+    enableDevValidations,
+} from 'ag-grid-community';
 import {
     CellSelectionModule,
     ClipboardModule,
@@ -11,6 +17,11 @@ import {
     IntegratedChartsModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ClipboardModule,
@@ -18,8 +29,8 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     CellSelectionModule,
+    TooltipModule,
     IntegratedChartsModule.with(AgChartsEnterpriseModule),
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -52,13 +63,13 @@ function createFlagImg(flag: string) {
 
 function getContextMenuItems(
     params: GetContextMenuItemsParams
-): (string | MenuItemDef)[] | Promise<(string | MenuItemDef)[]> {
-    const result: (string | MenuItemDef)[] = [
+): (DefaultMenuItem | MenuItemDef)[] | Promise<(DefaultMenuItem | MenuItemDef)[]> {
+    const result: (DefaultMenuItem | MenuItemDef)[] = [
         {
             // custom item
-            name: 'Alert ' + params.value,
+            name: 'Log ' + params.value,
             action: () => {
-                window.alert('Alerting about ' + params.value);
+                console.log('Logging about ' + params.value);
             },
             cssClasses: ['red', 'bold'],
         },

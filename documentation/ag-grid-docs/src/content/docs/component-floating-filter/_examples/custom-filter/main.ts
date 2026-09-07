@@ -1,40 +1,60 @@
-import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
+import type { ColDef, FilterHandler, GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     CustomFilterModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { NumberFilterComponent } from './numberFilterComponent_typescript';
 
-ModuleRegistry.registerModules([CustomFilterModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([CustomFilterModule, ClientSideRowModelModule]);
+
+function numberFilterHandler(): FilterHandler<any, any, number> {
+    return {
+        doesFilterPass: ({ node, model, handlerParams }) => {
+            const value = handlerParams.getValue(node);
+
+            if (value == null) {
+                return true;
+            }
+
+            return value > model;
+        },
+        getModelAsString: (model) => (model == null ? '' : '>' + model),
+    };
+}
 
 const columnDefs: ColDef[] = [
-    { field: 'athlete', width: 150, filter: false },
+    { field: 'athlete', width: 150 },
     {
         field: 'gold',
         width: 100,
-        filter: NumberFilterComponent,
+        filter: { component: NumberFilterComponent, handler: numberFilterHandler },
         suppressHeaderMenuButton: true,
     },
     {
         field: 'silver',
         width: 100,
-        filter: NumberFilterComponent,
+        filter: { component: NumberFilterComponent, handler: numberFilterHandler },
         suppressHeaderMenuButton: true,
     },
     {
         field: 'bronze',
         width: 100,
-        filter: NumberFilterComponent,
+        filter: { component: NumberFilterComponent, handler: numberFilterHandler },
         suppressHeaderMenuButton: true,
     },
     {
         field: 'total',
         width: 100,
-        filter: NumberFilterComponent,
+        filter: { component: NumberFilterComponent, handler: numberFilterHandler },
         suppressHeaderMenuButton: true,
     },
 ];
@@ -45,11 +65,10 @@ const gridOptions: GridOptions<IOlympicData> = {
     defaultColDef: {
         flex: 1,
         minWidth: 100,
-        filter: true,
         floatingFilter: true,
     },
-    columnDefs: columnDefs,
-    rowData: null,
+    columnDefs,
+    enableFilterHandlers: true,
 };
 
 // setup the grid after the page has finished loading

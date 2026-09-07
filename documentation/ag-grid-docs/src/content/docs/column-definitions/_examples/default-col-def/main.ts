@@ -3,11 +3,16 @@ import {
     CellStyleModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -18,7 +23,6 @@ const gridOptions: GridOptions<IOlympicData> = {
         width: 150,
         cellStyle: { fontWeight: 'bold' },
     },
-    rowData: null,
 };
 
 // setup the grid after the page has finished loading

@@ -1,39 +1,33 @@
-import { _clearElement } from '../../utils/dom';
-import { _exists } from '../../utils/generic';
+import { RefPlaceholder, _clearElement, _exists } from 'ag-stack';
+
+import type { ElementParams } from '../../utils/element';
 import { Component } from '../../widgets/component';
 import type { ICellRenderer } from './iCellRenderer';
 
 const ARROW_UP = '\u2191';
 const ARROW_DOWN = '\u2193';
 
-export class AnimateShowChangeCellRenderer extends Component implements ICellRenderer {
-    private lastValue: number;
+const AnimateShowChangeCellRendererElement: ElementParams = {
+    tag: 'span',
+    children: [
+        { tag: 'span', ref: 'eDelta', cls: 'ag-value-change-delta' },
+        { tag: 'span', ref: 'eValue', cls: 'ag-value-change-value' },
+    ],
+};
 
-    private eValue: HTMLElement;
-    private eDelta: HTMLElement;
+export class AnimateShowChangeCellRenderer extends Component implements ICellRenderer {
+    private lastValue: any;
+
+    private readonly eValue: HTMLElement = RefPlaceholder;
+    private readonly eDelta: HTMLElement = RefPlaceholder;
 
     private refreshCount = 0;
 
     constructor() {
-        super();
-
-        const template = document.createElement('span');
-        const delta = document.createElement('span');
-        delta.setAttribute('class', 'ag-value-change-delta');
-
-        const value = document.createElement('span');
-        value.setAttribute('class', 'ag-value-change-value');
-
-        template.appendChild(delta);
-        template.appendChild(value);
-
-        this.setTemplateFromElement(template);
+        super(AnimateShowChangeCellRendererElement);
     }
 
     public init(params: any): void {
-        this.eValue = this.queryForHtmlElement('.ag-value-change-value');
-        this.eDelta = this.queryForHtmlElement('.ag-value-change-delta');
-
         this.refresh(params, true);
     }
 
@@ -99,8 +93,16 @@ export class AnimateShowChangeCellRenderer extends Component implements ICellRen
             return false;
         }
 
-        if (typeof value === 'number' && typeof lastValue === 'number') {
-            const delta = value - lastValue;
+        const numericValue = value && typeof value === 'object' && 'toNumber' in value ? value.toNumber() : value;
+        const numericLastValue =
+            lastValue && typeof lastValue === 'object' && 'toNumber' in lastValue ? lastValue.toNumber() : lastValue;
+
+        if (numericValue === numericLastValue) {
+            return false;
+        }
+
+        if (typeof numericValue === 'number' && typeof numericLastValue === 'number') {
+            const delta = numericValue - numericLastValue;
             this.showDelta(params, delta);
         }
 

@@ -12,7 +12,7 @@ import type {
 import { convertLegacyBorder, convertLegacyColor, convertLegacyPattern } from '../../../assets/excelLegacyConvert';
 import { getFontFamilyId } from '../../../assets/excelUtils';
 import bordersFactory from './borders';
-import type { CellStyle } from './cellStyle';
+import type { ExcelCellStyle } from './cellStyle';
 import cellStylesXfsFactory from './cellStyleXfs';
 import cellStylesFactory from './cellStyles';
 import cellXfsFactory from './cellXfs';
@@ -28,11 +28,11 @@ let registeredFills: Fill[];
 let registeredBorders: BorderSet[];
 let registeredCellStyleXfs: Xf[];
 let registeredCellXfs: Xf[];
-let registeredCellStyles: CellStyle[];
+let registeredCellStyles: ExcelCellStyle[];
 let currentSheet: number;
 
 const getStyleName = (name: string, currentSheet: number): string => {
-    if (name.indexOf('mixedStyle') !== -1 && currentSheet > 1) {
+    if (name.includes('mixedStyle') && currentSheet > 1) {
         name += `_${currentSheet}`;
     }
     return name;
@@ -57,10 +57,7 @@ const registerFill = (fill: ExcelInterior): number => {
     let pos = registeredFills.findIndex((currentFill) => {
         const { patternType, fgRgb, bgRgb } = currentFill;
 
-        if (patternType != convertedPattern || fgRgb != convertedFillColor || bgRgb != convertedPatternColor) {
-            return false;
-        }
-        return true;
+        return !(patternType != convertedPattern || fgRgb != convertedFillColor || bgRgb != convertedPatternColor);
     });
 
     if (pos === -1) {
@@ -207,7 +204,7 @@ const registerFont = (font: ExcelFont): number => {
     const convertedVerticalAlign = verticalAlign ? verticalAlign.toLocaleLowerCase() : undefined;
 
     let pos = registeredFonts.findIndex((currentFont) => {
-        if (
+        return !(
             currentFont.fontName != name ||
             currentFont.color != convertedColor ||
             currentFont.size != size ||
@@ -219,11 +216,7 @@ const registerFont = (font: ExcelFont): number => {
             currentFont.underline != convertedUnderline ||
             currentFont.verticalAlign != convertedVerticalAlign ||
             currentFont.family != familyId
-        ) {
-            return false;
-        }
-
-        return true;
+        );
     });
 
     if (pos === -1) {

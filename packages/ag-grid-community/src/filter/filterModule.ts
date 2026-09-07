@@ -1,17 +1,19 @@
 import type { _ColumnFilterGridApi, _FilterGridApi, _QuickFilterGridApi } from '../api/gridApi';
-import { FilterStage } from '../clientSideRowModel/filterStage';
 import { HeaderFilterCellCtrl } from '../headerRendering/cells/floatingFilter/headerFilterCellCtrl';
-import type { _ModuleWithApi } from '../interfaces/iModule';
-import type { _ModuleWithoutApi } from '../interfaces/iModule';
+import type { FilterWrapperParams } from '../interfaces/iFilter';
+import type { _ModuleWithApi, _ModuleWithoutApi } from '../interfaces/iModule';
 import { SharedMenuModule } from '../misc/menu/sharedMenuModule';
 import { VERSION } from '../version';
 import { PopupModule } from '../widgets/popupModule';
-import { columnFiltersCSS } from './column-filters.css-GENERATED';
+import columnFiltersCSS from './column-filters.css';
 import {
     destroyFilter,
+    doFilterAction,
+    getColumnFilterHandler,
     getColumnFilterInstance,
     getColumnFilterModel,
     getFilterModel,
+    hideColumnFilter,
     isColumnFilterPresent,
     setColumnFilterModel,
     setFilterModel,
@@ -23,28 +25,24 @@ import { FilterManager } from './filterManager';
 import { FilterMenuFactory } from './filterMenuFactory';
 import { FilterValueService } from './filterValueService';
 import { ReadOnlyFloatingFilter } from './floating/provided/readOnlyFloatingFilter';
+import { BigIntFilter } from './provided/bigInt/bigIntFilter';
+import { BigIntFilterHandler } from './provided/bigInt/bigIntFilterHandler';
+import { BigIntFloatingFilter } from './provided/bigInt/bigIntFloatingFilter';
 import { DateFilter } from './provided/date/dateFilter';
+import { DateFilterHandler } from './provided/date/dateFilterHandler';
 import { DateFloatingFilter } from './provided/date/dateFloatingFilter';
 import { DefaultDateComponent } from './provided/date/defaultDateComponent';
 import { NumberFilter } from './provided/number/numberFilter';
+import { NumberFilterHandler } from './provided/number/numberFilterHandler';
 import { NumberFloatingFilter } from './provided/number/numberFloatingFilter';
 import { TextFilter } from './provided/text/textFilter';
+import { TextFilterHandler } from './provided/text/textFilterHandler';
 import { TextFloatingFilter } from './provided/text/textFloatingFilter';
 import { getQuickFilter, isQuickFilterPresent, resetQuickFilter } from './quickFilterApi';
 import { QuickFilterService } from './quickFilterService';
 
 /**
- * @internal
- */
-export const ClientSideRowModelFilterModule: _ModuleWithoutApi = {
-    moduleName: 'ClientSideRowModelFilter',
-    version: VERSION,
-    rowModels: ['clientSide'],
-    beans: [FilterStage],
-};
-
-/**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const FilterCoreModule: _ModuleWithApi<_FilterGridApi> = {
     moduleName: 'FilterCore',
@@ -55,11 +53,10 @@ export const FilterCoreModule: _ModuleWithApi<_FilterGridApi> = {
         onFilterChanged,
     },
     css: [columnFiltersCSS],
-    dependsOn: [ClientSideRowModelFilterModule],
 };
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const FilterValueModule: _ModuleWithoutApi = {
     moduleName: 'FilterValue',
@@ -68,7 +65,7 @@ export const FilterValueModule: _ModuleWithoutApi = {
 };
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const ColumnFilterModule: _ModuleWithApi<_ColumnFilterGridApi> = {
     moduleName: 'ColumnFilter',
@@ -90,6 +87,9 @@ export const ColumnFilterModule: _ModuleWithApi<_ColumnFilterGridApi> = {
         getColumnFilterModel,
         setColumnFilterModel,
         showColumnFilter,
+        hideColumnFilter,
+        getColumnFilterHandler,
+        doFilterAction,
     },
     dependsOn: [FilterCoreModule, PopupModule, FilterValueModule, SharedMenuModule],
 };
@@ -112,8 +112,16 @@ export const TextFilterModule: _ModuleWithoutApi = {
     version: VERSION,
     dependsOn: [ColumnFilterModule],
     userComponents: {
-        agTextColumnFilter: TextFilter,
+        agTextColumnFilter: {
+            classImp: TextFilter,
+            params: {
+                useForm: true,
+            } as FilterWrapperParams,
+        },
         agTextColumnFloatingFilter: TextFloatingFilter,
+    },
+    dynamicBeans: {
+        agTextColumnFilterHandler: TextFilterHandler,
     },
 };
 
@@ -125,8 +133,37 @@ export const NumberFilterModule: _ModuleWithoutApi = {
     version: VERSION,
     dependsOn: [ColumnFilterModule],
     userComponents: {
-        agNumberColumnFilter: NumberFilter,
+        agNumberColumnFilter: {
+            classImp: NumberFilter,
+            params: {
+                useForm: true,
+            } as FilterWrapperParams,
+        },
         agNumberColumnFloatingFilter: NumberFloatingFilter,
+    },
+    dynamicBeans: {
+        agNumberColumnFilterHandler: NumberFilterHandler,
+    },
+};
+
+/**
+ * @feature Filtering -> BigInt Filter
+ */
+export const BigIntFilterModule: _ModuleWithoutApi = {
+    moduleName: 'BigIntFilter',
+    version: VERSION,
+    dependsOn: [ColumnFilterModule],
+    userComponents: {
+        agBigIntColumnFilter: {
+            classImp: BigIntFilter,
+            params: {
+                useForm: true,
+            } as FilterWrapperParams,
+        },
+        agBigIntColumnFloatingFilter: BigIntFloatingFilter,
+    },
+    dynamicBeans: {
+        agBigIntColumnFilterHandler: BigIntFilterHandler,
     },
 };
 
@@ -138,10 +175,29 @@ export const DateFilterModule: _ModuleWithoutApi = {
     version: VERSION,
     dependsOn: [ColumnFilterModule],
     userComponents: {
-        agDateColumnFilter: DateFilter,
+        agDateColumnFilter: {
+            classImp: DateFilter,
+            params: {
+                useForm: true,
+            } as FilterWrapperParams,
+        },
         agDateInput: DefaultDateComponent,
         agDateColumnFloatingFilter: DateFloatingFilter,
     },
+    dynamicBeans: {
+        agDateColumnFilterHandler: DateFilterHandler,
+    },
+};
+
+/**
+ * @internal
+ */
+const QuickFilterCoreModule: _ModuleWithoutApi = {
+    moduleName: 'QuickFilterCore',
+    version: VERSION,
+    rowModels: ['clientSide'],
+    beans: [QuickFilterService],
+    dependsOn: [FilterCoreModule, FilterValueModule],
 };
 
 /**
@@ -151,14 +207,12 @@ export const DateFilterModule: _ModuleWithoutApi = {
 export const QuickFilterModule: _ModuleWithApi<_QuickFilterGridApi> = {
     moduleName: 'QuickFilter',
     version: VERSION,
-    rowModels: ['clientSide'],
-    beans: [QuickFilterService],
     apiFunctions: {
         isQuickFilterPresent,
         getQuickFilter,
         resetQuickFilter,
     },
-    dependsOn: [FilterCoreModule, FilterValueModule],
+    dependsOn: [QuickFilterCoreModule],
 };
 
 /**

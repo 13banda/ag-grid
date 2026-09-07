@@ -1,7 +1,12 @@
 import type { GridApi, GridOptions, ICellRendererParams, IDatasource, IGetRowsParams } from 'ag-grid-community';
-import { InfiniteRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { InfiniteRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([InfiniteRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([InfiniteRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 

@@ -1,12 +1,18 @@
-import { _getDocument } from '../../gridOptionsUtils';
-import { _clearElement } from '../../utils/dom';
-import { _exists, _missing } from '../../utils/generic';
+import { RefPlaceholder, _clearElement, _exists, _missing } from 'ag-stack';
+
+import type { ElementParams } from '../../utils/element';
+import { _createElement } from '../../utils/element';
 import { Component } from '../../widgets/component';
-import { animateSlideCellRendererCSS } from './animateSlideCellRenderer.css-GENERATED';
+import animateSlideCellRendererCSS from './animateSlideCellRenderer.css';
 import type { ICellRenderer } from './iCellRenderer';
 
+const AnimateSlideCellRendererElement: ElementParams = {
+    tag: 'span',
+    children: [{ tag: 'span', ref: 'eCurrent', cls: 'ag-value-slide-current' }],
+};
+
 export class AnimateSlideCellRenderer extends Component implements ICellRenderer {
-    private eCurrent: HTMLElement;
+    private readonly eCurrent: HTMLElement = RefPlaceholder;
     private ePrevious: HTMLElement | null;
 
     private lastValue: any;
@@ -14,16 +20,8 @@ export class AnimateSlideCellRenderer extends Component implements ICellRenderer
     private refreshCount = 0;
 
     constructor() {
-        super();
+        super(AnimateSlideCellRendererElement);
 
-        const template = document.createElement('span');
-        const slide = document.createElement('span');
-        slide.setAttribute('class', 'ag-value-slide-current');
-        template.appendChild(slide);
-
-        this.setTemplateFromElement(template);
-
-        this.eCurrent = this.queryForHtmlElement('.ag-value-slide-current');
         this.registerCSS(animateSlideCellRendererCSS);
     }
 
@@ -40,13 +38,10 @@ export class AnimateSlideCellRenderer extends Component implements ICellRenderer
         const refreshCountCopy = this.refreshCount;
 
         // if old animation, remove it
-        if (this.ePrevious) {
-            this.getGui().removeChild(this.ePrevious);
-        }
+        this.ePrevious?.remove();
 
         const { beans, eCurrent } = this;
-        const prevElement = _getDocument(beans).createElement('span');
-        prevElement.setAttribute('class', 'ag-value-slide-previous ag-value-slide-out');
+        const prevElement = _createElement({ tag: 'span', cls: 'ag-value-slide-previous ag-value-slide-out' });
         this.ePrevious = prevElement;
 
         prevElement.textContent = eCurrent.textContent;
@@ -67,7 +62,7 @@ export class AnimateSlideCellRenderer extends Component implements ICellRenderer
                 if (refreshCountCopy !== this.refreshCount) {
                     return;
                 }
-                this.getGui().removeChild(this.ePrevious!);
+                this.ePrevious?.remove();
                 this.ePrevious = null;
             }, 3000);
         });

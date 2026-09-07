@@ -1,16 +1,22 @@
-import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
+import type { GridApi, GridOptions } from 'ag-grid-community';
 import {
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ModuleRegistry,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CustomButtonComponent } from './customButtonComponent_typescript';
 import { MissionResultRenderer } from './missionResultRenderer_typescript';
 
-ModuleRegistry.registerModules([RowApiModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, ClientSideRowModelModule, ClientSideRowModelApiModule]);
 
 // Grid API: Access to Grid API methods
 let gridApi: GridApi;
@@ -23,24 +29,25 @@ interface IRow {
     successful: boolean;
 }
 
+// Override the icons via cellRendererParams
 function successIconSrc(params: boolean) {
     if (params === true) {
-        return 'https://www.ag-grid.com/example-assets/icons/tick-in-circle.png';
+        return 'https://www.ag-grid.com/example-assets/svg-icons/tick.svg';
     } else {
-        return 'https://www.ag-grid.com/example-assets/icons/cross-in-circle.png';
+        return 'https://www.ag-grid.com/example-assets/svg-icons/cross.svg';
     }
 }
 
 function refreshData() {
-    gridApi!.forEachNode((rowNode) => {
+    gridApi.forEachNode((rowNode) => {
         rowNode.setDataValue('successful', Math.random() > 0.5);
     });
+
+    gridApi.refreshClientSideRowModel('sort');
 }
 
-const onClick = () => alert('Mission Launched');
-const gridOptions: GridOptions = {
-    // Data to be displayed
-    rowData: [] as IRow[],
+const onClick = () => console.log('Mission Launched');
+const gridOptions: GridOptions<IRow> = {
     // Columns to be displayed (Should match rowData properties)
     columnDefs: [
         {
@@ -53,21 +60,23 @@ const gridOptions: GridOptions = {
         },
         {
             field: 'successful',
-            headerName: 'Success',
+            headerName: 'Success (Custom Props)',
             cellRenderer: MissionResultRenderer,
             cellRendererParams: {
                 src: successIconSrc,
             },
         },
         {
-            field: 'actions',
+            colId: 'actions',
             headerName: 'Actions',
             cellRenderer: CustomButtonComponent,
-            cellRendererParams: {
+            cellRendererParams: (params: any) => ({
                 onClick: onClick,
-            },
+                params,
+            }),
+            sortable: false,
         },
-    ] as ColDef[],
+    ],
     defaultColDef: {
         flex: 1,
     },

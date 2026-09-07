@@ -26,6 +26,7 @@
 
 input[type='search'].searchInput {
     width: 100%;
+    height: 76px;
     padding: $spacing-size-6 $spacing-size-6 $spacing-size-6 $spacing-size-16;
     font-size: 20px;
     border: none;
@@ -44,5 +45,33 @@ input[type='search'].searchInput {
     &::-webkit-search-decoration,
     &::-webkit-search-cancel-button {
         display: none;
+    }
+}
+
+.gettingStarted {
+    padding: $spacing-size-5;
+
+    span {
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        color: var(--color-text-secondary);
+        opacity: 0.6;
+        font-size: 13px;
+    }
+
+    h3 {
+        color: var(--color-link);
+        font-size: 17px;
+    }
+
+    p {
+        font-size: 15px;
+    }
+
+    a {
+        margin-top: 12px;
+        box-shadow: var(--shadow-sm);
+        height: 100px !important;
     }
 }

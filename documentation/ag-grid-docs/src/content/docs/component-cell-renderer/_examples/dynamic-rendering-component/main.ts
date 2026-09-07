@@ -7,12 +7,17 @@ import type {
     RowEditingStartedEvent,
     RowEditingStoppedEvent,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
 import { GenderRenderer } from './genderRenderer_typescript';
 import { MoodRenderer } from './moodRenderer_typescript';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 interface IRow {
     value: number | string;
@@ -59,18 +64,6 @@ const gridOptions: GridOptions<IRow> = {
         cellDataType: false,
     },
     rowData: rowData,
-    onRowEditingStarted: (event: RowEditingStartedEvent<IRow>) => {
-        console.log('never called - not doing row editing');
-    },
-    onRowEditingStopped: (event: RowEditingStoppedEvent<IRow>) => {
-        console.log('never called - not doing row editing');
-    },
-    onCellEditingStarted: (event: CellEditingStartedEvent<IRow>) => {
-        console.log('cellEditingStarted');
-    },
-    onCellEditingStopped: (event: CellEditingStoppedEvent<IRow>) => {
-        console.log('cellEditingStopped');
-    },
 };
 
 // setup the grid after the page has finished loading

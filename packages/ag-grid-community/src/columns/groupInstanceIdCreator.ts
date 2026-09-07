@@ -9,21 +9,12 @@
 // getInstanceIdForKey('age') => 1
 // getInstanceIdForKey('country') => 4
 export class GroupInstanceIdCreator {
-    // this map contains keys to numbers, so we remember what the last call was
-    private existingIds: any = {};
+    // Per-key counter: remembers the last instance id handed out for each key.
+    private readonly existingIds: Record<string, number> = Object.create(null);
 
     public getInstanceIdForKey(key: string): number {
-        const lastResult = this.existingIds[key];
-        let result: number;
-        if (typeof lastResult !== 'number') {
-            // first time this key
-            result = 0;
-        } else {
-            result = lastResult + 1;
-        }
-
+        const result = (this.existingIds[key] ?? -1) + 1;
         this.existingIds[key] = result;
-
         return result;
     }
 }

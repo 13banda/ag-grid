@@ -9,7 +9,7 @@ import type {
     AgCrosshairOptions,
 } from 'ag-charts-types';
 
-import type { ChartType, SeriesChartType, SeriesGroupType } from 'ag-grid-community';
+import type { ChartType, GridChartContext, SeriesChartType, SeriesGroupType } from 'ag-grid-community';
 
 import type { AgChartsExports } from '../../agChartsExports';
 import type { CrossFilteringContext } from '../../chartService';
@@ -20,12 +20,14 @@ import { getSeriesType } from '../utils/seriesTypeMapper';
 import { createAgChartTheme, lookupCustomChartTheme } from './chartTheme';
 
 export interface ChartProxyParams {
+    gridId: string;
     agChartsExports: AgChartsExports;
     chartInstance?: AgChartInstance<AgChartInstanceOptions>;
     chartType: ChartType;
     customChartThemes?: { [name: string]: AgChartTheme };
     parentElement: HTMLElement;
     grouping: boolean;
+    styleNonce?: string;
     getChartThemeName: () => string;
     getChartThemes: () => string[];
     getGridOptionsChartThemeOverrides: () => AgChartThemeOverrides | undefined;
@@ -38,6 +40,8 @@ export interface ChartProxyParams {
     chartPaletteToRestore?: AgChartThemePalette;
     seriesChartTypes: SeriesChartType[];
     translate: (toTranslate: string, defaultText?: string) => string;
+    context: GridChartContext;
+    enableRtl?: boolean;
 }
 
 export type ExtraPaddingDirection = 'top' | 'right' | 'bottom' | 'left';
@@ -55,6 +59,7 @@ export interface UpdateParams {
         id: string;
         name: string;
         chartDataType?: string;
+        convertTime?: (date: string | undefined) => Date | undefined;
     }[];
     fields: FieldDefinition[];
     chartId?: string;
@@ -78,7 +83,7 @@ export abstract class ChartProxy<
 
     protected clearThemeOverrides = false;
 
-    protected constructor(protected readonly chartProxyParams: ChartProxyParams) {
+    public constructor(protected readonly chartProxyParams: ChartProxyParams) {
         this.agChartsExports = chartProxyParams.agChartsExports;
         this.chart = chartProxyParams.chartInstance!;
         this.chartType = chartProxyParams.chartType;
@@ -119,7 +124,7 @@ export abstract class ChartProxy<
     public downloadChart(dimensions?: { width: number; height: number }, fileName?: string, fileFormat?: string) {
         const { chart } = this;
         const rawChart = deproxy(chart);
-        const imageFileName = fileName || (rawChart.title ? rawChart.title.text : 'chart');
+        const imageFileName = fileName || rawChart.title.node.getPlainText();
         const { width, height } = dimensions || {};
 
         chart.download({ width, height, fileName: imageFileName, fileFormat });
@@ -168,7 +173,7 @@ export abstract class ChartProxy<
         // replace the values for the selected category with a complex object to allow for duplicated categories
         return data.map((d, index) => {
             const value = d[categoryKey];
-            const valueString = value && value.toString ? value.toString() : '';
+            const valueString = value?.toString ? value.toString() : '';
             const datum = { ...d };
 
             datum[categoryKey] = { id: index, value, toString: () => valueString };
@@ -179,12 +184,14 @@ export abstract class ChartProxy<
 
     private getCommonChartOptions(updatedOverrides?: AgChartThemeOverrides): TOptions & { mode: 'integrated' } {
         // Only apply active overrides if chart is initialised.
-        const existingOptions = (this.clearThemeOverrides ? {} : this.chart?.getOptions() ?? {}) as TOptions;
+        const existingOptions = (this.clearThemeOverrides ? {} : (this.chart?.getOptions() ?? {})) as TOptions;
         const formattingPanelOverrides = this.chart != null ? this.getActiveFormattingPanelOverrides() : undefined;
         this.clearThemeOverrides = false;
+        const chartProxyParams = this.chartProxyParams;
+        const styleNonce = chartProxyParams.styleNonce;
 
         const theme = createAgChartTheme(
-            this.chartProxyParams,
+            chartProxyParams,
             this,
             this.agChartsExports.isEnterprise,
             this.getChartThemeDefaults(),
@@ -194,19 +201,17 @@ export abstract class ChartProxy<
         const newOptions = {
             ...existingOptions,
             mode: 'integrated',
-        } as const;
-        newOptions.theme = theme;
-        newOptions.container = this.chartProxyParams.parentElement;
-        return newOptions;
+            ...(styleNonce ? { styleNonce } : {}),
+            suppressFieldDotNotation: true,
+            theme,
+            container: chartProxyParams.parentElement,
+            enableRtl: chartProxyParams.enableRtl,
+        };
+
+        return newOptions as TOptions & { mode: 'integrated' };
     }
 
     private getChartThemeDefaults(): AgChartThemeOverrides | undefined {
-        const seriesOverrides = this.getSeriesChartThemeDefaults();
-        const seriesChartOptions = seriesOverrides
-            ? {
-                  [this.standaloneChartType]: seriesOverrides,
-              }
-            : {};
         const crosshair: AgCrosshairOptions = {
             enabled: true,
             snap: true,
@@ -235,11 +240,22 @@ export abstract class ChartProxy<
         common.minWidth = 0;
         common.navigator = {
             enabled: false,
+            height: 18,
         };
-        return {
+        common.context = this.chartProxyParams.context;
+        const overrides = {
             common,
-            ...seriesChartOptions,
         };
+        this.setSeriesChartThemeDefaults(overrides);
+        return overrides;
+    }
+
+    protected setSeriesChartThemeDefaults(overrides: AgChartThemeOverrides): void {
+        const seriesOverrides = this.getSeriesChartThemeDefaults();
+        if (!seriesOverrides) {
+            return;
+        }
+        overrides[this.standaloneChartType] = seriesOverrides;
     }
 
     protected getSeriesChartThemeDefaults(): AgChartThemeOverrides[TSeries] {

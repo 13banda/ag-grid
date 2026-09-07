@@ -3,17 +3,17 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     QuickFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { PivotModule } from 'ag-grid-enterprise';
+import { PivotModule, ToolbarModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    QuickFilterModule,
-    ClientSideRowModelModule,
-    PivotModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([QuickFilterModule, ToolbarModule, ClientSideRowModelModule, PivotModule]);
 
 let gridApi: GridApi;
 
@@ -36,6 +36,9 @@ const gridOptions: GridOptions = {
         minWidth: 250,
     },
     pivotMode: true,
+    toolbar: {
+        items: ['agQuickFilterToolbarItem'],
+    },
 };
 
 let applyBeforePivotOrAgg = false;
@@ -45,10 +48,6 @@ function onApplyBeforePivotOrAgg() {
     gridApi!.setGridOption('applyQuickFilterBeforePivotOrAgg', applyBeforePivotOrAgg);
     document.querySelector('#applyBeforePivotOrAgg')!.textContent =
         `Apply ${applyBeforePivotOrAgg ? 'After' : 'Before'} Pivot/Aggregation`;
-}
-
-function onFilterTextBoxChanged() {
-    gridApi!.setGridOption('quickFilterText', (document.getElementById('filter-text-box') as HTMLInputElement).value);
 }
 
 // setup the grid after the page has finished loading

@@ -1,22 +1,36 @@
-import type { BeanCollection, ColumnModel, CtrlsService, FocusService } from 'ag-grid-community';
 import {
-    Component,
-    KeyCode,
+    RefPlaceholder,
     _clearElement,
     _findNextFocusableElement,
     _focusInto,
     _getActiveDomElement,
-    _getFloatingFiltersHeight,
     _setAriaColIndex,
     _setAriaColSpan,
     _setAriaRole,
     _setAriaRowIndex,
     _setDisplayed,
-} from 'ag-grid-community';
+} from 'ag-stack';
+
+import type { BeanCollection, ColumnModel, CtrlsService, ElementParams, FocusService } from 'ag-grid-community';
+import { Component, KeyCode, _getFloatingFiltersHeight } from 'ag-grid-community';
 
 import { AdvancedFilterComp } from './advancedFilterComp';
 
+const AdvancedFilterHeaderElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-row ag-full-width-row ag-advanced-filter-header',
+    role: 'row',
+    children: [
+        {
+            tag: 'div',
+            cls: 'ag-full-width-anchor',
+            role: 'presentation',
+            ref: 'eFullWidthAnchor',
+        },
+    ],
+};
 export class AdvancedFilterHeaderComp extends Component {
+    protected readonly eFullWidthAnchor: HTMLElement = RefPlaceholder;
     private colModel: ColumnModel;
     private focusSvc: FocusService;
     private ctrlsSvc: CtrlsService;
@@ -31,9 +45,7 @@ export class AdvancedFilterHeaderComp extends Component {
     private height: number;
 
     constructor(private enabled: boolean) {
-        super(/* html */ `
-            <div class="ag-advanced-filter-header" role="row">
-            </div>`);
+        super(AdvancedFilterHeaderElement);
     }
 
     public postConstruct(): void {
@@ -41,20 +53,17 @@ export class AdvancedFilterHeaderComp extends Component {
 
         this.addDestroyFunc(() => this.destroyBean(this.eAdvancedFilter));
 
-        const heightListener = () => {
-            if (this.enabled) {
-                this.setEnabledHeight();
-            }
-        };
+        const refreshLayout = this.refreshLayout.bind(this);
 
         this.addManagedEventListeners({
             gridColumnsChanged: () => this.onGridColumnsChanged(),
-            columnHeaderHeightChanged: heightListener,
-            gridStylesChanged: heightListener,
+            headerRowsChanged: () => this.setAriaRowIndex(),
+            columnHeaderHeightChanged: refreshLayout,
+            stylesChanged: refreshLayout,
         });
 
-        this.addManagedPropertyListener('headerHeight', heightListener);
-        this.addManagedPropertyListener('floatingFiltersHeight', heightListener);
+        this.addManagedPropertyListener('headerHeight', refreshLayout);
+        this.addManagedPropertyListener('floatingFiltersHeight', refreshLayout);
 
         this.addGuiEventListener('keydown', (event: KeyboardEvent) => this.onKeyDown(event));
 
@@ -80,6 +89,12 @@ export class AdvancedFilterHeaderComp extends Component {
         this.eAdvancedFilter?.refresh();
     }
 
+    public refreshLayout(): void {
+        if (this.enabled) {
+            this.setEnabledHeight();
+        }
+    }
+
     public getHeight(): number {
         return this.height;
     }
@@ -89,12 +104,11 @@ export class AdvancedFilterHeaderComp extends Component {
     }
 
     private setupAdvancedFilter(enabled: boolean): void {
-        const eGui = this.getGui();
         if (enabled) {
             // unmanaged as can be recreated
             this.eAdvancedFilter = this.createBean(new AdvancedFilterComp());
             const eAdvancedFilterGui = this.eAdvancedFilter.getGui();
-            this.eAdvancedFilter.addCssClass('ag-advanced-filter-header-cell');
+            this.eAdvancedFilter.addCss('ag-advanced-filter-header-cell');
 
             this.setEnabledHeight();
 
@@ -103,13 +117,13 @@ export class AdvancedFilterHeaderComp extends Component {
             _setAriaColIndex(eAdvancedFilterGui, 1);
             this.setAriaColumnCount(eAdvancedFilterGui);
 
-            eGui.appendChild(eAdvancedFilterGui);
+            this.eFullWidthAnchor.appendChild(eAdvancedFilterGui);
         } else {
-            _clearElement(eGui);
+            _clearElement(this.eFullWidthAnchor);
             this.destroyBean(this.eAdvancedFilter);
             this.height = 0;
         }
-        _setDisplayed(eGui, enabled);
+        _setDisplayed(this.getGui(), enabled);
         this.enabled = enabled;
     }
 
@@ -126,7 +140,8 @@ export class AdvancedFilterHeaderComp extends Component {
     }
 
     private setAriaRowIndex(): void {
-        _setAriaRowIndex(this.getGui(), this.ctrlsSvc.getHeaderRowContainerCtrl()?.getRowCount() ?? 0);
+        const headerRowCount = this.ctrlsSvc.getHeaderRowContainerCtrl()?.getRowCount() ?? 0;
+        _setAriaRowIndex(this.getGui(), headerRowCount + 1);
     }
 
     private onGridColumnsChanged(): void {
@@ -162,12 +177,11 @@ export class AdvancedFilterHeaderComp extends Component {
                 if (this.hasFocus()) {
                     this.navigateLeftRight(event);
                 } else {
-                    const nextFocusableEl = _findNextFocusableElement(
-                        this.beans,
-                        this.getFocusableElement(),
-                        null,
-                        event.shiftKey
-                    );
+                    const nextFocusableEl = _findNextFocusableElement({
+                        beans: this.beans,
+                        rootNode: this.getFocusableElement(),
+                        backwards: event.shiftKey,
+                    });
                     if (nextFocusableEl) {
                         event.preventDefault();
                         nextFocusableEl.focus();
