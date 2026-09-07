@@ -2,10 +2,11 @@ name: Expand JIRA Links in PR descriptions
 
 on:
   pull_request:
-    types: [ opened, edited ]
+    types: [ opened, assigned, synchronize, auto_merge_enabled, auto_merge_disabled, closed, dequeued, demilestoned, labeled, locked, milestoned, enqueued, reopened, converted_to_draft, review_request_removed, unassigned, ready_for_review, review_requested, unlabeled, unlocked ,edited ]
 
 permissions:
   contents: read
+            write
 
 # Serialise runs per PR so overlapping edits can't race the duplicate-comment
 # check (check-then-act): later edits wait for the in-flight run to post its
