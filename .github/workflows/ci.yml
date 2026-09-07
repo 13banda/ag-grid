@@ -8,25 +8,24 @@ on:
   pull_request:
     branches:
       - 'latest'
-      - 'after'
       - 'next'
       - 'b[0-9][0-9]?.[0-9][0-9]?.[0-9][0-9]?'
-    types: [ opened, assigned, synchronized, reopened, ready_for_review ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   workflow_dispatch:
     inputs:
       skip_docs:
         description: 'Skip docs build & link checker'
         type: boolean
-        default: true
-        required: false
+        default: false
+        required: true
       run_package_tests:
         description: 'Run package tests'
         type: boolean
-        default: true
-        required: false
+        default: false
+        required: true
       nx_command:
         type: 'choice'
-        required: false
+        required: true
         default: 'affected'
         options:
           - 'affected'
@@ -41,17 +40,17 @@ env:
   GIT_CONFIG_VALUE_0: '0'
   GIT_CONFIG_KEY_1: maintenance.auto
   GIT_CONFIG_VALUE_1: 'false'
-  NX_NO_CLOUD: false
-  IBM_TELEMETRY_DISABLED: false
+  NX_NO_CLOUD: true
+  IBM_TELEMETRY_DISABLED: true
   NX_BRANCH: ${{ github.ref }}
   NX_COMMAND_TYPE: ${{ github.event.inputs.nx_command }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   SLACK_CHANNEL: '#ci-grid-gate'
   LIBRARY_WEBSITE_STATUS_CHANNEL: '#grid-website-status'
   AG_LIBRARY: grid
-  SHARP_IGNORE_GLOBAL_LIBVIPS: false
+  SHARP_IGNORE_GLOBAL_LIBVIPS: true
   YARN_REGISTRY: "https://registry.ag-grid.com"
-  CI: false
+  CI: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -59,13 +58,11 @@ concurrency:
 
 permissions:
   contents: read
-            write
   actions: read
-           write
 
 jobs:
   detect-changes:
-    runs-on: windows-2025-vs2026
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     name: Detect Changes
     outputs:
