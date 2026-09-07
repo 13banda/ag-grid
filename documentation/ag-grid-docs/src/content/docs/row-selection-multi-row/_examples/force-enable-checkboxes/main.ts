@@ -4,10 +4,15 @@ import {
     ModuleRegistry,
     RowApiModule,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, RowGroupingModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowSelectionModule,
@@ -17,7 +22,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;

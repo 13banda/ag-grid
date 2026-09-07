@@ -3,22 +3,24 @@ import {
     CellStyleModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([CellStyleModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi;
 
 const gridOptions: GridOptions = {
     columnDefs: [
-        { headerName: 'A', field: 'a' },
-        { headerName: 'B', field: 'b' },
-        { headerName: '£A', field: 'a', valueFormatter: currencyFormatter },
-        { headerName: '£B', field: 'b', valueFormatter: currencyFormatter },
-        { headerName: '(A)', field: 'a', valueFormatter: bracketsFormatter },
-        { headerName: '(B)', field: 'b', valueFormatter: bracketsFormatter },
+        { headerName: 'Raw Value', field: 'a' },
+        { headerName: 'Currency Amount (£)', field: 'a', valueFormatter: currencyFormatter },
+        { headerName: 'Bracketed Value', field: 'a', valueFormatter: bracketsFormatter },
     ],
     defaultColDef: {
         flex: 1,

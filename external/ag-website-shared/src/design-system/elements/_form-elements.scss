@@ -46,6 +46,7 @@ input[type='email']#{$selector-exclude-grid},
 input[type='checkbox']#{$selector-exclude-grid},
 input[type='radio']#{$selector-exclude-grid},
 input[type='number']#{$selector-exclude-grid},
+textarea#{$selector-exclude-grid},
 select#{$selector-exclude-grid} {
     color: var(--color-fg-primary);
 
@@ -59,10 +60,11 @@ select#{$selector-exclude-grid} {
 input[type='text'],
 input[type='search'],
 input[type='email'],
-input[type='number'] {
+input[type='number'],
+textarea {
     &#{$selector-exclude-grid} {
         padding: math.div(6em, 16) math.div(12em, 16);
-        line-height: var(--text-lh-base);
+        line-height: var(--text-lh-ratio-base);
         border-radius: var(--radius-sm);
         border: 1px solid var(--color-input-border);
         background-color: var(--color-bg-primary);
@@ -142,6 +144,10 @@ input[type='checkbox']:not(.switch)#{$selector-exclude-grid} {
         border-color $transition-default-timing,
         box-shadow $transition-default-timing;
 
+    #{$selector-darkmode} & {
+        border: 1px solid color-mix(in srgb, var(--color-bg-secondary), var(--color-fg-primary) 30%);
+    }
+
     &:hover:not(:disabled):not([readonly]),
     &.hover,
     &:focus-visible:not(:disabled):not([readonly]) {
@@ -202,6 +208,10 @@ input[type='radio']#{$selector-exclude-grid} {
         border-color $transition-default-timing,
         box-shadow $transition-default-timing;
 
+    #{$selector-darkmode} & {
+        border: 1px solid color-mix(in srgb, var(--color-bg-secondary), var(--color-fg-primary) 30%);
+    }
+
     &:hover:not(:disabled):not([readonly]),
     &.hover {
         border: 1px solid var(--color-input-border-hover);
@@ -224,7 +234,7 @@ select#{$selector-exclude-grid} {
     appearance: none;
     padding: math.div(6em, 16) math.div(36em, 16) math.div(6em, 16) math.div(12em, 16);
     font-size: var(--text-fs-base);
-    line-height: var(--text-lh-base);
+    line-height: var(--text-lh-ratio-base);
     border-radius: var(--radius-sm);
     background-color: var(--color-bg-primary);
     background-image: var(--svg-chevron-down);
@@ -335,6 +345,7 @@ input[type='range']#{$selector-exclude-grid} {
 
     label {
         margin-bottom: $spacing-size-1;
+        font-size: var(--text-fs-sm);
     }
 
     input,
@@ -355,31 +366,39 @@ input[type='range']#{$selector-exclude-grid} {
         label {
             display: inline-block;
             margin-bottom: 0;
+            font-size: var(--text-fs-base);
         }
 
         input[type='text'],
         input[type='search'],
-        input[type='email'] {
+        input[type='email'],
+        textarea {
             min-width: 280px;
         }
     }
 }
 
 .input-error {
-    label {
-        color: var(--color-input-error);
-    }
-
     input,
+    textarea,
     select {
         --color-border-primary: var(--color-input-error);
+        --color-input-border: var(--color-input-error);
         --color-input-border-hover: var(--color-input-error);
     }
+}
 
-    .error {
-        margin-top: $spacing-size-1;
-        color: var(--color-input-error);
-    }
+.input-field .error {
+    margin-top: -2px;
+    margin-bottom: -2px;
+    font-size: var(--text-fs-sm);
+    color: var(--color-input-error);
+    opacity: 0;
+    transition: opacity $transition-default-timing;
+}
+
+.input-error .error {
+    opacity: 1;
 }
 
 .extra-info {

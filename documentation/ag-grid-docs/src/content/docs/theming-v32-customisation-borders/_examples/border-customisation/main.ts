@@ -5,8 +5,8 @@ import {
     NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -18,6 +18,11 @@ import {
     SetFilterModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     NumberEditorModule,
     TextEditorModule,
@@ -28,7 +33,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     RowGroupingModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;

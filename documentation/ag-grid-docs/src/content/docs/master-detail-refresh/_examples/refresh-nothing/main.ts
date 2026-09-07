@@ -12,10 +12,15 @@ import {
     ModuleRegistry,
     RowApiModule,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, MasterDetailModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -27,7 +32,6 @@ ModuleRegistry.registerModules([
     MasterDetailModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IAccount>;

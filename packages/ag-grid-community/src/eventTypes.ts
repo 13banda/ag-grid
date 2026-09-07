@@ -1,5 +1,10 @@
 // events that are available for use by users of AG Grid and so should be documented
-/** EVENTS that should be exposed via code generation for the framework components.  */
+import type { AgEvent } from 'ag-stack';
+
+/**
+ * EVENTS that should be exposed via code generation for the framework components.
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
+ */
 export const _PUBLIC_EVENTS = [
     'columnEverythingChanged',
     'newColumnsLoaded',
@@ -13,6 +18,7 @@ export const _PUBLIC_EVENTS = [
     'columnMoved',
     'columnVisible',
     'columnPinned',
+    'columnHeaderNameChanged',
     'columnGroupOpened',
     'columnResized',
     'displayedColumnsChanged',
@@ -25,6 +31,7 @@ export const _PUBLIC_EVENTS = [
     'rowGroupOpened',
     'rowDataUpdated',
     'pinnedRowDataChanged',
+    'pinnedRowsChanged',
     'rangeSelectionChanged',
     'cellSelectionChanged',
     'chartCreated',
@@ -38,6 +45,10 @@ export const _PUBLIC_EVENTS = [
     'cutEnd',
     'pasteStart',
     'pasteEnd',
+    'calculatedColumnCreated',
+    'calculatedColumnExpressionChanged',
+    'calculatedColumnRemoved',
+    'calculatedColumnValidationStateChanged',
     'fillStart',
     'fillEnd',
     'cellSelectionDeleteStart',
@@ -66,7 +77,9 @@ export const _PUBLIC_EVENTS = [
     'cellMouseOut',
     'filterChanged',
     'filterModified',
+    'filterUiChanged',
     'filterOpened',
+    'floatingFilterUiChanged',
     'advancedFilterBuilderVisibleChanged',
     'sortChanged',
     'virtualRowRemoved',
@@ -97,12 +110,20 @@ export const _PUBLIC_EVENTS = [
     'rowDragLeave',
     'rowDragEnd',
     'rowDragCancel',
+    'findChanged',
+    'rowResizeStarted',
+    'rowResizeEnded',
+    'columnsReset',
+    'bulkEditingStarted',
+    'bulkEditingStopped',
+    'batchEditingStarted',
+    'batchEditingStopped',
 ] as const;
 
 // events that are internal to AG Grid and should not be exposed to users via documentation or generated framework components
 // These events are still available to users via the API if the eventName is cast to any to stop Typescript from complaining, but they are not intended for general use
 /** Exclude the following internal events from code generation to prevent exposing these events via framework components */
-export const _INTERNAL_EVENTS = [
+const _INTERNAL_EVENTS = [
     'scrollbarWidthChanged',
     'keyShortcutChangedCellStart',
     'keyShortcutChangedCellEnd',
@@ -117,12 +138,14 @@ export const _INTERNAL_EVENTS = [
     'columnPanelItemDragStart',
     'columnPanelItemDragEnd',
     'bodyHeightChanged',
+    'gridViewportWidthChanged',
     'columnContainerWidthChanged',
     'displayedColumnsWidthChanged',
     'scrollVisibilityChanged',
     'scrollGapChanged',
     'columnHoverChanged',
     'flashCells',
+    'rowDragVisibilityChanged',
     'paginationPixelOffsetChanged',
     'displayedRowsChanged',
     'leftPinnedWidthChanged',
@@ -131,9 +154,10 @@ export const _INTERNAL_EVENTS = [
     'headerHeightChanged',
     'columnGroupHeaderHeightChanged',
     'columnHeaderHeightChanged',
-    'gridStylesChanged',
+    'stylesChanged',
     'storeUpdated',
     'filterDestroyed',
+    'filterHandlerDestroyed',
     'rowDataUpdateStarted',
     'rowCountReady',
     'advancedFilterEnabledChanged',
@@ -148,12 +172,28 @@ export const _INTERNAL_EVENTS = [
     'chartTitleEdit',
     'recalculateRowBounds',
     'stickyTopOffsetChanged',
+    'stickyBottomOffsetChanged',
     'overlayExclusiveChanged',
-    'beforeRefreshModel',
+    'rowNodeDataChanged',
+    'cellEditValuesChanged',
+    'filterSwitched',
+    'filterClosed',
+    'headerRowsChanged',
+    'rowExpansionStateChanged',
+    'showRowGroupColsSetChanged',
+    'columnHeaderEditHighlightChanged',
+    'columnShowValuesAsChanged',
 ] as const;
 
-export const _ALL_EVENTS = [..._PUBLIC_EVENTS, ..._INTERNAL_EVENTS] as const;
+// We define as a callback to help with tree shaking (esbuild)
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const _GET_ALL_EVENTS = () => [..._PUBLIC_EVENTS, ..._INTERNAL_EVENTS] as const;
 
 export type AgPublicEventType = (typeof _PUBLIC_EVENTS)[number];
 export type AgInternalEventType = (typeof _INTERNAL_EVENTS)[number];
 export type AgEventType = AgPublicEventType | AgInternalEventType;
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const ALWAYS_SYNC_GLOBAL_EVENTS: Set<AgEventType> = new Set(['gridPreDestroyed', 'fillStart', 'pasteStart']);
+
+export type BuildEventTypeMap<TEventTypes extends string, T extends { [K in TEventTypes]: AgEvent<K> }> = T;

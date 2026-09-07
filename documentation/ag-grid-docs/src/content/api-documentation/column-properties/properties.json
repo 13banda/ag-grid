@@ -1,6 +1,13 @@
 {
     "_config_": {
-        "codeSrc": "column-options.AUTO.json"
+        "codeSrc": "column-options.AUTO.json",
+        "validate": true,
+        "undocumentedProperties": {
+            "pivotKeys": "Internal use only, doc comment says 'Never set this'",
+            "pivotValueColumn": "Internal use only, doc comment says 'Never set this'",
+            "pivotTotalColumnIds": "Internal use only, doc comment says 'Never set this'",
+            "rowSpan": "Old API, not deprecated, but not encouraged either"
+        }
     },
     "columns": {
         "meta": {
@@ -83,6 +90,7 @@
                 "url": "./context-menu/#configuring-the-context-menu"
             }
         },
+        "suppressNoteActions": {},
         "context": {}
     },
     "charts": {
@@ -96,14 +104,9 @@
         "meta": {
             "displayName": "Columns: Tooltips"
         },
-        "tooltipField": {
-            "interfaceHierarchyOverrides": {
-                "exclude": ["NestedFieldPaths"]
-            }
-        },
-        "tooltipValueGetter": {
+        "tooltip": {
             "more": {
-                "name": "Tooltip Component",
+                "name": "Tooltips",
                 "url": "./tooltips"
             }
         },
@@ -112,6 +115,12 @@
             "more": {
                 "name": "Tooltip Component",
                 "url": "./tooltips"
+            }
+        },
+        "tooltipComponentSelector": {
+            "more": {
+                "name": "Custom Tooltip Component",
+                "url": "./tooltips/#custom-component"
             }
         },
         "tooltipComponentParams": {}
@@ -125,10 +134,17 @@
             }
         },
         "headerName": {},
+        "headerNameEditable": {
+            "more": {
+                "name": "Editable Header Name",
+                "url": "./column-headers/#editable-header-name"
+            }
+        },
         "headerValueGetter": {
             "description": "Function or [expression](./cell-expressions/#column-definition-expressions). Gets the value for display in the header."
         },
         "headerTooltip": {},
+        "headerStyle": {},
         "headerClass": {},
         "headerComponent": {
             "description": "The custom header group component to be used for rendering the component header. If none specified the default AG Grid is used.",
@@ -154,10 +170,16 @@
         "columnChooserParams": {
             "more": {
                 "name": "Customising the Column Chooser",
-                "url": "./column-menu/#customising-the-column-chooser"
+                "url": "./column-chooser/#customising-the-column-chooser"
             }
         },
         "mainMenuItems": {
+            "more": {
+                "name": "Customising the Menu Items",
+                "url": "./column-menu/#customising-the-menu-items"
+            }
+        },
+        "columnMenuItems": {
             "more": {
                 "name": "Customising the Menu Items",
                 "url": "./column-menu/#customising-the-menu-items"
@@ -257,7 +279,12 @@
             "description": "See [Column](./column-spanning/) / [Row](./row-spanning/) Spanning"
         },
         "colSpan": {},
-        "rowSpan": {}
+        "spanRows": {
+            "more": {
+                "name": "Row Spanning",
+                "url": "./row-spanning/"
+            }
+        }
     },
     "styling": {
         "meta": {
@@ -297,11 +324,11 @@
         "cellRendererSelector": {
             "more": {
                 "name": "Many Renderers One Column",
-                "url": "./component-cell-renderer/#dynamic-component-selection"
+                "url": "./component-cell-renderer/#providing-custom-components-dynamically"
             }
         },
         "loadingCellRenderer": {
-            "description": "Provide your own cell loading Renderer component for this column's cells when using SSRM.",
+            "description": "Provide your own cell loading Renderer component for this column's cells when using SSRM or when a cell renderer is deferred.",
             "more": {
                 "name": "SSRM Cell Loading",
                 "url": "./component-loading-cell-renderer/#skeleton-loading"
@@ -319,8 +346,18 @@
                 "url": "./component-loading-cell-renderer/#skeleton-loading"
             }
         },
-        "autoHeight": {},
-        "wrapText": {},
+        "autoHeight": {
+            "more": {
+                "name": "Auto Row Height",
+                "url": "./row-height/#auto-row-height"
+            }
+        },
+        "wrapText": {
+            "more": {
+                "name": "Text Wrapping and Displaying Multi-Line Text",
+                "url": "./row-height/#text-wrapping-and-displaying-multi-line-text"
+            }
+        },
         "enableCellChangeFlash": {}
     },
     "sort": {
@@ -388,7 +425,20 @@
                 "url": "./component-floating-filter/#example-custom-floating-filter"
             }
         },
-        "suppressFiltersToolPanel": {}
+        "suppressFiltersToolPanel": {},
+        "dateComponent": {
+            "description": "Custom date selection component to be used in Date Filters and Date Floating Filters for this column.",
+            "more": {
+                "name": "Custom Selection Component",
+                "url": "./filter-date/#custom-selection-component"
+            }
+        },
+        "dateComponentParams": {
+            "more": {
+                "name": "Custom Selection Component",
+                "url": "./filter-date/#custom-selection-component"
+            }
+        }
     },
     "editing": {
         "meta": {
@@ -399,6 +449,20 @@
             }
         },
         "editable": {},
+        "groupRowEditable": {
+            "description": "Works like `editable`, but is evaluated only for group rows. Requires `RowGroupingEditModule`.",
+            "more": {
+                "name": "Editing Group Row Cells",
+                "url": "./grouping-edit/"
+            }
+        },
+        "groupRowValueSetter": {
+            "description": "Runs after a group row value changes so custom code can push edits down to descendant rows. Requires `RowGroupingEditModule`.",
+            "more": {
+                "name": "Editing Group Row Cells",
+                "url": "./grouping-edit/"
+            }
+        },
         "valueSetter": {
             "description": "Function or [expression](./cell-expressions/#column-definition-expressions). Custom function to modify your data based off the new value for saving. Return `true` if the data changed.",
             "more": {
@@ -430,6 +494,8 @@
         "cellEditorPopup": {},
         "cellEditorPopupPosition": {},
         "singleClickEdit": {},
+        "groupRowEditable": {},
+        "groupRowValueSetter": {},
         "useValueParserForImport": {
             "more": {
                 "name": "Using Value Parsers with Other Grid Features",
@@ -452,6 +518,12 @@
                 "name": "Custom Group Columns",
                 "url": "./grouping-custom-group-columns/"
             }
+        },
+        "groupHierarchy": {
+            "more": {
+                "name": "Grouping by Dates and Times",
+                "url": "./grouping-data/#example-grouping-date-time"
+            }
         }
     },
     "aggregation": {
@@ -466,6 +538,8 @@
             }
         },
         "initialAggFunc": {},
+        "valueIndex": {},
+        "initialValueIndex": {},
         "enableValue": {
             "more": {
                 "name": "Configuring via the UI",
@@ -483,7 +557,21 @@
                 "name": "Default Function",
                 "url": "./aggregation-columns/#default-function"
             }
-        }
+        },
+        "showValuesAs": {
+            "more": {
+                "name": "Show Values As",
+                "url": "./aggregation-show-values-as/"
+            }
+        },
+        "initialShowValuesAs": {},
+        "showValuesAsDef": {
+            "more": {
+                "name": "Configuration",
+                "url": "./aggregation-show-values-as/#configuration"
+            }
+        },
+        "enableShowValuesAs": {}
     },
     "pivoting": {
         "meta": {
@@ -510,7 +598,14 @@
                 "name": "Ordering Pivot Result Groups",
                 "url": "./pivoting-column-groups/#ordering-groups"
             }
-        }
+        },
+        "pivotSort": {
+            "more": {
+                "name": "Sorting Pivot Columns",
+                "url": "./pivoting-column-groups/#sorting-pivot-columns"
+            }
+        },
+        "initialPivotSort": {}
     },
     "row dragging": {
         "meta": {
@@ -591,5 +686,36 @@
         "headerGroupComponentParams": {},
         "suppressSpanHeaderHeight": {},
         "suppressStickyLabel": {}
+    },
+    "find": {
+        "meta": {
+            "displayName": "Columns: Find"
+        },
+        "getFindText": {
+            "more": {
+                "name": "Using Find with Cell Components",
+                "url": "./find/#using-find-with-cell-components"
+            }
+        }
+    },
+    "formulas": {
+        "meta": {
+            "displayName": "Columns: Formulas",
+            "page": {
+                "name": "Formulas",
+                "url": "./formulas/"
+            }
+        },
+        "allowFormula": {}
+    },
+    "calculatedColumns": {
+        "meta": {
+            "displayName": "Columns: Calculated Columns",
+            "page": {
+                "name": "Calculated Columns",
+                "url": "./calculated-columns/"
+            }
+        },
+        "calculatedExpression": {}
     }
 }

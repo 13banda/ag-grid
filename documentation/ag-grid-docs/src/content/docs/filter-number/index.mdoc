@@ -2,20 +2,30 @@
 title: "Number Filter"
 ---
 
-Number Filters allow you to filter number data.
+Number Filters allow you to filter numeric data.
 
 {% imageCaption imagePath="resources/number-filter.png" alt="Number Filter" centered=true /%}
 
 ## Enabling Number Filters
 
-The Number Filter can be configured as shown below:
+{% gridExampleRunner title="Number Filter" name="number-filter" /%}
+
+The Number Filter is the default filter used in AG Grid Community for columns with number [Cell Data Type](./cell-data-types/), but it can also be explicitly configured as shown below:
 
 ```{% frameworkTransform=true %}
 const gridOptions = {
     columnDefs: [
         {
-            field: 'age',
-            // configure column to use the Number Filter
+            field: 'price',
+            // Number Filter is used by default in Community version for numeric columns
+            filter: true,
+            filterParams: {
+                // pass in additional parameters to the Number Filter
+            },
+        },
+        {
+            field: 'quantity',
+            // explicitly configure column to use the Number Filter
             filter: 'agNumberColumnFilter',
             filterParams: {
                 // pass in additional parameters to the Number Filter
@@ -25,19 +35,9 @@ const gridOptions = {
 }
 ```
 
-## Example: Number Filter
-
-The example below shows the Number Filter in action:
-
-* The first column shows the default Number Filter behaviour.
-* The second column demonstrates [Custom Number Support](#custom-number-support) and uses commas for decimals and allows a dollar sign ($) to be included.
-* Floating filters are enabled and also react to the configuration of `allowedCharPattern`.
-
-{% gridExampleRunner title="Number Filter" name="number-filter" /%}
-
 ## Number Filter Parameters
 
-Number Filters are configured though the `filterParams` attribute of the column definition (`INumberFilterParams` interface):
+Number Filters are configured through the `filterParams` attribute of the column definition (`INumberFilterParams` interface):
 
 {% interfaceDocumentation interfaceName="INumberFilterParams" overrideSrc="filter-number/number-filter-params.json" config={"description":"", "sortAlphabetically":true} /%}
 
@@ -68,15 +68,31 @@ const gridOptions = {
 }
 ```
 
-The `allowedCharPattern` is a regex of all the characters that are allowed to be typed. This is surrounded by square brackets `[]` and used as a character class to be compared against each typed character individually and prevent the character from appearing in the input if it does not match (in supported browsers).
+The `allowedCharPattern` is a regex of all the characters that are allowed to be typed. A value starting `[` and ending `]` is used as written and must therefore match exactly one character; anything else is surrounded by square brackets `[]` for you. It is compared against each character an edit brings in, and an edit bringing in a character it does not admit is refused whole. That covers a paste and a drop as well as a keystroke. Text committed by an IME or another composing keyboard is not held to it, since a composition cannot be cancelled. A pattern that does not compile to a character pattern is reported as a warning and ignored.
 
 The `numberParser` should take the user-entered text and return either a number if one can be interpreted, or `null` if not.
 
 The `numberFormatter` should take a number (e.g. from the Filter Model) and convert it into the formatted text to be displayed, or `null` if no value.
 
-Custom number support can be seen in the [Number Filter Example](#example-number-filter) above.
+`numberParser` and `numberFormatter` are also passed the grid `api` and `context` as a second argument, along with the `column` and `colDef` they are working on. One callback set on `defaultColDef.filterParams` can therefore serve every column it applies to.
 
 An `allowedCharPattern` of `\\d\\-\\.` will give similar behaviour to the default `number` input.
+
+A `text` input is used when `allowedCharPattern` or `numberFormatter` is provided, unless `filterInputType` says otherwise, as a `number` input keeps only its own number syntax and would discard formatted text.
+
+Set `filterInputType` to choose the input yourself. A `numberFormatter` writing text a `number` input can hold, such as `(value) => (value == null ? null : value.toFixed(2))`, can keep that input with `filterInputType: 'number'`. An `allowedCharPattern` applies to either input, narrowing what a `number` input already accepts.
+
+Provide a `numberParser` alongside a `numberFormatter` to have the format read back. Without one, typed text is read with `parseFloat`, so `1,234` becomes `1`.
+
+Pair both to have the [Advanced Filter](./filter-advanced/) read and display this column's operands in the same format. With only one of them, its operands stay plain numbers.
+
+The following example demonstrates custom number support:
+
+- The first column shows the default Number Filter behaviour.
+- The second column demonstrates custom number support, and uses commas for decimals and allows a dollar sign ($) to be included.
+- Floating filters are enabled and also react to the configuration of `allowedCharPattern` and `numberFormatter`.
+
+{% gridExampleRunner title="Custom Number Support" name="custom-number-support" /%}
 
 ## Number Filter Model
 
@@ -99,8 +115,6 @@ interface ICombinedSimpleModel<NumberFilterModel> {
 
 type JoinOperator = 'AND' | 'OR';
 ```
-
-Note that in AG Grid versions prior to 29.2, only two Filter Conditions were supported. These appeared in the Combined Model as properties `condition1` and `condition2`. The grid will still accept and supply models using these properties, but this behaviour is deprecated. The `conditions` property should be used instead.
 
 An example of a Filter Model with two conditions is as follows:
 
@@ -128,24 +142,33 @@ const numberEquals18OrEquals20 = {
 
 The Number Filter presents a list of [Filter Options](./filter-conditions/#filter-options) to the user.
 
-The list of options are as follows:
+The list of options is as follows:
 
-| Option Name              | Option Key            | Included by Default |
-| ------------------------ | --------------------- | ------------------- |
-| Equals                   | `equals`              | Yes                 |
-| Does not equal           | `notEqual`            | Yes                 |
-| Greater than             | `greaterThan`         | Yes                 |
-| Greater than or equal to | `greaterThanOrEqual`  | Yes                 |
-| Less than                | `lessThan`            | Yes                 |
-| Less than or equal to    | `lessThanOrEqual`     | Yes                 |
-| Between                  | `inRange`             | Yes                 |
-| Blank                    | `blank`               | Yes                 |
-| Not blank                | `notBlank`            | Yes                 |
-| Choose one               | `empty`               | No                  |
+| Option Name              | Option Key           | Included by Default |
+| ------------------------ | -------------------- | ------------------- |
+| Equals                   | `equals`             | Yes                 |
+| Does not equal           | `notEqual`           | Yes                 |
+| Greater than             | `greaterThan`        | Yes                 |
+| Greater than or equal to | `greaterThanOrEqual` | Yes                 |
+| Less than                | `lessThan`           | Yes                 |
+| Less than or equal to    | `lessThanOrEqual`    | Yes                 |
+| Between                  | `inRange`            | Yes                 |
+| Blank                    | `blank`              | Yes                 |
+| Not blank                | `notBlank`           | Yes                 |
+| Choose one               | `empty`              | No                  |
 
 Note that the `empty` filter option is primarily used when creating [Custom Filter Options](./filter-conditions/#custom-filter-options). When 'Choose one' is displayed, the filter is not active.
 
 The default option for the Number Filter is `equals`.
+
+When providing filter options, the default filter option (or the first option if no default set) must be an option that displays an input or the `empty` filter option (as a filter option with no inputs would mean the filter is active by default).
+
+## Range Input Validation and Error States
+
+When using the `inRange` filter type, the grid performs input validation to ensure the bounds of the range produce a valid filter; that is, where the start value is less than the end value.
+
+Where this is not the case, the last edited input will display a red border and a hover tooltip directing the user to enter a valid value. While the filter is in an invalid state, the filter will not be applied.
+Screen readers that respond to the `aria-invalid` attribute or the `ValidityState` of the input will detect the input as invalid.
 
 ## Number Filter Values
 
@@ -153,16 +176,36 @@ By default, the values supplied to the Number Filter are retrieved from the data
 
 {% apiDocumentation source="column-properties/properties.json" section="filtering" names=["filterValueGetter"] /%}
 
+A [Value Formatter](./value-formatters/) that changes the number itself, such as one that rounds, leaves the column displaying one number and filtering on another, because the filter compares the value the grid holds rather than the formatted text. Return the displayed number from `filterValueGetter` and every filter option compares against that instead:
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    columnDefs: [
+        {
+            field: 'price',
+            filter: 'agNumberColumnFilter',
+            valueFormatter: ({ value }) => (value == null ? '' : value.toFixed(2)),
+            filterValueGetter: ({ getValue }) => {
+                const value = getValue('price');
+                return value == null ? null : Number(value.toFixed(2));
+            },
+        }
+    ]
+}
+```
+
+Where the displayed text is not itself a number, such as a currency, add `numberParser` to read what the user types and `numberFormatter` to write stored values back in the same form. The formatter gives the filter a `text` input on its own, so no `allowedCharPattern` is needed to make that text typeable — one would only narrow it, and a pattern omitting the symbols the formatter writes would stop the user typing them.
+
 ## Applying the Number Filter
 
 Applying the Number Filter is described in more detail in the following sections:
 
-* [Apply, Clear, Reset and Cancel Buttons](./filter-applying/#apply-clear-reset-and-cancel-buttons)
-* [Applying the UI Model](./filter-applying/#applying-the-ui-model)
+- [Apply, Clear, Reset and Cancel Buttons](./filter-applying/#apply-clear-reset-and-cancel-buttons)
+- [Applying the UI Model](./filter-applying/#applying-the-ui-model)
 
 ## Blank Cells
 
-If the row data contains blanks (i.e. `null` or `undefined`), by default the row won't be included in filter results. To change this, use the filter params `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange`. For example, the code snippet below configures a filter to include `null` for equals, but not for less than, greater than or in range (between):
+If the row data contains blanks (i.e. `null`, `undefined`, or an empty or whitespace-only string), by default the row won't be included in filter results. To change this, use the filter params `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange`. For example, the code snippet below configures a filter to include `null` for equals, but not for less than, greater than or in range (between):
 
 ```js
 const filterParams = {
@@ -176,15 +219,11 @@ const filterParams = {
 
 In the following example you can filter by age and see how blank values are included. Note the following:
 
-* Column **Age** has both `null` and `undefined` values resulting in blank cells.
-* Toggle the controls on the top to see how `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange` impact the search result.
+- Column **Age** has both `null` and `undefined` values resulting in blank cells.
+- Toggle the controls on the top to see how `includeBlanksInEquals`, `includeBlanksInNotEqual`, `includeBlanksInLessThan`, `includeBlanksInGreaterThan` and `includeBlanksInRange` impact the search result.
 
 {% gridExampleRunner title="Number Null Filtering" name="number-null-filtering"  exampleHeight=310 /%}
 
 ## Data Updates
 
 The Number Filter is not affected by data changes. When the grid data is updated, the filter value will remain unchanged and the filter will be re-applied based on the updated data (e.g. the displayed rows will update if necessary).
-
-## Next Up
-
-Continue to the next section to learn about [Date Filters](./filter-date/).

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 
 import { CodeOptions } from './CodeOptions';
 import styles from './CodeViewer.module.scss';
+import { stripOutExampleGeneratorCode } from './stripOutExampleGeneratorCode';
 
 const ExtensionMap = {
     sh: 'bash',
@@ -15,19 +16,6 @@ const ExtensionMap = {
     tsx: 'jsx',
     json: 'js',
 };
-
-export function stripOutDarkModeCode(files: FileContents) {
-    const mainFiles = ['main.js', 'main.ts', 'index.tsx', 'index.jsx', 'app.component.ts'];
-    mainFiles.forEach((mainFile) => {
-        if (files[mainFile]) {
-            // hide integrated theme switcher
-            files[mainFile] = files[mainFile]?.replace(
-                /\/\*\* DARK INTEGRATED START \*\*\/([\s\S]*?)\/\*\* DARK INTEGRATED END \*\*\//g,
-                ''
-            );
-        }
-    });
-}
 
 /**
  * This renders the code viewer in the example runner.
@@ -53,9 +41,10 @@ export const CodeViewer = ({
     const [showFiles, setShowFiles] = useState(true);
     const localFiles = { ...files };
     const exampleFiles = Object.keys(localFiles);
-    stripOutDarkModeCode(localFiles);
+    stripOutExampleGeneratorCode(localFiles);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync state from prop
         setActiveFile(initialSelectedFile);
     }, [initialSelectedFile]);
 
@@ -141,5 +130,9 @@ const FileView = ({ path, code }) => {
     const parts = path.split('.');
     const extension = parts[parts.length - 1];
 
-    return <Code code={code} language={ExtensionMap[extension] || extension} lineNumbers={true} />;
+    return (
+        <>
+            <Code code={code} language={ExtensionMap[extension] || extension} lineNumbers />
+        </>
+    );
 };

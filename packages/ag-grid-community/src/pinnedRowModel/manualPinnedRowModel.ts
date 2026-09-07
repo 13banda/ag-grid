@@ -1,0 +1,519 @@
+import { _getClientSideRowModel } from '../api/rowModelApiUtils';
+import { BeanStub } from '../context/beanStub';
+import type { BeanCollection } from '../context/context';
+import type { AgColumn } from '../entities/agColumn';
+import type { RowNode } from '../entities/rowNode';
+import { ROW_ID_PREFIX_BOTTOM_PINNED, ROW_ID_PREFIX_TOP_PINNED } from '../entities/rowNode';
+import { _createRowNodeSibling } from '../entities/rowNodeUtils';
+import { _addRowHeightChangedListener, _getGrandTotalPinnedFloat, _getRowHeightForNode } from '../gridOptionsUtils';
+import type { RowPinningState } from '../interfaces/gridState';
+import type { IClientSideRowModel } from '../interfaces/iClientSideRowModel';
+import type { IPinnedRowModel } from '../interfaces/iPinnedRowModel';
+import type { RowPinnedType } from '../interfaces/iRowNode';
+import { PinnedRows, _isPinnedNodeGrandTotal, _shouldHidePinnedRows } from './manualPinnedRowUtils';
+
+export class ManualPinnedRowModel extends BeanStub implements IPinnedRowModel {
+    private top: PinnedRows;
+    private bottom: PinnedRows;
+    /** Cached CSRM reference, null if not using client-side row model */
+    private csrm: IClientSideRowModel | null = null;
+    /** True if using server-side row model */
+    private ssrm: boolean = false;
+    /**
+     * Determines where the grand total row should be pinned. Need a separate flag to break
+     * an infinite recursion with CSRM.
+     */
+    private _grandTotalPinned: RowPinnedType;
+
+    public postConstruct(): void {
+        const { gos, beans } = this;
+        this.top = new PinnedRows(beans, 'top');
+        this.bottom = new PinnedRows(beans, 'bottom');
+
+        // Cache row model references
+        this.csrm = _getClientSideRowModel(beans) ?? null;
+        this.ssrm = beans.rowModel.getType() === 'serverSide';
+
+        const shouldHide = (node: RowNode) => _shouldHidePinnedRows(beans, node.pinnedSibling!);
+
+        const runIsRowPinned = () => {
+            const isRowPinned = gos.get('isRowPinned');
+            if (isRowPinned && gos.get('enableRowPinning')) {
+                beans.rowModel.forEachNode((node) => this.pinRow(node, isRowPinned(node)), true);
+            }
+            this.refreshRowPositions();
+            this.dispatchRowPinnedEvents();
+        };
+
+        _addRowHeightChangedListener(this, () => this.estimateRowHeights());
+
+        this.addManagedEventListeners({
+            modelUpdated: ({ keepRenderedRows }) => {
+                this.tryToEmptyQueues();
+                this.pinGrandTotalRow();
+
+                let visibilityChanged = false;
+                this.forContainers((container) => {
+                    visibilityChanged ||= container.hide(shouldHide);
+                });
+
+                const positionsChanged = this.refreshRowPositions();
+
+                if (!keepRenderedRows || positionsChanged || visibilityChanged) {
+                    this.dispatchRowPinnedEvents();
+                }
+            },
+            columnRowGroupChanged: () => {
+                this.forContainers(removeGroupRows);
+                this.refreshRowPositions();
+            },
+            rowNodeDataChanged: ({ node }) => {
+                const isRowPinnable = gos.get('isRowPinnable');
+                const pinnable = isRowPinnable?.(node) ?? true;
+
+                if (!pinnable) {
+                    this.pinRow(node, null);
+                }
+            },
+            firstDataRendered: runIsRowPinned,
+        });
+
+        this.addManagedPropertyListener('pivotMode', () => {
+            this.forContainers((container) => container.hide(shouldHide));
+            this.dispatchRowPinnedEvents();
+        });
+
+        this.addManagedPropertyListener('grandTotalRow', ({ currentValue }) => {
+            this._grandTotalPinned = _getGrandTotalPinnedFloat(currentValue);
+        });
+
+        this.addManagedPropertyListener('isRowPinned', runIsRowPinned);
+    }
+
+    public override destroy(): void {
+        this.reset(false);
+        super.destroy();
+    }
+
+    public reset(dispatch = true): void {
+        this.forContainers((container) => {
+            const nodesToUnpin: RowNode[] = [];
+            // The grand total row is owned by the `grandTotalRow` option, not manual row-pinning
+            // state, so preserve it across a manual-pin reset; on destroy (dispatch false) clear it too.
+            let grandTotalNode: RowNode | undefined;
+            container.forEach((n) => {
+                if (dispatch && _isPinnedNodeGrandTotal(n)) {
+                    grandTotalNode = n;
+                } else {
+                    nodesToUnpin.push(n);
+                }
+            });
+            // Have to collect up the nodes to unpin because unpinning mutates the container
+            nodesToUnpin.forEach((n) => this.pinRow(n, null));
+            container.clear();
+            if (grandTotalNode) {
+                container.add(grandTotalNode);
+            }
+        });
+        if (dispatch) {
+            this.dispatchRowPinnedEvents();
+        }
+    }
+
+    public pinRow(rowNode: RowNode, float: RowPinnedType, column?: AgColumn | null): void {
+        if (float != null && rowNode.destroyed) {
+            return; // Don't pin destroyed nodes (but allow unpinning)
+        }
+
+        if (rowNode.footer) {
+            const level = rowNode.level;
+
+            if (level > -1) {
+                return; // Forbid pinning group footers
+            }
+
+            // Pinning grand total row is the only case in which pinned rows are not duplicates of rows
+            // in the main viewport. So we have to handle them differently:
+            // 1. We first set `_grandTotalPinned` to mark the location the grand total row should be pinned to.
+            // 2. Then we refresh the row model to hide the sticky footer.
+            // 3. We then react to the `modelUpdated` event (above) to actually add the footer to the pinned row model.
+            // Otherwise we would run into either an infinite recursion of `modelUpdated` events, or be missing the `sibling`
+            // on the root node.
+            // Skip this path when unpinning an existing clone (called from RowNode._destroy):
+            // the standard unpin path below cleans the DOM without mutating _grandTotalPinned.
+            const unpinningExistingClone = float == null && rowNode.rowPinned != null;
+            if (level === -1 && !unpinningExistingClone) {
+                this._grandTotalPinned = float;
+                // CSRM goes through reMapRows so the modelUpdated listener picks up the
+                // change; SSRM has no model-update path so we apply it directly.
+                const csrm = this.csrm;
+                if (csrm) {
+                    csrm.reMapRows();
+                } else if (this.ssrm) {
+                    this.pinGrandTotalRow();
+                }
+                return;
+            }
+        }
+
+        // May have been called on either the pinned row or the source row, check both
+        const currentFloat = rowNode.rowPinned ?? rowNode.pinnedSibling?.rowPinned;
+
+        // We're only switching if neither the current nor the target container are null
+        const switching = currentFloat != null && float != null && float != currentFloat;
+        if (switching) {
+            // call unpin on pinned row, re-pin on source row, since we always want to dispatch events
+            // on the source rows
+            const pinned = rowNode.rowPinned ? rowNode : rowNode.pinnedSibling!;
+            const source = rowNode.rowPinned ? rowNode.pinnedSibling! : rowNode;
+            this.pinRow(pinned, null, column);
+            this.pinRow(source, float, column);
+            return;
+        }
+
+        // cell-span pinning/unpinning
+        const spannedRows = column && getSpannedRows(this.beans, rowNode, column);
+        if (spannedRows) {
+            spannedRows.forEach((node) => this.pinRow(node, float));
+            return;
+        }
+
+        // unpinning
+        if (float == null) {
+            // Want to act on the pinned row, not the source row
+            const node = rowNode.rowPinned ? rowNode : rowNode.pinnedSibling!;
+            const found = this.findPinnedRowNode(node);
+            if (!found) {
+                return;
+            }
+
+            found.delete(node);
+            const source = node.pinnedSibling!;
+            _destroyRowNodeSibling(node);
+            this.refreshRowPositions(float);
+
+            this.dispatchRowPinnedEvents(source);
+        } else {
+            // pinning
+            const sibling = _createPinnedSibling(this.beans, rowNode, float);
+            const container = this.getContainer(float);
+            container.add(sibling);
+            // Check if we should hide this row -- covers us for some asynchronicities
+            // between (e.g.) applying filters and pinning rows.
+            if (_shouldHidePinnedRows(this.beans, rowNode)) {
+                container.hide((node) => _shouldHidePinnedRows(this.beans, node.pinnedSibling!));
+            }
+            this.refreshRowPositions(float);
+
+            this.dispatchRowPinnedEvents(rowNode);
+        }
+    }
+
+    public isManual(): boolean {
+        return true;
+    }
+
+    public isEmpty(floating: NonNullable<RowPinnedType>): boolean {
+        return this.getContainer(floating).size() === 0;
+    }
+
+    public isRowsToRender(floating: NonNullable<RowPinnedType>): boolean {
+        return !this.isEmpty(floating);
+    }
+
+    public ensureRowHeightsValid(): boolean {
+        let anyChange = false;
+        let rowTop = 0;
+        const updateRowHeight = (rowNode: RowNode) => {
+            if (rowNode.rowHeightEstimated) {
+                const rowHeight = _getRowHeightForNode(this.beans, rowNode);
+                rowNode.setRowTop(rowTop);
+                rowNode.setRowHeight(rowHeight.height);
+                rowTop += rowHeight.height;
+                anyChange = true;
+            }
+        };
+        this.bottom.forEach(updateRowHeight);
+        rowTop = 0;
+        this.top.forEach(updateRowHeight);
+
+        if (anyChange) {
+            this.eventSvc.dispatchEvent({
+                type: 'pinnedHeightChanged',
+            });
+        }
+
+        return anyChange;
+    }
+
+    public getPinnedTopTotalHeight(): number {
+        return getTotalHeight(this.top);
+    }
+
+    public getPinnedBottomTotalHeight(): number {
+        return getTotalHeight(this.bottom);
+    }
+
+    public getPinnedTopRowCount(): number {
+        return this.top.size();
+    }
+
+    public getPinnedBottomRowCount(): number {
+        return this.bottom.size();
+    }
+
+    public getPinnedTopRow(index: number): RowNode | undefined {
+        return this.top.getByIndex(index);
+    }
+
+    public getPinnedBottomRow(index: number): RowNode | undefined {
+        return this.bottom.getByIndex(index);
+    }
+
+    public getPinnedRowById(id: string, floating: NonNullable<RowPinnedType>): RowNode | undefined {
+        return this.getContainer(floating).getById(id);
+    }
+
+    public forEachPinnedRow(
+        floating: NonNullable<RowPinnedType>,
+        callback: (node: RowNode, index: number) => void
+    ): void {
+        this.getContainer(floating).forEach(callback);
+    }
+
+    public getPinnedState(): RowPinningState {
+        const buildState = (floating: NonNullable<RowPinnedType>) => {
+            const list: string[] = [];
+            this.forEachPinnedRow(floating, (node) => {
+                // The grand total row is driven by the `grandTotalRow` option, not manual
+                // row-pinning state, so it must not be serialised as a pinned row id.
+                if (_isPinnedNodeGrandTotal(node)) {
+                    return;
+                }
+                const id = node.pinnedSibling?.id;
+                if (id != null) {
+                    list.push(id);
+                }
+            });
+            return list;
+        };
+
+        return {
+            top: buildState('top'),
+            bottom: buildState('bottom'),
+        };
+    }
+
+    public setPinnedState(state: RowPinningState): void {
+        this.forContainers((pinned, floating) => {
+            for (const id of state[floating]) {
+                const node = this.beans.rowModel.getRowNode(id);
+                if (node) {
+                    this.pinRow(node, floating);
+                } else {
+                    pinned.queue(id);
+                }
+            }
+        });
+    }
+
+    public getGrandTotalPinned(): RowPinnedType {
+        return this._grandTotalPinned;
+    }
+
+    public setGrandTotalPinned(value: RowPinnedType): void {
+        this._grandTotalPinned = value;
+    }
+
+    private tryToEmptyQueues(): void {
+        this.forContainers((pinned, container) => {
+            const nodesToPin = new Set<RowNode>();
+
+            pinned.forEachQueued((id) => {
+                const node = this.beans.rowModel.getRowNode(id);
+                if (node) {
+                    nodesToPin.add(node);
+                }
+            });
+
+            for (const node of nodesToPin) {
+                pinned.unqueue(node.id!);
+                this.pinRow(node, container);
+            }
+        });
+    }
+
+    private pinGrandTotalRow() {
+        const { beans, _grandTotalPinned: float } = this;
+
+        // Grand total node is the root node's sibling in both CSRM and SSRM.
+        // Other row models (Infinite, Viewport) have a rootNode but never set sibling.
+        const sibling = this.csrm || this.ssrm ? beans.rowModel.rootNode?.sibling : undefined;
+
+        if (!sibling) {
+            return;
+        }
+
+        const pinnedSibling = sibling.pinnedSibling;
+        const container = pinnedSibling && this.findPinnedRowNode(pinnedSibling);
+        if (!float) {
+            // unpin
+            if (!container) {
+                return;
+            }
+            _destroyRowNodeSibling(pinnedSibling);
+            container.delete(pinnedSibling);
+        } else {
+            // pin
+            if (container && container.floating !== float) {
+                // already have pinned grand total row, need to unpin first
+                _destroyRowNodeSibling(pinnedSibling);
+                container.delete(pinnedSibling);
+            }
+            if (container?.floating !== float) {
+                const newPinnedSibling = _createPinnedSibling(beans, sibling, float);
+                this.getContainer(float).add(newPinnedSibling);
+            }
+        }
+    }
+
+    private estimateRowHeights(): void {
+        this.forContainers((container) =>
+            container.forEach((rowNode) => rowNode.setRowHeight(rowNode.rowHeight, true))
+        );
+    }
+
+    private getContainer(floating: NonNullable<RowPinnedType>): PinnedRows {
+        return floating === 'top' ? this.top : this.bottom;
+    }
+
+    private findPinnedRowNode(node: RowNode): PinnedRows | undefined {
+        if (this.top.has(node)) {
+            return this.top;
+        }
+        if (this.bottom.has(node)) {
+            return this.bottom;
+        }
+    }
+
+    private refreshRowPositions(floating?: RowPinnedType): boolean {
+        const refreshAll = (pinned: PinnedRows) => refreshRowPositions(this.beans, pinned);
+
+        if (floating) {
+            return refreshAll(this.getContainer(floating));
+        }
+
+        let changed = false;
+        this.forContainers((container) => {
+            const updated = refreshAll(container);
+            changed ||= updated;
+        });
+        return changed;
+    }
+
+    private forContainers(fn: (container: PinnedRows, floating: NonNullable<RowPinnedType>) => void): void {
+        fn(this.top, 'top');
+        fn(this.bottom, 'bottom');
+    }
+
+    private dispatchRowPinnedEvents(node?: RowNode): void {
+        this.eventSvc.dispatchEvent({ type: 'pinnedRowsChanged' });
+        node?.dispatchRowEvent('rowPinned');
+    }
+}
+
+function refreshRowPositions(beans: BeanCollection, container: PinnedRows): boolean {
+    let rowTop = 0;
+    let changed = false;
+
+    container.forEach((node, index) => {
+        changed ||= node.rowTop !== rowTop;
+        node.setRowTop(rowTop);
+
+        if (node.rowHeightEstimated || node.rowHeight == null) {
+            const rowHeight = _getRowHeightForNode(beans, node).height;
+            changed ||= node.rowHeight !== rowHeight;
+            node.setRowHeight(rowHeight);
+        }
+
+        node.setRowIndex(index);
+        rowTop += node.rowHeight!;
+    });
+
+    return changed;
+}
+
+function _createPinnedSibling(beans: BeanCollection, rowNode: RowNode, floating: NonNullable<RowPinnedType>): RowNode {
+    // only create sibling node once, otherwise we have daemons and
+    // the animate screws up with the daemons hanging around
+    if (rowNode.pinnedSibling) {
+        return rowNode.pinnedSibling;
+    }
+
+    const sibling = _createRowNodeSibling(rowNode, beans);
+
+    sibling.setRowTop(null);
+    sibling.setRowIndex(null);
+    sibling.rowPinned = floating;
+
+    const prefix = floating === 'top' ? ROW_ID_PREFIX_TOP_PINNED : ROW_ID_PREFIX_BOTTOM_PINNED;
+
+    sibling.id = `${prefix}${floating}-${rowNode.id}`;
+
+    // get both header and footer to reference each other as siblings
+    sibling.pinnedSibling = rowNode;
+    rowNode.pinnedSibling = sibling;
+
+    return sibling;
+}
+
+/** Expect to be passed the pinned node, not the original node. Therefore `pinnedSibling` is the original. */
+function _destroyRowNodeSibling(rowNode: RowNode): void {
+    if (!rowNode.pinnedSibling) {
+        return;
+    }
+
+    rowNode.rowPinned = null;
+    rowNode._destroy(false);
+
+    const mainNode = rowNode.pinnedSibling;
+    rowNode.pinnedSibling = undefined as any;
+
+    if (mainNode) {
+        mainNode.pinnedSibling = undefined as any;
+        mainNode.rowPinned = null;
+    }
+}
+
+function removeGroupRows(set: PinnedRows) {
+    const rowsToRemove = new Set<RowNode>();
+    set.forEach((node) => {
+        if (node.group) {
+            rowsToRemove.add(node);
+        }
+    });
+
+    rowsToRemove.forEach((node) => set.delete(node));
+}
+
+function getSpannedRows(beans: BeanCollection, rowNode: RowNode, column: AgColumn) {
+    const { rowSpanSvc } = beans;
+    const isCellSpanning = (column && rowSpanSvc?.isCellSpanning(column, rowNode)) ?? false;
+    if (column && isCellSpanning) {
+        return rowSpanSvc?.getCellSpan(column, rowNode)?.spannedNodes;
+    }
+}
+
+function getTotalHeight(container: PinnedRows): number {
+    const size = container.size();
+    if (size === 0) {
+        return 0;
+    }
+
+    const node = container.getByIndex(size - 1);
+    if (node === undefined) {
+        return 0;
+    }
+
+    return node.rowTop! + node.rowHeight!;
+}

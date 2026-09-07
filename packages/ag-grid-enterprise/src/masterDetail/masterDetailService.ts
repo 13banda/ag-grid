@@ -1,46 +1,67 @@
+import { _exists, _observeResize } from 'ag-stack';
+
 import type {
     BeanName,
-    BeforeRefreshModelEvent,
     DetailGridInfo,
-    IChangedRowNodes,
     IMasterDetailService,
     NamedBean,
+    RefreshModelParams,
     RowCtrl,
+    RowNodeDataChangedEvent,
+    _ChangedRowNodes,
 } from 'ag-grid-community';
 import {
     BeanStub,
+    DETAIL_ROW_ID_PREFIX,
     RowNode,
-    _exists,
     _getClientSideRowModel,
     _isClientSideRowModel,
     _isServerSideRowModel,
-    _observeResize,
 } from 'ag-grid-community';
 
 export class MasterDetailService extends BeanStub implements NamedBean, IMasterDetailService {
     beanName: BeanName = 'masterDetailSvc' as const;
 
     public store: { [id: string]: DetailGridInfo | undefined } = {};
-
     private enabled: boolean;
 
     private isEnabled(): boolean {
-        const gos = this.gos;
-        return (
-            gos.get('masterDetail') &&
-            // TODO: AG-1752: [Tree Data] Allow tree data leaf rows to serve as master rows for detail grids (Tree Data hosting Master/Detail)"
-            !gos.get('treeData')
-        );
+        return this.gos.get('masterDetail');
     }
 
     public postConstruct(): void {
-        if (_isClientSideRowModel(this.gos)) {
+        const gos = this.gos;
+        if (_isClientSideRowModel(gos)) {
             this.enabled = this.isEnabled();
-            this.addManagedEventListeners({ beforeRefreshModel: this.beforeRefreshModel.bind(this) });
+        }
+        if (_isServerSideRowModel(gos)) {
+            this.addEventListeners();
         }
     }
 
-    private beforeRefreshModel({ params }: BeforeRefreshModelEvent) {
+    private addEventListeners() {
+        const rowNodeDataChanged = (event: RowNodeDataChangedEvent) => {
+            this.setMaster(event.node, false, true);
+        };
+
+        let removeListeners: (() => null)[] | undefined;
+        const addOrRemoveListeners = () => {
+            if (removeListeners) {
+                for (const removeListener of removeListeners) {
+                    removeListener();
+                }
+                removeListeners = undefined;
+            }
+            if (this.isEnabled()) {
+                removeListeners = this.addManagedListeners(this.beans.eventSvc, { rowNodeDataChanged });
+            }
+        };
+
+        addOrRemoveListeners();
+        this.gos.addPropertyEventListener('masterDetail', addOrRemoveListeners);
+    }
+
+    public refreshModel(params: RefreshModelParams) {
         if (params.changedProps) {
             const enabled = this.isEnabled();
             if (this.enabled !== enabled) {
@@ -54,62 +75,57 @@ export class MasterDetailService extends BeanStub implements NamedBean, IMasterD
         }
     }
 
-    private setMasters(changedRowNodes: IChangedRowNodes | null | undefined): void {
+    public setMaster(row: RowNode, created: boolean, updated: boolean): void {
+        const oldMaster = row.master;
         const enabled = this.isEnabled();
-        this.enabled = enabled;
+        let newMaster = enabled;
 
         const gos = this.gos;
         const isRowMaster = gos.get('isRowMaster');
-        const groupDefaultExpanded = gos.get('groupDefaultExpanded');
+        const treeData = gos.get('treeData');
 
-        const setMaster = (row: RowNode, created: boolean, updated: boolean) => {
-            const oldMaster = row.master;
-
-            let newMaster = enabled;
-
-            if (enabled) {
-                if (created || updated) {
-                    if (isRowMaster) {
-                        const data = row.data;
-                        newMaster = !!data && !!isRowMaster(data);
-                    }
-                } else {
-                    newMaster = oldMaster;
+        if (enabled) {
+            if (created || updated) {
+                if (isRowMaster) {
+                    const data = row.data;
+                    newMaster = !!data && !!isRowMaster(data);
                 }
+            } else {
+                newMaster = oldMaster;
             }
+        }
 
-            if (newMaster && created) {
-                // TODO: AG-11476 isGroupOpenByDefault callback doesn't apply to master/detail grid
-
-                if (groupDefaultExpanded === -1) {
-                    row.expanded = true;
-                } else {
-                    // need to take row group into account when determining level
-                    const masterRowLevel = this.beans.rowGroupColsSvc?.columns.length ?? 0;
-                    row.expanded = masterRowLevel < groupDefaultExpanded;
-                }
-            } else if (!newMaster && oldMaster) {
-                row.expanded = false; // if changing AWAY from master, then un-expand, otherwise next time it's shown it is expanded again
+        if (!treeData) {
+            // Note that with treeData the initialization of the expansed state is delegated to treeGroupStrategy
+            if (
+                (newMaster && created) ||
+                // if changing AWAY from master, forget current state
+                (!newMaster && oldMaster)
+            ) {
+                row._expanded ??= null;
             }
+        }
 
-            if (newMaster !== oldMaster) {
-                row.master = newMaster;
+        if (newMaster !== oldMaster) {
+            row.master = newMaster;
+            row.dispatchRowEvent('masterChanged');
+        }
+    }
 
-                row.dispatchRowEvent('masterChanged');
-            }
-        };
-
+    private setMasters(changedRowNodes: _ChangedRowNodes | null | undefined): void {
+        this.enabled = this.isEnabled();
         if (changedRowNodes) {
-            const updates = changedRowNodes.updates;
-            for (const node of updates.keys()) {
-                const created = updates.get(node)!;
-                setMaster(node, created, !created);
+            for (const node of changedRowNodes.updates) {
+                this.setMaster(node, false, true);
+            }
+            for (const node of changedRowNodes.adds) {
+                this.setMaster(node, true, false);
             }
         } else {
-            const allLeafChildren = _getClientSideRowModel(this.beans)?.rootNode?.allLeafChildren;
+            const allLeafChildren = _getClientSideRowModel(this.beans)?.rootNode?._leafs;
             if (allLeafChildren) {
                 for (let i = 0, len = allLeafChildren.length; i < len; ++i) {
-                    setMaster(allLeafChildren[i], true, false);
+                    this.setMaster(allLeafChildren[i], true, false);
                 }
             }
         }
@@ -132,7 +148,7 @@ export class MasterDetailService extends BeanStub implements NamedBean, IMasterD
         detailNode.parent = masterNode;
 
         if (_exists(masterNode.id)) {
-            detailNode.id = 'detail_' + masterNode.id;
+            detailNode.id = DETAIL_ROW_ID_PREFIX + masterNode.id;
         }
 
         detailNode.data = masterNode.data;
@@ -159,9 +175,10 @@ export class MasterDetailService extends BeanStub implements NamedBean, IMasterD
                 // we do the update in a timeout, to make sure we are not calling from inside the grid
                 // doing another update
                 const updateRowHeightFunc = () => {
-                    const { rowModel } = this.beans;
+                    const { rowModel, environment } = this.beans;
                     const { rowNode } = rowCtrl;
-                    rowNode.setRowHeight(clientHeight);
+                    // the row uses border-box sizing, so the border width must be added
+                    rowNode.setRowHeight(clientHeight + environment.getRowBorderWidth());
                     if (_isClientSideRowModel(gos, rowModel) || _isServerSideRowModel(gos, rowModel)) {
                         rowModel.onRowHeightChanged();
                     }

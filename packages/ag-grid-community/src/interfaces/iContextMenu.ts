@@ -13,7 +13,7 @@ export interface IContextMenuService {
         mouseEvent: MouseEvent | undefined,
         touchEvent: TouchEvent | undefined,
         rowComp: RowCtrl | null,
-        cellCtrl: CellCtrl
+        cellCtrl: CellCtrl | null
     ): void;
 }
 
@@ -24,6 +24,7 @@ export interface ShowContextMenuParams {
     column?: Column | null;
     /** The value that will be passed to the Context Menu (useful with `getContextMenuItems`). If none is passed, and `rowNode` and `column` are provided, this will be the respective Cell value */
     value: any;
+    source: 'api' | 'ui';
 }
 
 export interface IContextMenuParams extends ShowContextMenuParams {

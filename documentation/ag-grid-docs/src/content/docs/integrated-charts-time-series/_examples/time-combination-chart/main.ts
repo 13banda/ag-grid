@@ -12,10 +12,15 @@ import type {
     GridReadyEvent,
     ValueParserParams,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, IntegratedChartsModule, RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -23,7 +28,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -72,18 +76,12 @@ const gridOptions: GridOptions = {
             series: {
                 strokeWidth: 2,
                 fillOpacity: 0.8,
-                tooltip: {
-                    renderer: chartTooltipRenderer,
-                },
             },
         },
         line: {
             series: {
                 strokeWidth: 5,
                 strokeOpacity: 0.8,
-                tooltip: {
-                    renderer: chartTooltipRenderer,
-                },
             },
         },
     },
@@ -116,12 +114,6 @@ function numberParser(params: ValueParserParams) {
         return null;
     }
     return parseFloat(value);
-}
-
-function chartTooltipRenderer({ datum, xKey, yKey }: AgCartesianSeriesTooltipRendererParams) {
-    return {
-        content: `${formatDate(datum[xKey])}: ${datum[yKey]}`,
-    };
 }
 
 function formatDate(date: Date | number) {

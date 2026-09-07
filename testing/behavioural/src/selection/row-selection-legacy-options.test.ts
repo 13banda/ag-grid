@@ -1,18 +1,19 @@
+import { GridColumns, GridRows, TestGridsManager, assertSelectedRowsByIndex, waitForEvent } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, InfiniteRowModelModule } from 'ag-grid-community';
+import {
+    ClientSideRowModelModule,
+    InfiniteRowModelModule,
+    PaginationModule,
+    QuickFilterModule,
+    RowSelectionModule,
+    enableDevValidations,
+} from 'ag-grid-community';
 import { RowGroupingModule, ServerSideRowModelModule, ViewportRowModelModule } from 'ag-grid-enterprise';
 
-import { TestGridsManager } from '../test-utils';
-import { GROUP_ROW_DATA } from './data';
-import {
-    assertSelectedRowsByIndex,
-    clickRowByIndex,
-    selectRowsByIndex,
-    toggleCheckboxByIndex,
-    toggleHeaderCheckboxByIndex,
-} from './utils';
+import { GROUP_ROW_DATA } from './group-data';
+import { GridActions } from './utils';
 
 describe('Row Selection Legacy Grid Options', () => {
     const columnDefs = [{ field: 'sport' }];
@@ -28,27 +29,38 @@ describe('Row Selection Legacy Grid Options', () => {
     let consoleErrorSpy: MockInstance;
     let consoleWarnSpy: MockInstance;
 
-    function createGrid(gridOptions: GridOptions): GridApi {
-        return gridMgr.createGrid('myGrid', gridOptions);
+    function createGrid(gridOptions: GridOptions): [GridApi, GridActions] {
+        const api = gridMgr.createGrid('myGrid', gridOptions);
+        consoleWarnSpy.mockClear();
+        const actions = new GridActions(api, '#myGrid');
+        return [api, actions];
     }
 
-    async function createGridAndWait(gridOptions: GridOptions): Promise<GridApi> {
-        const api = createGrid(gridOptions);
+    async function createGridAndWait(gridOptions: GridOptions): Promise<[GridApi, GridActions]> {
+        const [api, actions] = createGrid(gridOptions);
 
-        return new Promise((resolve) => api.addEventListener('firstDataRendered', () => resolve(api)));
+        await waitForEvent('firstDataRendered', api);
+
+        return [api, actions];
     }
 
     const gridMgr = new TestGridsManager({
         modules: [
+            RowSelectionModule,
             ClientSideRowModelModule,
             ServerSideRowModelModule,
             ViewportRowModelModule,
             InfiniteRowModelModule,
             RowGroupingModule,
+            PaginationModule,
+            QuickFilterModule,
         ],
     });
 
     beforeEach(() => {
+        // This file exercises deprecated selection options on purpose; the global throw-on-validation must be off here.
+        enableDevValidations({ throwOn: [] });
+
         gridMgr.reset();
 
         consoleErrorSpy = vitest.spyOn(console, 'error').mockImplementation(() => {});
@@ -64,91 +76,194 @@ describe('Row Selection Legacy Grid Options', () => {
 
     describe('User Interactions', () => {
         describe('Single Row Selection', () => {
-            test('Select single row', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Select single row', async () => {
+                const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+                await new GridColumns(api, `Select single row setup`).checkColumns(`
+                    CENTER
+                    └── sport "Sport" width:200
+                `);
+                await new GridRows(api, `Select single row setup`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
-                clickRowByIndex(2);
+                actions.clickRowByIndex(2);
 
                 assertSelectedRowsByIndex([2], api);
+                await new GridRows(api, `Select single row final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Clicking two rows selects only the last clicked row', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Clicking two rows selects only the last clicked row', async () => {
+                const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
-                clickRowByIndex(2);
-                clickRowByIndex(5);
+                actions.clickRowByIndex(2);
+                actions.clickRowByIndex(5);
 
                 assertSelectedRowsByIndex([5], api);
+                await new GridRows(api, `Clicking two rows selects only the last clicked row final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test("SHIFT-click doesn't select multiple rows in single row selection mode", () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test("SHIFT-click doesn't select multiple rows in single row selection mode", async () => {
+                const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
-                clickRowByIndex(2);
-                clickRowByIndex(5, { shiftKey: true });
+                actions.clickRowByIndex(2);
+                actions.clickRowByIndex(5, { shiftKey: true });
 
                 assertSelectedRowsByIndex([5], api);
+                await new GridRows(
+                    api,
+                    `SHIFT-click doesn't select multiple rows in single row selection mode final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test("CTRL-click doesn't select multiple rows in single row selection mode", () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test("CTRL-click doesn't select multiple rows in single row selection mode", async () => {
+                const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
-                clickRowByIndex(2);
-                clickRowByIndex(5, { metaKey: true });
+                actions.clickRowByIndex(2);
+                actions.clickRowByIndex(5, { metaKey: true });
 
                 assertSelectedRowsByIndex([5], api);
+                await new GridRows(
+                    api,
+                    `CTRL-click doesn't select multiple rows in single row selection mode final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('suppressRowClickSelection prevents row from being selected when clicked', () => {
-                const api = createGrid({
+            test('suppressRowClickSelection prevents row from being selected when clicked', async () => {
+                const [api, actions] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'single',
                     suppressRowClickSelection: true,
                 });
 
-                clickRowByIndex(2);
+                actions.clickRowByIndex(2);
 
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(
+                    api,
+                    `suppressRowClickSelection prevents row from being selected when clicked final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('un-selectable row cannot be selected', () => {
-                const api = createGrid({
+            test('un-selectable row cannot be selected', async () => {
+                const [api, actions] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'single',
                     isRowSelectable: (node) => node.data?.sport !== 'football',
                 });
+                await new GridRows(api, `un-selectable row cannot be selected setup`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF 🚫 id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
-                clickRowByIndex(0);
+                actions.clickRowByIndex(0);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `un-selectable row cannot be selected final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF 🚫 id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
         });
 
         describe('Multiple Row Selection', () => {
-            test('un-selectable row cannot be selected', () => {
-                const api = createGrid({
+            test('un-selectable row cannot be selected', async () => {
+                const [api, actions] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'multiple',
                     isRowSelectable: (node) => node.data?.sport !== 'football',
                 });
 
-                clickRowByIndex(0);
+                actions.clickRowByIndex(0);
                 assertSelectedRowsByIndex([], api);
 
-                clickRowByIndex(0, { metaKey: true });
+                actions.clickRowByIndex(0, { metaKey: true });
                 assertSelectedRowsByIndex([], api);
 
-                clickRowByIndex(0, { ctrlKey: true });
+                actions.clickRowByIndex(0, { ctrlKey: true });
                 assertSelectedRowsByIndex([], api);
 
-                clickRowByIndex(0, { shiftKey: true });
+                actions.clickRowByIndex(0, { shiftKey: true });
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `un-selectable row cannot be selected final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF 🚫 id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('row-click interaction with multiple selected rows', () => {
-                const api = createGrid({
+            test('suppressRowClickSelection prevents clicks from clearing selection state', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((c, i) => (i === 0 ? { ...c, checkboxSelection: true } : c)),
                     rowData,
                     rowSelection: 'multiple',
@@ -156,197 +271,399 @@ describe('Row Selection Legacy Grid Options', () => {
                 });
 
                 // Select two rows by toggling checkboxes
-                selectRowsByIndex([2, 3], false, api);
+                actions.selectRowsByIndex([2, 3], false);
 
-                clickRowByIndex(3);
+                actions.clickRowByIndex(3);
 
                 // Both rows should still be selected
                 assertSelectedRowsByIndex([2, 3], api);
+                await new GridRows(
+                    api,
+                    `suppressRowClickSelection prevents clicks from clearing selection state final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
+            });
+
+            test('row-click interaction with multiple selected rows', async () => {
+                const [api, actions] = createGrid({
+                    columnDefs: columnDefs.map((c, i) => (i === 0 ? { ...c, checkboxSelection: true } : c)),
+                    rowData,
+                    rowSelection: 'multiple',
+                });
+
+                // Select two rows by toggling checkboxes
+                actions.selectRowsByIndex([2, 3], false);
+
+                actions.clickRowByIndex(3);
+
+                // Both rows should still be selected
+                assertSelectedRowsByIndex([3], api);
+                await new GridRows(api, `row-click interaction with multiple selected rows final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
             describe('Range selection behaviour', () => {
-                test('CTRL-click and CMD-click selects multiple rows', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('CTRL-click and CMD-click selects multiple rows', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(2);
-                    clickRowByIndex(5, { metaKey: true });
-                    clickRowByIndex(3, { ctrlKey: true });
+                    actions.clickRowByIndex(2);
+                    actions.clickRowByIndex(5, { metaKey: true });
+                    actions.clickRowByIndex(3, { ctrlKey: true });
 
                     assertSelectedRowsByIndex([2, 5, 3], api);
+                    await new GridRows(api, `CTRL-click and CMD-click selects multiple rows final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Single click after multiple selection clears previous selection', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Single click after multiple selection clears previous selection', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    selectRowsByIndex([1, 3, 5], true, api);
+                    actions.selectRowsByIndex([1, 3, 5], true);
 
-                    clickRowByIndex(2);
+                    actions.clickRowByIndex(2);
 
                     assertSelectedRowsByIndex([2], api);
+                    await new GridRows(
+                        api,
+                        `Single click after multiple selection clears previous selection final state`
+                    ).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click selects range of rows', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('SHIFT-click selects range of rows', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(2);
-                    clickRowByIndex(5, { shiftKey: true });
+                    actions.clickRowByIndex(2);
+                    actions.clickRowByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 3, 4, 5], api);
+                    await new GridRows(api, `SHIFT-click selects range of rows final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click extends range downwards from from last selected row', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('SHIFT-click extends range downwards from from last selected row', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    selectRowsByIndex([1, 3], true, api);
+                    actions.selectRowsByIndex([1, 3], true);
 
-                    clickRowByIndex(5, { shiftKey: true });
+                    actions.clickRowByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([1, 3, 4, 5], api);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range downwards from from last selected row final state`
+                    ).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click extends range upwards from from last selected row', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('SHIFT-click extends range upwards from from last selected row', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    selectRowsByIndex([2, 4], true, api);
+                    actions.selectRowsByIndex([2, 4], true);
 
-                    clickRowByIndex(1, { shiftKey: true });
+                    actions.clickRowByIndex(1, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 4, 1, 3], api);
+                    await new GridRows(api, `SHIFT-click extends range upwards from from last selected row final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF selected id:2 sport:"tennis"
+                            ├── LEAF selected id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('SHIFT-click on un-selected table selects only clicked row', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('SHIFT-click on un-selected table selects only clicked row', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(4, { shiftKey: true });
+                    actions.clickRowByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([4], api);
 
-                    clickRowByIndex(6, { shiftKey: true });
+                    actions.clickRowByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
+                    await new GridRows(api, `SHIFT-click on un-selected table selects only clicked row final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF id:1 sport:"rugby"
+                            ├── LEAF id:2 sport:"tennis"
+                            ├── LEAF id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF selected id:5 sport:"swimming"
+                            └── LEAF selected id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range selection is preserved on CTRL-click and CMD-click', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Range selection is preserved on CTRL-click and CMD-click', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(1);
-                    clickRowByIndex(3, { shiftKey: true });
+                    actions.clickRowByIndex(1);
+                    actions.clickRowByIndex(3, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3], api);
 
-                    clickRowByIndex(5, { metaKey: true });
+                    actions.clickRowByIndex(5, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 5], api);
+                    await new GridRows(api, `Range selection is preserved on CTRL-click and CMD-click final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF selected id:2 sport:"tennis"
+                            ├── LEAF selected id:3 sport:"cricket"
+                            ├── LEAF id:4 sport:"golf"
+                            ├── LEAF selected id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range members can be un-selected with CTRL-click or CMD-click', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Range members can be un-selected with CTRL-click or CMD-click', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(1);
-                    clickRowByIndex(4, { shiftKey: true });
+                    actions.clickRowByIndex(1);
+                    actions.clickRowByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 4], api);
 
-                    clickRowByIndex(3, { metaKey: true });
+                    actions.clickRowByIndex(3, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 4], api);
 
-                    clickRowByIndex(2, { ctrlKey: true });
+                    actions.clickRowByIndex(2, { ctrlKey: true });
                     assertSelectedRowsByIndex([1, 4], api);
+                    await new GridRows(api, `Range members can be un-selected with CTRL-click or CMD-click final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF id:2 sport:"tennis"
+                            ├── LEAF id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range is extended downwards from selection root', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Range is extended downwards from selection root', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(2);
-                    clickRowByIndex(4, { shiftKey: true });
+                    actions.clickRowByIndex(2);
+                    actions.clickRowByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
 
-                    clickRowByIndex(6, { shiftKey: true });
+                    actions.clickRowByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4, 5, 6], api);
+                    await new GridRows(api, `Range is extended downwards from selection root final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range is extended upwards from selection root', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Range is extended upwards from selection root', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(6);
-                    clickRowByIndex(4, { shiftKey: true });
+                    actions.clickRowByIndex(6);
+                    actions.clickRowByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5], api);
 
-                    clickRowByIndex(2, { shiftKey: true });
+                    actions.clickRowByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5, 2, 3], api);
+                    await new GridRows(api, `Range is extended upwards from selection root final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range can be inverted', () => {
-                    const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+                test('Range can be inverted', async () => {
+                    const [api, actions] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
-                    clickRowByIndex(4);
-                    clickRowByIndex(6, { shiftKey: true });
+                    actions.clickRowByIndex(4);
+                    actions.clickRowByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
 
-                    clickRowByIndex(2, { shiftKey: true });
+                    actions.clickRowByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
+                    await new GridRows(api, `Range can be inverted final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
             });
         });
 
         describe('Multiple Row Selection with Click', () => {
-            test('Select multiple rows without modifier keys', () => {
-                const api = createGrid({
+            test('Select multiple rows without modifier keys', async () => {
+                const [api, actions] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'multiple',
                     rowMultiSelectWithClick: true,
                 });
 
-                clickRowByIndex(2);
-                clickRowByIndex(5);
-                clickRowByIndex(3);
+                actions.clickRowByIndex(2);
+                actions.clickRowByIndex(5);
+                actions.clickRowByIndex(3);
 
                 assertSelectedRowsByIndex([2, 5, 3], api);
+                await new GridRows(api, `Select multiple rows without modifier keys final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('De-select row with click', () => {
-                const api = createGrid({
+            test('De-select row with click', async () => {
+                const [api, actions] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'multiple',
                     rowMultiSelectWithClick: true,
                 });
 
-                selectRowsByIndex([1, 2, 3], true, api);
+                actions.selectRowsByIndex([1, 2, 3], true);
 
-                clickRowByIndex(2);
+                actions.clickRowByIndex(2);
 
                 assertSelectedRowsByIndex([1, 3], api);
+                await new GridRows(api, `De-select row with click final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF selected id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
         });
 
         describe('Checkbox selection', () => {
-            test('Checkbox can be toggled on and off', () => {
-                const api = createGrid({
+            test('Checkbox can be toggled on and off', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                     rowData,
                     rowSelection: 'multiple',
                 });
 
-                toggleCheckboxByIndex(1);
+                actions.toggleCheckboxByIndex(1);
                 assertSelectedRowsByIndex([1], api);
 
-                toggleCheckboxByIndex(1);
+                actions.toggleCheckboxByIndex(1);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `Checkbox can be toggled on and off final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Multiple rows can be selected without modifier keys nor rowMultiSelectWithClick', () => {
-                const api = createGrid({
+            test('Multiple rows can be selected without modifier keys nor rowMultiSelectWithClick', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                     rowData,
                     rowSelection: 'multiple',
                 });
 
-                toggleCheckboxByIndex(1);
+                actions.toggleCheckboxByIndex(1);
                 assertSelectedRowsByIndex([1], api);
 
-                toggleCheckboxByIndex(2);
+                actions.toggleCheckboxByIndex(2);
                 assertSelectedRowsByIndex([1, 2], api);
+                await new GridRows(
+                    api,
+                    `Multiple rows can be selected without modifier keys nor rowMultiSelectWithClick final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF selected id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Clicking a row still selects it when `suppressRowClickSelection` is false', () => {
-                const api = createGrid({
+            test('Clicking a row still selects it when `suppressRowClickSelection` is false', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         checkboxSelection: true,
@@ -357,16 +674,29 @@ describe('Row Selection Legacy Grid Options', () => {
                 });
 
                 // click, not toggle
-                clickRowByIndex(1);
+                actions.clickRowByIndex(1);
                 assertSelectedRowsByIndex([1], api);
 
                 // toggle, not click, to assert inter-op
-                toggleCheckboxByIndex(1);
+                actions.toggleCheckboxByIndex(1);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(
+                    api,
+                    `Clicking a row still selects it when _suppressRowClickSelection_ is false final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Clicking a row does nothing when `suppressRowClickSelection` is true', () => {
-                const api = createGrid({
+            test('Clicking a row does nothing when `suppressRowClickSelection` is true', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         checkboxSelection: true,
@@ -378,12 +708,25 @@ describe('Row Selection Legacy Grid Options', () => {
                 });
 
                 // click, not toggle
-                clickRowByIndex(1);
+                actions.clickRowByIndex(1);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(
+                    api,
+                    `Clicking a row does nothing when _suppressRowClickSelection_ is true final state`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Un-selectable checkboxes cannot be toggled', () => {
-                const api = createGrid({
+            test('Un-selectable checkboxes cannot be toggled', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         checkboxSelection: true,
@@ -393,212 +736,372 @@ describe('Row Selection Legacy Grid Options', () => {
                     rowSelection: 'multiple',
                     isRowSelectable: (node) => node.data?.sport !== 'golf',
                 });
+                await new GridRows(api, `Un-selectable checkboxes cannot be toggled setup`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF 🚫 id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
-                toggleCheckboxByIndex(4);
+                actions.toggleCheckboxByIndex(4);
 
                 assertSelectedRowsByIndex([], api);
 
-                toggleCheckboxByIndex(5);
+                actions.toggleCheckboxByIndex(5);
                 assertSelectedRowsByIndex([5], api);
+                await new GridRows(api, `Un-selectable checkboxes cannot be toggled final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF 🚫 id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
             describe('Range selection behaviour', () => {
-                test('CTRL-click and CMD-click does not affect ability to select multiple rows', () => {
-                    const api = createGrid({
+                test('CTRL-click and CMD-click does not affect ability to select multiple rows', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(5, { metaKey: true });
-                    toggleCheckboxByIndex(3, { ctrlKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(5, { metaKey: true });
+                    actions.toggleCheckboxByIndex(3, { ctrlKey: true });
 
                     assertSelectedRowsByIndex([2, 5, 3], api);
+                    await new GridRows(
+                        api,
+                        `CTRL-click and CMD-click does not affect ability to select multiple rows final state`
+                    ).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click selects range of rows', () => {
-                    const api = createGrid({
+                test('SHIFT-click selects range of rows', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(5, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 3, 4, 5], api);
+                    await new GridRows(api, `SHIFT-click selects range of rows final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click extends range downwards from from last selected row', () => {
-                    const api = createGrid({
+                test('SHIFT-click extends range downwards from from last selected row', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    selectRowsByIndex([1, 3], true, api);
+                    actions.selectRowsByIndex([1, 3], true);
 
-                    toggleCheckboxByIndex(5, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([1, 3, 4, 5], api);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range downwards from from last selected row final state`
+                    ).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('SHIFT-click extends range upwards from from last selected row', () => {
-                    const api = createGrid({
+                test('SHIFT-click extends range upwards from from last selected row', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    selectRowsByIndex([2, 4], true, api);
+                    actions.selectRowsByIndex([2, 4], true);
 
-                    toggleCheckboxByIndex(1, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 4, 1, 3], api);
+                    await new GridRows(api, `SHIFT-click extends range upwards from from last selected row final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF selected id:2 sport:"tennis"
+                            ├── LEAF selected id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('SHIFT-click on un-selected table selects only clicked row', () => {
-                    const api = createGrid({
+                test('SHIFT-click on un-selected table selects only clicked row', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([4], api);
 
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
+                    await new GridRows(api, `SHIFT-click on un-selected table selects only clicked row final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF id:1 sport:"rugby"
+                            ├── LEAF id:2 sport:"tennis"
+                            ├── LEAF id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF selected id:5 sport:"swimming"
+                            └── LEAF selected id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range selection is preserved on CTRL-click and CMD-click', () => {
-                    const api = createGrid({
+                test('Range selection is preserved on CTRL-click and CMD-click', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(3, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(3, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3], api);
 
-                    toggleCheckboxByIndex(5, { metaKey: true });
+                    actions.toggleCheckboxByIndex(5, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 5], api);
+                    await new GridRows(api, `Range selection is preserved on CTRL-click and CMD-click final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF selected id:2 sport:"tennis"
+                            ├── LEAF selected id:3 sport:"cricket"
+                            ├── LEAF id:4 sport:"golf"
+                            ├── LEAF selected id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range selection is preserved on checkbox toggle', () => {
-                    const api = createGrid({
+                test('Range selection is preserved on checkbox toggle', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(3, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(3, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3], api);
 
-                    toggleCheckboxByIndex(5);
+                    actions.toggleCheckboxByIndex(5);
                     assertSelectedRowsByIndex([1, 2, 3, 5], api);
+                    await new GridRows(api, `Range selection is preserved on checkbox toggle final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range members can be un-selected with CTRL-click or CMD-click', () => {
-                    const api = createGrid({
+                test('Range members can be un-selected with CTRL-click or CMD-click', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 4], api);
 
-                    toggleCheckboxByIndex(3, { metaKey: true });
+                    actions.toggleCheckboxByIndex(3, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 4], api);
 
-                    toggleCheckboxByIndex(2, { ctrlKey: true });
+                    actions.toggleCheckboxByIndex(2, { ctrlKey: true });
                     assertSelectedRowsByIndex([1, 4], api);
+                    await new GridRows(api, `Range members can be un-selected with CTRL-click or CMD-click final state`)
+                        .check(`
+                            ROOT id:ROOT_NODE_ID
+                            ├── LEAF id:0 sport:"football"
+                            ├── LEAF selected id:1 sport:"rugby"
+                            ├── LEAF id:2 sport:"tennis"
+                            ├── LEAF id:3 sport:"cricket"
+                            ├── LEAF selected id:4 sport:"golf"
+                            ├── LEAF id:5 sport:"swimming"
+                            └── LEAF id:6 sport:"rowing"
+                        `);
                 });
 
-                test('Range members can be un-selected with toggle', () => {
-                    const api = createGrid({
+                test('Range members can be un-selected with toggle', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 4], api);
 
-                    toggleCheckboxByIndex(3);
+                    actions.toggleCheckboxByIndex(3);
                     assertSelectedRowsByIndex([1, 2, 4], api);
+                    await new GridRows(api, `Range members can be un-selected with toggle final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range is extended downwards from selection root', () => {
-                    const api = createGrid({
+                test('Range is extended downwards from selection root', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
 
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4, 5, 6], api);
+                    await new GridRows(api, `Range is extended downwards from selection root final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range is extended upwards from selection root', () => {
-                    const api = createGrid({
+                test('Range is extended upwards from selection root', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(6);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5], api);
 
-                    toggleCheckboxByIndex(2, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5, 2, 3], api);
+                    await new GridRows(api, `Range is extended upwards from selection root final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `);
                 });
 
-                test('Range can be inverted', () => {
-                    const api = createGrid({
+                test('Range can be inverted', async () => {
+                    const [api, actions] = createGrid({
                         columnDefs: columnDefs.map((d) => ({ ...d, checkboxSelection: true })),
                         rowData,
                         rowSelection: 'multiple',
                     });
 
-                    toggleCheckboxByIndex(4);
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(4);
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
 
-                    toggleCheckboxByIndex(2, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
+                    await new GridRows(api, `Range can be inverted final state`).check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
                 });
             });
         });
 
         describe('Header checkbox selection', () => {
-            test('can be used to select and deselect all rows', () => {
-                const api = createGrid({
+            test('can be used to select and deselect all rows', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({ ...d, headerCheckboxSelection: true })),
                     rowData,
                     rowSelection: 'multiple',
                 });
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([0, 1, 2, 3, 4, 5, 6], api);
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `can be used to select and deselect all rows final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('can select multiple pages of data', () => {
-                const api = createGrid({
+            test('can select multiple pages of data', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({ ...d, headerCheckboxSelection: true })),
                     rowData,
                     rowSelection: 'multiple',
@@ -606,15 +1109,25 @@ describe('Row Selection Legacy Grid Options', () => {
                     paginationPageSize: 5,
                 });
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([0, 1, 2, 3, 4, 5, 6], api);
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `can select multiple pages of data final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('can select only current page of data', () => {
-                const api = createGrid({
+            test('can select only current page of data', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         headerCheckboxSelection: true,
@@ -626,15 +1139,25 @@ describe('Row Selection Legacy Grid Options', () => {
                     paginationPageSize: 5,
                 });
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([0, 1, 2, 3, 4], api);
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(api, `can select only current page of data final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('can select only filtered data', () => {
-                const api = createGrid({
+            test('can select only filtered data', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         headerCheckboxSelection: true,
@@ -647,17 +1170,44 @@ describe('Row Selection Legacy Grid Options', () => {
                 });
 
                 api.setGridOption('quickFilterText', 'ing');
+                await new GridColumns(api, `can select only filtered data after setGridOption quickFilterText`)
+                    .checkColumns(`
+                        CENTER
+                        └── sport "Sport" width:200
+                    `);
+                await new GridRows(api, `can select only filtered data after setGridOption quickFilterText`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([0, 1], api);
 
                 api.setGridOption('quickFilterText', '');
+                await new GridColumns(api, `can select only filtered data after setGridOption quickFilterText #2`)
+                    .checkColumns(`
+                        CENTER
+                        └── sport "Sport" width:200
+                    `);
+                await new GridRows(api, `can select only filtered data after setGridOption quickFilterText #2`).check(
+                    `
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF id:2 sport:"tennis"
+                        ├── LEAF id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `
+                );
 
                 assertSelectedRowsByIndex([5, 6], api);
             });
 
-            test('indeterminate selection state transitions to select all', () => {
-                const api = createGrid({
+            test('indeterminate selection state transitions to select all', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         headerCheckboxSelection: true,
@@ -666,14 +1216,26 @@ describe('Row Selection Legacy Grid Options', () => {
                     rowSelection: 'multiple',
                 });
 
-                selectRowsByIndex([3], true, api);
+                actions.selectRowsByIndex([3], true);
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([3, 0, 1, 2, 4, 5, 6], api);
+                await new GridRows(api, `indeterminate selection state transitions to select all final state`).check(
+                    `
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF selected id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `
+                );
             });
 
-            test('un-selectable rows are not part of the selection', () => {
-                const api = createGrid({
+            test('un-selectable rows are not part of the selection', async () => {
+                const [api, actions] = createGrid({
                     columnDefs: columnDefs.map((d) => ({
                         ...d,
                         headerCheckboxSelection: true,
@@ -683,8 +1245,18 @@ describe('Row Selection Legacy Grid Options', () => {
                     isRowSelectable: (node) => node.data?.sport !== 'football',
                 });
 
-                toggleHeaderCheckboxByIndex(0);
+                actions.toggleHeaderCheckboxByIndex(0);
                 assertSelectedRowsByIndex([1, 2, 3, 4, 5, 6], api);
+                await new GridRows(api, `un-selectable rows are not part of the selection final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF 🚫 id:0 sport:"football"
+                    ├── LEAF selected id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF selected id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF selected id:6 sport:"rowing"
+                `);
             });
         });
 
@@ -712,203 +1284,308 @@ describe('Row Selection Legacy Grid Options', () => {
             };
 
             test('clicking group row selects only that row', async () => {
-                const api = await createGridAndWait({
+                const [api, actions] = await createGridAndWait({
                     ...groupGridOptions,
                     rowSelection: 'multiple',
                 });
+                await new GridColumns(api, `clicking group row selects only that row setup`).checkColumns(``);
+                await new GridRows(api, `clicking group row selects only that row setup`).check(``);
 
-                toggleCheckboxByIndex(0);
+                actions.toggleCheckboxByIndex(0);
                 assertSelectedRowsByIndex([0], api);
+                await new GridRows(api, `clicking group row selects only that row final state`).check(``);
             });
 
             test('clicking group row with `groupSelectsChildren` enabled selects that row and all its children', async () => {
-                const api = await createGridAndWait({
+                const [api, actions] = await createGridAndWait({
                     ...groupGridOptions,
                     rowSelection: 'multiple',
                     groupSelectsChildren: true,
                 });
+                await new GridColumns(
+                    api,
+                    `clicking group row with _groupSelectsChildren_ enabled selects that row and all  setup`
+                ).checkColumns(``);
+                await new GridRows(
+                    api,
+                    `clicking group row with _groupSelectsChildren_ enabled selects that row and all  setup`
+                ).check(``);
 
                 // Group selects children
-                toggleCheckboxByIndex(0);
+                actions.toggleCheckboxByIndex(0);
                 assertSelectedRowsByIndex([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13], api);
 
                 // Can un-select child row
-                toggleCheckboxByIndex(4);
+                actions.toggleCheckboxByIndex(4);
                 assertSelectedRowsByIndex([2, 3, 5, 6, 7, 8, 9, 10, 11, 13], api);
 
                 // Toggling group row from indeterminate state selects all children
-                toggleCheckboxByIndex(0);
+                actions.toggleCheckboxByIndex(0);
                 assertSelectedRowsByIndex([2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 4], api);
 
                 // Toggle group row again de-selects all children
-                toggleCheckboxByIndex(0);
+                actions.toggleCheckboxByIndex(0);
                 assertSelectedRowsByIndex([], api);
+                await new GridRows(
+                    api,
+                    `clicking group row with _groupSelectsChildren_ enabled selects that row and all  final state`
+                ).check(``);
             });
 
             describe('Range selection behaviour', () => {
                 test('CTRL-click and CMD-click does not affect ability to select multiple rows', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `CTRL-click and CMD-click does not affect ability to select multiple rows setup`
+                    ).checkColumns(``);
+                    await new GridRows(
+                        api,
+                        `CTRL-click and CMD-click does not affect ability to select multiple rows setup`
+                    ).check(``);
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(5, { metaKey: true });
-                    toggleCheckboxByIndex(3, { ctrlKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(5, { metaKey: true });
+                    actions.toggleCheckboxByIndex(3, { ctrlKey: true });
 
                     assertSelectedRowsByIndex([2, 5, 3], api);
+                    await new GridRows(
+                        api,
+                        `CTRL-click and CMD-click does not affect ability to select multiple rows final state`
+                    ).check(``);
                 });
 
                 test('SHIFT-click selects range of rows', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `SHIFT-click selects range of rows setup`).checkColumns(``);
+                    await new GridRows(api, `SHIFT-click selects range of rows setup`).check(``);
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(5, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 3, 4, 5], api);
+                    await new GridRows(api, `SHIFT-click selects range of rows final state`).check(``);
                 });
 
                 test('SHIFT-click extends range downwards from from last selected row', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `SHIFT-click extends range downwards from from last selected row setup`
+                    ).checkColumns(``);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range downwards from from last selected row setup`
+                    ).check(``);
 
-                    selectRowsByIndex([1, 3], true, api);
+                    actions.selectRowsByIndex([1, 3], true);
 
-                    toggleCheckboxByIndex(5, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(5, { shiftKey: true });
 
                     assertSelectedRowsByIndex([1, 3, 4, 5], api);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range downwards from from last selected row final state`
+                    ).check(``);
                 });
 
                 test('SHIFT-click extends range upwards from from last selected row', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `SHIFT-click extends range upwards from from last selected row setup`
+                    ).checkColumns(``);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range upwards from from last selected row setup`
+                    ).check(``);
 
-                    selectRowsByIndex([2, 4], true, api);
+                    actions.selectRowsByIndex([2, 4], true);
 
-                    toggleCheckboxByIndex(1, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1, { shiftKey: true });
 
                     assertSelectedRowsByIndex([2, 4, 1, 3], api);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click extends range upwards from from last selected row final state`
+                    ).check(``);
                 });
 
                 test('SHIFT-click on un-selected table selects only clicked row', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `SHIFT-click on un-selected table selects only clicked row setup`
+                    ).checkColumns(``);
+                    await new GridRows(api, `SHIFT-click on un-selected table selects only clicked row setup`).check(
+                        ``
+                    );
 
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([4], api);
 
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
+                    await new GridRows(
+                        api,
+                        `SHIFT-click on un-selected table selects only clicked row final state`
+                    ).check(``);
                 });
 
                 test('Range selection is preserved on CTRL-click and CMD-click', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `Range selection is preserved on CTRL-click and CMD-click setup`
+                    ).checkColumns(``);
+                    await new GridRows(api, `Range selection is preserved on CTRL-click and CMD-click setup`).check(``);
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(3, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(3, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3], api);
 
-                    toggleCheckboxByIndex(5, { metaKey: true });
+                    actions.toggleCheckboxByIndex(5, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 5], api);
+                    await new GridRows(
+                        api,
+                        `Range selection is preserved on CTRL-click and CMD-click final state`
+                    ).check(``);
                 });
 
                 test('Range selection is preserved on checkbox toggle', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `Range selection is preserved on checkbox toggle setup`).checkColumns(
+                        ``
+                    );
+                    await new GridRows(api, `Range selection is preserved on checkbox toggle setup`).check(``);
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(3, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(3, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3], api);
 
-                    toggleCheckboxByIndex(5);
+                    actions.toggleCheckboxByIndex(5);
                     assertSelectedRowsByIndex([1, 2, 3, 5], api);
+                    await new GridRows(api, `Range selection is preserved on checkbox toggle final state`).check(``);
                 });
 
                 test('Range members can be un-selected with CTRL-click or CMD-click', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(
+                        api,
+                        `Range members can be un-selected with CTRL-click or CMD-click setup`
+                    ).checkColumns(``);
+                    await new GridRows(
+                        api,
+                        `Range members can be un-selected with CTRL-click or CMD-click setup`
+                    ).check(``);
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 4], api);
 
-                    toggleCheckboxByIndex(3, { metaKey: true });
+                    actions.toggleCheckboxByIndex(3, { metaKey: true });
                     assertSelectedRowsByIndex([1, 2, 4], api);
 
-                    toggleCheckboxByIndex(2, { ctrlKey: true });
+                    actions.toggleCheckboxByIndex(2, { ctrlKey: true });
                     assertSelectedRowsByIndex([1, 4], api);
+                    await new GridRows(
+                        api,
+                        `Range members can be un-selected with CTRL-click or CMD-click final state`
+                    ).check(``);
                 });
 
                 test('Range members can be un-selected with toggle', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `Range members can be un-selected with toggle setup`).checkColumns(``);
+                    await new GridRows(api, `Range members can be un-selected with toggle setup`).check(``);
 
-                    toggleCheckboxByIndex(1);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(1);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([1, 2, 3, 4], api);
 
-                    toggleCheckboxByIndex(3);
+                    actions.toggleCheckboxByIndex(3);
                     assertSelectedRowsByIndex([1, 2, 4], api);
+                    await new GridRows(api, `Range members can be un-selected with toggle final state`).check(``);
                 });
 
                 test('Range is extended downwards from selection root', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `Range is extended downwards from selection root setup`).checkColumns(
+                        ``
+                    );
+                    await new GridRows(api, `Range is extended downwards from selection root setup`).check(``);
 
-                    toggleCheckboxByIndex(2);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
 
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4, 5, 6], api);
+                    await new GridRows(api, `Range is extended downwards from selection root final state`).check(``);
                 });
 
                 test('Range is extended upwards from selection root', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `Range is extended upwards from selection root setup`).checkColumns(``);
+                    await new GridRows(api, `Range is extended upwards from selection root setup`).check(``);
 
-                    toggleCheckboxByIndex(6);
-                    toggleCheckboxByIndex(4, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(6);
+                    actions.toggleCheckboxByIndex(4, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5], api);
 
-                    toggleCheckboxByIndex(2, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([6, 4, 5, 2, 3], api);
+                    await new GridRows(api, `Range is extended upwards from selection root final state`).check(``);
                 });
 
                 test('Range can be inverted', async () => {
-                    const api = await createGridAndWait({
+                    const [api, actions] = await createGridAndWait({
                         ...groupGridOptions,
                         rowSelection: 'multiple',
                     });
+                    await new GridColumns(api, `Range can be inverted setup`).checkColumns(``);
+                    await new GridRows(api, `Range can be inverted setup`).check(``);
 
-                    toggleCheckboxByIndex(4);
-                    toggleCheckboxByIndex(6, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(4);
+                    actions.toggleCheckboxByIndex(6, { shiftKey: true });
                     assertSelectedRowsByIndex([4, 5, 6], api);
 
-                    toggleCheckboxByIndex(2, { shiftKey: true });
+                    actions.toggleCheckboxByIndex(2, { shiftKey: true });
                     assertSelectedRowsByIndex([2, 3, 4], api);
+                    await new GridRows(api, `Range can be inverted final state`).check(``);
                 });
             });
         });
@@ -916,8 +1593,12 @@ describe('Row Selection Legacy Grid Options', () => {
 
     describe('Selection API', () => {
         describe('setNodesSelected', () => {
-            test('Select single row in single selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Select single row in single selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+                await new GridColumns(api, `Select single row in single selection mode setup`).checkColumns(`
+                    CENTER
+                    └── sport "Sport" width:200
+                `);
 
                 const nodes = api.getRenderedNodes();
                 const toSelect = [nodes[3]];
@@ -927,10 +1608,20 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 expect(selectedNodes).toHaveLength(1);
                 expect(selectedNodes[0]).toBe(toSelect[0]);
+                await new GridRows(api, `Select single row in single selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Select single row in multiple selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+            test('Select single row in multiple selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
                 const nodes = api.getRenderedNodes();
                 const toSelect = [nodes[3]];
@@ -939,10 +1630,20 @@ describe('Row Selection Legacy Grid Options', () => {
                 const selectedNodes = api.getSelectedNodes();
                 expect(selectedNodes).toHaveLength(1);
                 expect(selectedNodes[0]).toBe(toSelect[0]);
+                await new GridRows(api, `Select single row in multiple selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Cannot select multiple rows in single selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Cannot select multiple rows in single selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
                 const nodes = api.getRenderedNodes();
                 const toSelect = [nodes[0], nodes[3], nodes[1]];
@@ -952,10 +1653,20 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 expect(selectedNodes).toHaveLength(0);
                 expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+                await new GridRows(api, `Cannot select multiple rows in single selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Can select multiple rows in multiple selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+            test('Can select multiple rows in multiple selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
                 const nodes = api.getRenderedNodes();
                 const toSelect = [nodes[5], nodes[4], nodes[2]];
@@ -963,12 +1674,22 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 const selectedNodes = api.getSelectedNodes();
                 expect(selectedNodes).toHaveLength(3);
+                await new GridRows(api, `Can select multiple rows in multiple selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF selected id:4 sport:"golf"
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
         });
 
         describe('selectAll', () => {
-            test('Can select all rows in single selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Can select all rows in single selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
                 api.selectAll();
 
@@ -977,10 +1698,20 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 api.deselectAll();
                 expect(api.getSelectedNodes().length).toBe(0);
+                await new GridRows(api, `Can select all rows in single selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
 
-            test('Can select all rows in multiple selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
+            test('Can select all rows in multiple selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'multiple' });
 
                 api.selectAll();
 
@@ -988,12 +1719,22 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 api.deselectAll();
                 expect(api.getSelectedNodes().length).toBe(0);
+                await new GridRows(api, `Can select all rows in multiple selection mode final state`).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:0 sport:"football"
+                    ├── LEAF id:1 sport:"rugby"
+                    ├── LEAF id:2 sport:"tennis"
+                    ├── LEAF id:3 sport:"cricket"
+                    ├── LEAF id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
             });
         });
 
         describe('selectAllOnCurrentPage', () => {
-            test('Can select all rows on current page in single selection mode', () => {
-                const api = createGrid({
+            test('Can select all rows on current page in single selection mode', async () => {
+                const [api] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'single',
@@ -1005,10 +1746,21 @@ describe('Row Selection Legacy Grid Options', () => {
 
                 assertSelectedRowsByIndex([0, 1, 2, 3, 4], api);
                 expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+                await new GridRows(api, `Can select all rows on current page in single selection mode final state`)
+                    .check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF selected id:0 sport:"football"
+                        ├── LEAF selected id:1 sport:"rugby"
+                        ├── LEAF selected id:2 sport:"tennis"
+                        ├── LEAF selected id:3 sport:"cricket"
+                        ├── LEAF selected id:4 sport:"golf"
+                        ├── LEAF id:5 sport:"swimming"
+                        └── LEAF id:6 sport:"rowing"
+                    `);
             });
 
-            test('Can deselect only rows on current page in single selection mode', () => {
-                const api = createGrid({
+            test('Can deselect only rows on current page in single selection mode', async () => {
+                const [api] = createGrid({
                     columnDefs,
                     rowData,
                     rowSelection: 'single',
@@ -1020,14 +1772,40 @@ describe('Row Selection Legacy Grid Options', () => {
                 api.deselectAllOnCurrentPage();
 
                 assertSelectedRowsByIndex([5, 6], api);
+                await new GridRows(api, `Can deselect only rows on current page in single selection mode final state`)
+                    .check(`
+                        ROOT id:ROOT_NODE_ID
+                        ├── LEAF id:0 sport:"football"
+                        ├── LEAF id:1 sport:"rugby"
+                        ├── LEAF id:2 sport:"tennis"
+                        ├── LEAF id:3 sport:"cricket"
+                        ├── LEAF id:4 sport:"golf"
+                        ├── LEAF selected id:5 sport:"swimming"
+                        └── LEAF selected id:6 sport:"rowing"
+                    `);
             });
         });
 
         describe('selectAllFiltered', () => {
-            test('Can select all filtered rows in single selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Can select all filtered rows in single selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
                 api.setGridOption('quickFilterText', 'ing');
+                await new GridColumns(
+                    api,
+                    `Can select all filtered rows in single selection mode after setGridOption quickFilterText`
+                ).checkColumns(`
+                    CENTER
+                    └── sport "Sport" width:200
+                `);
+                await new GridRows(
+                    api,
+                    `Can select all filtered rows in single selection mode after setGridOption quickFilterText`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
                 api.selectAllFiltered();
                 const selectedNodes = api.getSelectedNodes();
@@ -1035,16 +1813,51 @@ describe('Row Selection Legacy Grid Options', () => {
                 expect(selectedNodes.length).toBe(2);
             });
 
-            test('Can deselect filtered rows only in single selection mode', () => {
-                const api = createGrid({ columnDefs, rowData, rowSelection: 'single' });
+            test('Can deselect filtered rows only in single selection mode', async () => {
+                const [api] = createGrid({ columnDefs, rowData, rowSelection: 'single' });
 
                 api.selectAll();
 
                 api.setGridOption('quickFilterText', 'ing');
+                await new GridColumns(
+                    api,
+                    `Can deselect filtered rows only in single selection mode after setGridOption quickFilterText`
+                ).checkColumns(`
+                    CENTER
+                    └── sport "Sport" width:200
+                `);
+                await new GridRows(
+                    api,
+                    `Can deselect filtered rows only in single selection mode after setGridOption quickFilterText`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF selected id:5 sport:"swimming"
+                    └── LEAF selected id:6 sport:"rowing"
+                `);
 
                 api.deselectAllFiltered();
 
                 api.setGridOption('quickFilterText', '');
+                await new GridColumns(
+                    api,
+                    `Can deselect filtered rows only in single selection mode after setGridOption quickFilterText #2`
+                ).checkColumns(`
+                    CENTER
+                    └── sport "Sport" width:200
+                `);
+                await new GridRows(
+                    api,
+                    `Can deselect filtered rows only in single selection mode after setGridOption quickFilterText #2`
+                ).check(`
+                    ROOT id:ROOT_NODE_ID
+                    ├── LEAF selected id:0 sport:"football"
+                    ├── LEAF selected id:1 sport:"rugby"
+                    ├── LEAF selected id:2 sport:"tennis"
+                    ├── LEAF selected id:3 sport:"cricket"
+                    ├── LEAF selected id:4 sport:"golf"
+                    ├── LEAF id:5 sport:"swimming"
+                    └── LEAF id:6 sport:"rowing"
+                `);
 
                 assertSelectedRowsByIndex([0, 1, 2, 3, 4], api);
             });

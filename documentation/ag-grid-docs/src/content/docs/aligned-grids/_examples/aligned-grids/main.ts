@@ -7,9 +7,14 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnApiModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     ColumnAutoSizeModule,
     AlignedGridsModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
@@ -49,7 +53,6 @@ const defaultColDef: ColDef = {
 const gridOptionsTop: GridOptions = {
     defaultColDef,
     columnDefs,
-    rowData: null,
     alignedGrids: () => [bottomApi],
     autoSizeStrategy: {
         type: 'fitGridWidth',
@@ -62,7 +65,6 @@ const topApi = createGrid(gridDivTop, gridOptionsTop);
 const gridOptionsBottom: GridOptions = {
     defaultColDef,
     columnDefs,
-    rowData: null,
     alignedGrids: () => [topApi],
 };
 const gridDivBottom = document.querySelector<HTMLElement>('#myGridBottom')!;

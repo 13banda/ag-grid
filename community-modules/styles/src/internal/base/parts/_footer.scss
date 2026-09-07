@@ -5,8 +5,12 @@
         border-top: 1px solid;
         border-top-color: var(--ag-border-color);
         color: var(--ag-secondary-foreground-color);
-        height: var(--ag-header-height);
+        height: var(--ag-pagination-panel-height);
+        overflow: auto hidden;
+        scrollbar-width: thin;
+    }
 
+    .ag-paging-panel-content {
         > * {
             margin: 0 var(--ag-cell-horizontal-padding);
         }
@@ -25,11 +29,84 @@
         color: var(--ag-disabled-foreground-color);
     }
 
+    .ag-number-field.ag-paging-number {
+        display: inline-block;
+    }
+
+    .ag-number-field.ag-paging-number .ag-input-field-input {
+        text-align: end;
+        padding-inline: var(--ag-grid-size);
+    }
+
     @include ag.keyboard-focus((ag-paging-button), 0px);
+    @include ag.keyboard-focus((ag-paging-page-number), 0px);
 
     .ag-paging-button,
     .ag-paging-description {
         margin: 0 var(--ag-grid-size);
+        // avoids misalignment of buttons and text
+        line-height: 0;
+    }
+
+    .ag-paging-page-numbers-panel {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--ag-grid-size) * 1.5);
+    }
+
+    .ag-paging-page-numbers-panel .ag-paging-button {
+        margin: 0;
+    }
+
+    .ag-paging-page-numbers {
+        display: flex;
+        align-items: center;
+    }
+
+    .ag-paging-page-number {
+        // relative so the keyboard-focus ::after focus ring positions over the button
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--ag-grid-size);
+        margin: 0 calc(var(--ag-grid-size) * 0.25);
+        border-radius: var(--ag-border-radius);
+        cursor: pointer;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ag-paging-page-number:hover {
+        background-color: var(--ag-row-hover-color);
+    }
+
+    .ag-paging-page-number-current {
+        cursor: default;
+        font-weight: 600;
+        background-color: color-mix(in srgb, var(--ag-background-color), var(--ag-foreground-color) 5%);
+    }
+
+    .ag-paging-page-number-ellipsis {
+        margin: 0 calc(var(--ag-grid-size) * 0.25);
+        pointer-events: none;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ag-paging-row-summary-panel {
+        display: inline-grid;
+
+        &::before {
+            content: var(--ag-internal-pagination-width-string);
+            grid-area: 1/1;
+            visibility: hidden;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
+    .ag-paging-row-summary-content {
+        grid-area: 1/1;
+        justify-self: center;
     }
 
     .ag-status-bar {
@@ -38,6 +115,8 @@
         padding-right: calc(var(--ag-grid-size) * 4);
         padding-left: calc(var(--ag-grid-size) * 4);
         line-height: 1.5;
+        overflow: auto hidden;
+        scrollbar-width: thin;
     }
 
     .ag-status-name-value-value {

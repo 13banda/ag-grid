@@ -1,7 +1,7 @@
 import type { Group, Scene } from 'ag-charts-types/scene';
 
 import type { BeanCollection } from 'ag-grid-community';
-import { Component, _error } from 'ag-grid-community';
+import { Component } from 'ag-grid-community';
 
 import type { AgChartsExports } from '../../../../agChartsExports';
 import type { ChartTranslationKey, ChartTranslationService } from '../../../services/chartTranslationService';
@@ -30,9 +30,13 @@ export abstract class MiniChart extends Component {
         const { _Scene } = agChartsExports;
 
         this.root = new _Scene.Group();
+        const canvasElement = container.ownerDocument.createElement('canvas');
         const scene = new _Scene.Scene({
+            canvasElement,
+            pixelRatio: container.ownerDocument.defaultView?.devicePixelRatio ?? 1,
             width: this.size,
             height: this.size,
+            willReadFrequently: false,
         });
 
         scene.canvas.element.classList.add(CANVAS_CLASS);
@@ -49,7 +53,7 @@ export abstract class MiniChart extends Component {
         try {
             this.scene.render();
         } catch (e) {
-            _error(108, { e });
+            this.beans.log.error(108, { e });
         }
     }
 

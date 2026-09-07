@@ -4,10 +4,15 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberFilterModule,
@@ -17,7 +22,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [

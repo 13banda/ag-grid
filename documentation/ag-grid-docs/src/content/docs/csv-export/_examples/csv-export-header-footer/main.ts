@@ -5,10 +5,15 @@ import {
     ModuleRegistry,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -17,7 +22,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -99,11 +103,6 @@ function getParams() {
 
 function onBtnExport() {
     const params = getParams();
-    if (params.suppressQuotes || params.columnSeparator) {
-        alert(
-            'NOTE: you are downloading a file with non-standard quotes or separators - it may not render correctly in Excel.'
-        );
-    }
     gridApi!.exportDataAsCsv(params);
 }
 

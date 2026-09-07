@@ -1,0 +1,32 @@
+import { TestGridsManager } from 'ag-test-utils';
+
+import { CellStyleModule } from 'ag-grid-community';
+import { RowGroupingModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
+
+import { getTestGenerator } from '../../../util';
+import { rowModelGridOptions } from '../../grid-config';
+import {
+    getGridOptions_correctValue_innerRenderer,
+    getTestConcerns_correctValue,
+    groupCellSnapshotter,
+} from '../../grouping-test-utils';
+
+describe('ag-grid groupCellRenderer', () => {
+    const gridsManager = new TestGridsManager({
+        modules: [CellStyleModule, RowGroupingModule, ServerSideRowModelModule],
+    });
+    const createTests = getTestGenerator(gridsManager, groupCellSnapshotter);
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    const gridOptions = rowModelGridOptions.ssrm;
+    describe('with rowModelType=serverSide - correct values are displayed - with an autoColDef.cellRenderer.innerRenderer', () => {
+        createTests(getTestConcerns_correctValue(gridOptions), getGridOptions_correctValue_innerRenderer(gridOptions));
+    });
+});

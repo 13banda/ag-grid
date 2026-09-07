@@ -1,10 +1,15 @@
 import type { ColGroupDef, GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
 declare let window: any;
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule]);
 
 const columnDefs: ColGroupDef[] = [
     {
@@ -35,13 +40,12 @@ const gridOptions: GridOptions<IOlympicData> = {
         width: 150,
     },
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 function saveState() {
     window.groupState = gridApi!.getColumnGroupState();
     console.log('group state saved', window.groupState);
-    console.log('column state saved');
+    console.log('column group state saved');
 }
 
 function restoreState() {
@@ -50,12 +54,12 @@ function restoreState() {
         return;
     }
     gridApi!.setColumnGroupState(window.groupState);
-    console.log('column state restored');
+    console.log('column group state restored');
 }
 
 function resetState() {
     gridApi!.resetColumnGroupState();
-    console.log('column state reset');
+    console.log('column group state reset');
 }
 
 // setup the grid after the page has finished loading

@@ -5,16 +5,20 @@ import {
     ModuleRegistry,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
     NumberEditorModule,
     TextEditorModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicDataWithId>;

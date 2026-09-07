@@ -4,12 +4,18 @@ import {
     ClientSideRowModelModule,
     HighlightChangesModule,
     ModuleRegistry,
+    NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextEditorModule,
@@ -18,7 +24,7 @@ ModuleRegistry.registerModules([
     CellStyleModule,
     ClientSideRowModelModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
+    NumberEditorModule,
 ]);
 
 let gridApi: GridApi;
@@ -46,13 +52,13 @@ const gridOptions: GridOptions = {
         valueColumn: {
             minWidth: 90,
             editable: true,
-            valueParser: 'Number(newValue)',
             filter: 'agNumberColumnFilter',
         },
     },
     rowData: getRowData(),
     groupDefaultExpanded: 1,
     suppressAggFuncInHeader: true,
+    allowShowChangeAfterFilter: true,
 };
 
 function getRowData() {

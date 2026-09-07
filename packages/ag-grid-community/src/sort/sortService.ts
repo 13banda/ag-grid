@@ -1,22 +1,44 @@
+import { getSortDefFromColDef } from '../columns/columnUtils';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
-import type { SortDirection } from '../entities/colDef';
+import { _normalizeSortType, getSortDefFromInput, getSortingOrder } from '../entities/agColumn';
 import type { ColumnEventType, SortChangedEvent } from '../events';
 import { _isColumnsSortingCoupledToGroup } from '../gridOptionsUtils';
 import type { WithoutGridCommon } from '../interfaces/iCommon';
+import type { DisplaySortDef, SortDef, SortDirection } from '../interfaces/iSort';
 import type { SortModelItem } from '../interfaces/iSortModelItem';
 import type { SortOption } from '../interfaces/iSortOption';
-import type { Component, ComponentSelector } from '../widgets/component';
+import type { Component } from '../widgets/component';
 import { SortIndicatorComp, SortIndicatorSelector } from './sortIndicatorComp';
+import { _resolveSortOptions } from './sortOptionUtils';
 
-export const DEFAULT_SORTING_ORDER: SortDirection[] = ['asc', 'desc', null];
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class SortService extends BeanStub implements NamedBean {
     beanName = 'sortSvc' as const;
 
+    public readonly SortIndicatorSelector = SortIndicatorSelector;
+    public readonly SortIndicatorComp = SortIndicatorComp;
+
+    private cols: AgColumn[] | null = null;
+    private map: Map<AgColumn, number> | null = null;
+    private opts: SortOption[] | null = null;
+    private multi = false;
+
+    public override destroy(): void {
+        super.destroy();
+        this.invalidate();
+    }
+
+    public invalidate(): void {
+        this.cols = null;
+        this.map = null;
+        this.opts = null;
+    }
+
     public progressSort(column: AgColumn, multiSort: boolean, source: ColumnEventType): void {
-        const nextDirection = this.getNextSortDirection(column);
-        this.setSortForColumn(column, nextDirection, multiSort, source);
+        const { sortDef, index } = this.getNextSortDefAndIndex(column, column.getSortDef(), column.sortCycleIndex);
+        this.setSortForColumn(column, sortDef, multiSort, source, index);
     }
 
     public progressSortFromEvent(column: AgColumn, event: MouseEvent | KeyboardEvent): void {
@@ -25,341 +47,338 @@ export class SortService extends BeanStub implements NamedBean {
         this.progressSort(column, multiSort, 'uiColumnSorted');
     }
 
-    public setSortForColumn(column: AgColumn, sort: SortDirection, multiSort: boolean, source: ColumnEventType): void {
-        // auto correct - if sort not legal value, then set it to 'no sort' (which is null)
-        if (sort !== 'asc' && sort !== 'desc') {
-            sort = null;
-        }
-
+    public setSortForColumn(
+        column: AgColumn,
+        sortDef: SortDef,
+        multiSort: boolean,
+        source: ColumnEventType,
+        cycleIndex?: number
+    ): void {
         const { gos, showRowGroupCols } = this.beans;
+        const coupled = _isColumnsSortingCoupledToGroup(gos);
 
-        const isColumnsSortingCoupledToGroup = _isColumnsSortingCoupledToGroup(gos);
-        let columnsToUpdate = [column];
-        if (isColumnsSortingCoupledToGroup) {
-            if (column.getColDef().showRowGroup) {
-                const rowGroupColumns = showRowGroupCols?.getSourceColumnsForGroupColumn?.(column);
-                const sortableRowGroupColumns = rowGroupColumns?.filter((col) => col.isSortable());
-
-                if (sortableRowGroupColumns) {
-                    columnsToUpdate = [column, ...sortableRowGroupColumns];
+        const columnsToUpdate: AgColumn[] = [column];
+        if (column.showRowGroup && coupled) {
+            const rowGroupColumns = showRowGroupCols?.getSourceColumnsForGroupColumn?.(column);
+            for (let i = 0, len = rowGroupColumns?.length ?? 0; i < len; ++i) {
+                const col = rowGroupColumns![i];
+                if (col.isSortable()) {
+                    columnsToUpdate.push(col);
                 }
             }
         }
 
-        columnsToUpdate.forEach((col) => this.setColSort(col, sort, source));
-
-        const doingMultiSort = (multiSort || gos.get('alwaysMultiSort')) && !gos.get('suppressMultiSort');
-
-        // clear sort on all columns except those changed, and update the icons
-        const updatedColumns: AgColumn[] = [];
-        if (!doingMultiSort) {
-            const clearedColumns = this.clearSortBarTheseColumns(columnsToUpdate, source);
-            updatedColumns.push(...clearedColumns);
+        // Only the clicked column (always first) carries the cycle position; coupled sources share the def.
+        for (let i = 0, len = columnsToUpdate.length; i < len; ++i) {
+            this.setColSort(columnsToUpdate[i], sortDef, source, i === 0 ? cycleIndex : undefined);
         }
 
-        // sortIndex used for knowing order of cols when multi-col sort
-        this.updateSortIndex(column);
+        const displayCol = coupled ? column.showRowGroupCol : null;
+        if (displayCol) {
+            columnsToUpdate.push(displayCol);
+        }
 
-        updatedColumns.push(...columnsToUpdate);
+        const doingMultiSort = (multiSort || gos.get('alwaysMultiSort')) && !gos.get('suppressMultiSort');
+        const updatedColumns = doingMultiSort ? [] : this.clearSortBarTheseColumns(columnsToUpdate, source);
+
+        // Must run after clearSortBarTheseColumns, which may clear sibling sources in single-sort mode.
+        if (displayCol) {
+            this.setColSort(displayCol, this.getCoupledGroupSortDef(displayCol), source);
+        }
+
+        this.updateSortIndex(column);
+        for (let i = 0, len = columnsToUpdate.length; i < len; ++i) {
+            updatedColumns.push(columnsToUpdate[i]);
+        }
         this.dispatchSortChangedEvents(source, updatedColumns);
     }
 
-    private updateSortIndex(lastColToChange: AgColumn) {
-        const { gos, colModel, showRowGroupCols } = this.beans;
-        const isCoupled = _isColumnsSortingCoupledToGroup(gos);
-        const groupParent = showRowGroupCols?.getShowRowGroupCol(lastColToChange.getId());
-        const lastSortIndexCol = isCoupled ? groupParent || lastColToChange : lastColToChange;
-
-        const allSortedCols = this.getColumnsWithSortingOrdered();
-
-        // reset sort index on everything
-        colModel.getAllCols().forEach((col) => this.setColSortIndex(col, null));
-        const allSortedColsWithoutChangesOrGroups = allSortedCols.filter((col) => {
-            if (isCoupled && col.getColDef().showRowGroup) {
-                return false;
+    /** A coupled display group col's own sortDef derived from its source cols: the first sorted source's
+     *  def (only its truthiness matters — the arrow is source-derived), or unsorted when none is sorted. */
+    private getCoupledGroupSortDef(displayCol: AgColumn): SortDef {
+        const sourceCols = this.beans.showRowGroupCols?.getSourceColumnsForGroupColumn(displayCol);
+        for (let i = 0, len = sourceCols?.length ?? 0; i < len; ++i) {
+            const sortDef = sourceCols![i].getSortDef();
+            if (sortDef) {
+                return sortDef;
             }
-            return col !== lastSortIndexCol;
-        });
-        const sortedColsWithIndices = lastSortIndexCol.getSort()
-            ? [...allSortedColsWithoutChangesOrGroups, lastSortIndexCol]
-            : allSortedColsWithoutChangesOrGroups;
-        sortedColsWithIndices.forEach((col, idx) => this.setColSortIndex(col, idx));
+        }
+        return getSortDefFromInput();
     }
 
-    // gets called by API, so if data changes, use can call this, which will end up
-    // working out the sort order again of the rows.
+    private updateSortIndex(lastColToChange: AgColumn) {
+        const { gos, colModel } = this.beans;
+        const isCoupled = _isColumnsSortingCoupledToGroup(gos);
+        const lastSortIndexCol = isCoupled ? lastColToChange.showRowGroupCol || lastColToChange : lastColToChange;
+
+        // Read the old-order list before mutating sortIndex below.
+        const sorted = this.getSortedCols();
+
+        // Target index per col, dropping coupled group cols and the changed col — re-appended last so it
+        // takes the highest index.
+        const targetIndex = new Map<AgColumn, number>();
+        let nextIndex = 0;
+        for (let i = 0, len = sorted.length; i < len; ++i) {
+            const col = sorted[i];
+            if ((isCoupled && col.showRowGroup) || col === lastSortIndexCol) {
+                continue;
+            }
+            targetIndex.set(col, nextIndex++);
+        }
+        if (lastSortIndexCol.getSortDef()) {
+            targetIndex.set(lastSortIndexCol, nextIndex);
+        }
+
+        // Apply only where changed — `setColSortIndex` fires a state event per call.
+        const allCols = colModel.getAllCols();
+        for (let i = 0, len = allCols.length; i < len; ++i) {
+            const col = allCols[i];
+            const target = targetIndex.get(col) ?? null;
+            if ((col.sortIndex ?? null) !== target) {
+                this.setColSortIndex(col, target);
+            }
+        }
+    }
+
+    // Called by API when data changes out-of-band; we can't know what changed, so drop everything.
     public onSortChanged(source: string, columns?: AgColumn[]): void {
+        this.invalidate();
         this.dispatchSortChangedEvents(source, columns);
     }
 
-    public isSortActive(): boolean {
-        // pull out all the columns that have sorting set
-        const allCols = this.beans.colModel.getAllCols();
-        const sortedCols = allCols.filter((column) => !!column.getSort());
-        return sortedCols && sortedCols.length > 0;
-    }
-
     public dispatchSortChangedEvents(source: string, columns?: AgColumn[]): void {
-        const event: WithoutGridCommon<SortChangedEvent> = {
-            type: 'sortChanged',
-            source,
-        };
-
-        if (columns) {
-            event.columns = columns;
-        }
+        const event: WithoutGridCommon<SortChangedEvent> = { type: 'sortChanged', source, columns };
         this.eventSvc.dispatchEvent(event);
     }
 
     private clearSortBarTheseColumns(columnsToSkip: AgColumn[], source: ColumnEventType): AgColumn[] {
         const clearedColumns: AgColumn[] = [];
-        this.beans.colModel.getAllCols().forEach((columnToClear) => {
-            // Do not clear if either holding shift, or if column in question was clicked
-            if (!columnsToSkip.includes(columnToClear)) {
-                // add to list of cleared cols when sort direction is set
-                if (columnToClear.getSort()) {
-                    clearedColumns.push(columnToClear);
-                }
-
-                // setting to 'undefined' as null means 'none' rather than cleared, otherwise issue will arise
-                // if sort order is: ['desc', null , 'asc'], as it will start at null rather than 'desc'.
-                this.setColSort(columnToClear, undefined, source);
+        const skip = new Set(columnsToSkip);
+        const allCols = this.beans.colModel.getAllCols();
+        for (let i = 0, len = allCols.length; i < len; ++i) {
+            const col = allCols[i];
+            if (skip.has(col)) {
+                continue;
             }
-        });
-
+            if (col.getSortDef()) {
+                clearedColumns.push(col);
+            }
+            // Fresh SortDef per col: `getColumnDefs()` exposes a reference to user code.
+            this.setColSort(col, getSortDefFromInput(), source);
+        }
         return clearedColumns;
     }
 
-    private getNextSortDirection(column: AgColumn): SortDirection {
-        const sortingOrder: SortDirection[] | null | undefined =
-            column.getColDef().sortingOrder ?? this.gos.get('sortingOrder') ?? DEFAULT_SORTING_ORDER;
-
-        const currentIndex = sortingOrder.indexOf(column.getSort()!);
-        const notInArray = currentIndex < 0;
-        const lastItemInArray = currentIndex == sortingOrder.length - 1;
-
-        return notInArray || lastItemInArray ? sortingOrder[0] : sortingOrder[currentIndex + 1];
+    public getNextSortDirection(column: AgColumn, currentSort?: SortDef | SortDirection | null): SortDef {
+        const useCycle = currentSort === undefined;
+        const currentSortDef = useCycle ? column.getSortDef() : getSortDefFromInput(currentSort);
+        // Without an explicit current sort this must agree with `progressSort`, so honour the cycle position.
+        return this.getNextSortDefAndIndex(column, currentSortDef, useCycle ? column.sortCycleIndex : 0).sortDef;
     }
 
-    /**
-     * @returns a map of sort indexes for every sorted column, if groups sort primaries then they will have equivalent indices
-     */
-    private getIndexedSortMap(): Map<AgColumn, number> {
-        const { gos, colModel, showRowGroupCols, rowGroupColsSvc } = this.beans;
-        // pull out all the columns that have sorting set
-        let allSortedCols = colModel.getAllCols().filter((col) => !!col.getSort());
-
-        if (colModel.isPivotMode()) {
-            const isSortingLinked = _isColumnsSortingCoupledToGroup(gos);
-            allSortedCols = allSortedCols.filter((col) => {
-                const isAggregated = !!col.getAggFunc();
-                const isSecondary = !col.isPrimary();
-                const isGroup = isSortingLinked
-                    ? showRowGroupCols?.getShowRowGroupCol(col.getId())
-                    : col.getColDef().showRowGroup;
-                return isAggregated || isSecondary || isGroup;
-            });
+    /** Next `sortingOrder` entry and its index. The scan starts at `cachedIndex` when that is a valid
+     *  position, so a repeated entry resolves to the one the last click landed on rather than always to
+     *  its first occurrence. */
+    private getNextSortDefAndIndex(
+        column: AgColumn,
+        currentSortDef: SortDef | null,
+        cachedIndex = 0
+    ): { sortDef: SortDef; index: number } {
+        const sortingOrder = getSortingOrder(this.gos, column);
+        const len = sortingOrder.length;
+        if (len === 0) {
+            return { sortDef: getSortDefFromInput(), index: 0 };
         }
-
-        const sortedRowGroupCols = rowGroupColsSvc?.columns.filter((col) => !!col.getSort()) ?? [];
-
-        // when both cols are missing sortIndex, we use the position of the col in all cols list.
-        // this means if colDefs only have sort, but no sortIndex, we deterministically pick which
-        // cols is sorted by first.
-        const allColsIndexes: { [id: string]: number } = {};
-        allSortedCols.forEach((col, index) => (allColsIndexes[col.getId()] = index));
-
-        // put the columns in order of which one got sorted first
-        allSortedCols.sort((a, b) => {
-            const iA = a.getSortIndex();
-            const iB = b.getSortIndex();
-            if (iA != null && iB != null) {
-                return iA - iB; // both present, normal comparison
-            } else if (iA == null && iB == null) {
-                // both missing, compare using column positions
-                const posA = allColsIndexes[a.getId()];
-                const posB = allColsIndexes[b.getId()];
-                return posA > posB ? 1 : -1;
-            } else if (iB == null) {
-                return -1; // iB missing
-            } else {
-                return 1; // iA missing
+        let current = -1;
+        for (let i = cachedIndex < len ? cachedIndex : 0; i < len; ++i) {
+            if (areSortDefsEqual(sortingOrder[i], currentSortDef)) {
+                current = i;
+                break;
             }
-        });
-
-        const isSortLinked = _isColumnsSortingCoupledToGroup(gos) && !!sortedRowGroupCols.length;
-        if (isSortLinked) {
-            allSortedCols = [
-                ...new Set(
-                    // if linked sorting, replace all columns with the display group column for index purposes, and ensure uniqueness
-                    allSortedCols.map((col) => showRowGroupCols?.getShowRowGroupCol(col.getId()) ?? col)
-                ),
-            ];
         }
-
-        const indexMap: Map<AgColumn, number> = new Map();
-
-        allSortedCols.forEach((col, idx) => indexMap.set(col, idx));
-
-        // add the row group cols back
-        if (isSortLinked) {
-            sortedRowGroupCols.forEach((col) => {
-                const groupDisplayCol = showRowGroupCols!.getShowRowGroupCol(col.getId())!;
-                indexMap.set(col, indexMap.get(groupDisplayCol)!);
-            });
-        }
-
-        return indexMap;
+        // No match, or the last entry -> restart at the first entry.
+        const index = current === -1 || current + 1 >= len ? 0 : current + 1;
+        return { sortDef: getSortDefFromInput(sortingOrder[index]), index };
     }
 
-    public getColumnsWithSortingOrdered(): AgColumn[] {
-        // pull out all the columns that have sorting set
-        return (
-            [...this.getIndexedSortMap().entries()]
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .sort(([col1, idx1], [col2, idx2]) => idx1 - idx2)
-                .map(([col]) => col)
-        );
+    private getSortedCols(): AgColumn[] {
+        return this.cols ?? this.loadSortedCols();
     }
 
-    // used by server side row models, to sent sort to server
-    public getSortModel(): SortModelItem[] {
-        return this.getColumnsWithSortingOrdered()
-            .filter((column) => column.getSort())
-            .map((column) => ({
-                sort: column.getSort()!,
-                colId: column.getId(),
-            }));
+    private getIndexMap(): Map<AgColumn, number> {
+        return this.map ?? this.loadIndexMap(this.getSortedCols());
+    }
+
+    /** Sorted cols in display order. Pivot drops primary leaves (irrelevant to the result); coupled mode
+     *  interleaves each display group col with its source row-group cols (shared display index). */
+    private loadSortedCols(): AgColumn[] {
+        const { colModel, showRowGroupCols } = this.beans;
+        const coupled = _isColumnsSortingCoupledToGroup(this.gos);
+        const pivotMode = colModel.pivotMode;
+        const allCols = colModel.getAllCols();
+        const sorted: AgColumn[] = [];
+        for (let i = 0, len = allCols.length; i < len; ++i) {
+            const col = allCols[i];
+            if (!col.getSortDef()) {
+                continue;
+            }
+            if (pivotMode) {
+                const isGroup = coupled ? col.showRowGroupCol : col.showRowGroup;
+                if (!col.aggFunc && col.primary && !isGroup) {
+                    continue;
+                }
+            }
+            sorted.push(col);
+        }
+        if (sorted.length > 1) {
+            sorted.sort(compareBySortIndex);
+        }
+
+        // Coupled mode interleaves each display group col with its source row-group cols (enterprise).
+        const result = coupled && showRowGroupCols ? showRowGroupCols.interleaveSortedColumns(sorted) : sorted;
+        this.cols = result;
+        return result;
+    }
+
+    /** Col -> display index. Coupled mode: source row-group cols share their display col's index (which
+     *  counts display cols only). Sets `multi`. */
+    private loadIndexMap(sortedCols: AgColumn[]): Map<AgColumn, number> {
+        const map = new Map<AgColumn, number>();
+        const len = sortedCols.length;
+        const showRowGroupCols = this.beans.showRowGroupCols;
+        let idx: number;
+        if (_isColumnsSortingCoupledToGroup(this.gos) && showRowGroupCols) {
+            // Coupled mode: source cols share their display group col's index (enterprise).
+            idx = showRowGroupCols.fillCoupledSortIndexMap(sortedCols, map);
+        } else {
+            for (let i = 0; i < len; ++i) {
+                map.set(sortedCols[i], i);
+            }
+            idx = len - 1;
+        }
+        this.multi = idx >= 1;
+        this.map = map;
+        return map;
     }
 
     public getSortOptions(): SortOption[] {
-        return this.getColumnsWithSortingOrdered()
-            .filter((column) => column.getSort())
-            .map((column) => ({
-                sort: column.getSort()!,
-                column,
-            }));
+        let opts = this.opts;
+        if (opts === null) {
+            opts = [];
+            const cols = this.getSortedCols();
+            for (let i = 0, len = cols.length; i < len; ++i) {
+                const column = cols[i];
+                const sortDef = column.getSortDef();
+                const sort = sortDef?.direction;
+                if (sort) {
+                    opts.push({
+                        sort,
+                        type: _normalizeSortType(sortDef.type),
+                        column,
+                        colComparator: undefined,
+                        leafComparator: undefined,
+                        descending: false,
+                        absolute: false,
+                    });
+                }
+            }
+            _resolveSortOptions(opts, this.beans.colModel);
+            this.opts = opts;
+        }
+        return opts;
     }
 
-    public canColumnDisplayMixedSort(column: AgColumn): boolean {
-        const isColumnSortCouplingActive = _isColumnsSortingCoupledToGroup(this.gos);
-        const isGroupDisplayColumn = !!column.getColDef().showRowGroup;
-        return isColumnSortCouplingActive && isGroupDisplayColumn;
-    }
-
-    public getDisplaySortForColumn(column: AgColumn): SortDirection | 'mixed' | undefined {
+    public getDisplaySort(column: AgColumn): DisplaySortDef | null {
+        const colSortDef = column.getSortDef();
+        // Mixed sort only on a coupled group display col — check the cheap flags before the linked-col lookup.
+        if (!column.showRowGroup || !_isColumnsSortingCoupledToGroup(this.gos)) {
+            return colSortDef;
+        }
         const linkedColumns = this.beans.showRowGroupCols?.getSourceColumnsForGroupColumn(column);
-        if (!this.canColumnDisplayMixedSort(column) || !linkedColumns?.length) {
-            return column.getSort();
+        if (!linkedColumns?.length) {
+            return colSortDef;
         }
-
-        // if column has unique data, its sorting is independent - but can still be mixed
-        const columnHasUniqueData = column.getColDef().field != null || !!column.getColDef().valueGetter;
-        const sortableColumns = columnHasUniqueData ? [column, ...linkedColumns] : linkedColumns;
-
-        const firstSort = sortableColumns[0].getSort();
-        // the == is intentional, as null and undefined both represent no sort, which means they are equivalent
-        const allMatch = sortableColumns.every((col) => col.getSort() == firstSort);
-        if (!allMatch) {
-            return 'mixed';
+        // A group col with its own field/valueGetter sorts independently, so it joins the comparison.
+        const ownData = column.field != null || !!column.valueGetter;
+        const firstSort = ownData ? colSortDef : linkedColumns[0].getSortDef();
+        let allMatch = true;
+        for (let i = 0, len = linkedColumns.length; allMatch && i < len; ++i) {
+            allMatch = areSortDefsEqual(linkedColumns[i].getSortDef(), firstSort);
         }
-        return firstSort;
+        return allMatch ? firstSort : { type: _normalizeSortType(colSortDef?.type), direction: 'mixed' };
     }
 
-    public getDisplaySortIndexForColumn(column: AgColumn): number | null | undefined {
-        return this.getIndexedSortMap().get(column);
+    public getDisplaySortIndex(column: AgColumn): number | undefined {
+        return this.getIndexMap().get(column);
     }
 
-    public setupHeader(comp: Component, column: AgColumn, clickElement?: HTMLElement): void {
-        let lastMovingChanged = 0;
+    /** `true` when the indicator should show ordinal numbers (2+ distinct display indices). */
+    public isMultiSort(): boolean {
+        this.getIndexMap();
+        return this.multi;
+    }
 
-        // keep track of last time the moving changed flag was set
-        comp.addManagedListeners(column, {
-            movingChanged: () => {
-                lastMovingChanged = new Date().getTime();
-            },
-        });
-
-        // add the event on the header, so when clicked, we do sorting
-        if (clickElement) {
-            comp.addManagedElementListeners(clickElement, {
-                click: (event: MouseEvent) => {
-                    // sometimes when moving a column via dragging, this was also firing a clicked event.
-                    // here is issue raised by user: https://ag-grid.zendesk.com/agent/tickets/1076
-                    // this check stops sort if a) column is moving or b) column moved less than 200ms ago (so caters for race condition)
-                    const moving = column.isMoving();
-                    const nowTime = new Date().getTime();
-                    // typically there is <2ms if moving flag was set recently, as it would be done in same VM turn
-                    const movedRecently = nowTime - lastMovingChanged < 50;
-                    const columnMoving = moving || movedRecently;
-
-                    if (!columnMoving) {
-                        this.progressSortFromEvent(column, event);
-                    }
-                },
-            });
-        }
-
-        const onSortingChanged = () => {
-            const sort = column.getSort();
-            comp.addOrRemoveCssClass('ag-header-cell-sorted-asc', sort === 'asc');
-            comp.addOrRemoveCssClass('ag-header-cell-sorted-desc', sort === 'desc');
-            comp.addOrRemoveCssClass('ag-header-cell-sorted-none', !sort);
-
-            if (column.getColDef().showRowGroup) {
-                const sourceColumns = this.beans.showRowGroupCols?.getSourceColumnsForGroupColumn(column);
-                // this == is intentional, as it allows null and undefined to match, which are both unsorted states
-                const sortDirectionsMatch = sourceColumns?.every(
-                    (sourceCol) => column.getSort() == sourceCol.getSort()
-                );
-                const isMultiSorting = !sortDirectionsMatch;
-
-                comp.addOrRemoveCssClass('ag-header-cell-sorted-mixed', isMultiSorting);
+    public setupHeader(comp: Component, column: AgColumn): void {
+        const refreshStyles = () => {
+            const { type, direction } = getSortDefFromInput(column.getSortDef());
+            comp.toggleCss('ag-header-cell-sorted-asc', direction === 'asc');
+            comp.toggleCss('ag-header-cell-sorted-desc', direction === 'desc');
+            comp.toggleCss('ag-header-cell-sorted-abs-asc', type === 'absolute' && direction === 'asc');
+            comp.toggleCss('ag-header-cell-sorted-abs-desc', type === 'absolute' && direction === 'desc');
+            comp.toggleCss('ag-header-cell-sorted-none', !direction);
+            if (column.showRowGroup) {
+                const isMixed = this.beans.showRowGroupCols?.isGroupSortMixed(column, direction) ?? true;
+                comp.toggleCss('ag-header-cell-sorted-mixed', isMixed);
             }
         };
+
         comp.addManagedEventListeners({
-            sortChanged: onSortingChanged,
-            columnRowGroupChanged: onSortingChanged,
+            sortChanged: refreshStyles,
+            columnPinned: refreshStyles,
+            columnRowGroupChanged: refreshStyles,
+            displayedColumnsChanged: refreshStyles,
         });
+
+        // A column already sorted when its header is created (e.g. from initialState) must have correct styles
+        refreshStyles();
     }
 
     public initCol(column: AgColumn): void {
-        const { sort, initialSort, sortIndex, initialSortIndex } = column.colDef;
-
-        if (sort !== undefined) {
-            if (sort === 'asc' || sort === 'desc') {
-                column.sort = sort;
-            }
-        } else {
-            if (initialSort === 'asc' || initialSort === 'desc') {
-                column.sort = initialSort;
-            }
+        const { sortIndex, initialSortIndex } = column.colDef;
+        const sortDef = getSortDefFromColDef(column.colDef);
+        if (sortDef) {
+            column.setSortDef(sortDef);
         }
-
-        if (sortIndex !== undefined) {
-            if (sortIndex !== null) {
-                column.sortIndex = sortIndex;
-            }
-        } else {
-            if (initialSortIndex !== null) {
-                column.sortIndex = initialSortIndex;
-            }
+        // sortIndex wins over initialSortIndex; null/undefined leaves it unset.
+        const idx = sortIndex !== undefined ? sortIndex : initialSortIndex;
+        if (idx != null) {
+            column.sortIndex = idx;
         }
     }
 
-    public updateColSort(column: AgColumn, sort: SortDirection | undefined, source: ColumnEventType): void {
-        if (sort !== undefined) {
-            if (sort === 'desc' || sort === 'asc') {
-                this.setColSort(column, sort, source);
+    /** Update a column's sort from a sort def; `undefined` is a no-op. */
+    public updateColSort(
+        column: AgColumn,
+        sortDefOrDirection: SortDirection | SortDef | undefined,
+        source: ColumnEventType
+    ): void {
+        if (sortDefOrDirection !== undefined) {
+            this.setColSort(column, getSortDefFromInput(sortDefOrDirection), source);
+        }
+    }
+
+    private setColSort(column: AgColumn, sortDef: SortDef, source: ColumnEventType, cycleIndex?: number): void {
+        const prevSortDef = column.getSortDef();
+        // Stamped before the events below, so a re-entrant sort write during dispatch clears it and wins.
+        column.sortCycleIndex = cycleIndex;
+        if (!areSortDefsEqual(prevSortDef, sortDef)) {
+            // Presence flip changes membership (drop all); direction/type-only keeps order (drop opts).
+            if (!!prevSortDef?.direction !== !!sortDef.direction) {
+                this.invalidate();
             } else {
-                this.setColSort(column, undefined, source);
+                this.opts = null;
             }
-        }
-    }
-
-    private setColSort(column: AgColumn, sort: SortDirection | undefined, source: ColumnEventType): void {
-        if (column.sort !== sort) {
-            column.sort = sort;
+            column.setSortDef(sortDef);
             column.dispatchColEvent('sortChanged', source);
         }
         column.dispatchStateUpdatedEvent('sort');
@@ -367,14 +386,38 @@ export class SortService extends BeanStub implements NamedBean {
 
     public setColSortIndex(column: AgColumn, sortOrder?: number | null): void {
         column.sortIndex = sortOrder;
+        this.invalidate();
         column.dispatchStateUpdatedEvent('sortIndex');
     }
+}
 
-    public createSortIndicator(skipTemplate?: boolean): SortIndicatorComp {
-        return new SortIndicatorComp(skipTemplate);
-    }
+/** Order by `sortIndex` ascending; cols without one sort last (sentinel) and, being equal, keep their
+ *  discovery order via stable sort (ES2019+). */
+const compareBySortIndex = (a: AgColumn, b: AgColumn): number =>
+    (a.sortIndex ?? 0x7fffffff) - (b.sortIndex ?? 0x7fffffff);
 
-    public getSortIndicatorSelector(): ComponentSelector {
-        return SortIndicatorSelector;
+/** True when two sort defs match. A falsy/absent def is treated as unsorted (direction `null`). */
+const areSortDefsEqual = (sortDef1: SortDef | null | undefined, sortDef2: SortDef | null | undefined): boolean => {
+    if (!sortDef1) {
+        return sortDef2 ? sortDef2.direction === null : true;
     }
+    if (!sortDef2) {
+        return sortDef1.direction === null;
+    }
+    return sortDef1.type === sortDef2.type && sortDef1.direction === sortDef2.direction;
+};
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _getSortModel(sortSvc: SortService | undefined): SortModelItem[] {
+    const opts = sortSvc?.getSortOptions();
+    if (!opts) {
+        return [];
+    }
+    const len = opts.length;
+    const model: SortModelItem[] = new Array(len);
+    for (let i = 0; i < len; ++i) {
+        const o = opts[i];
+        model[i] = { sort: o.sort, type: o.type, colId: (o.column as AgColumn).colId };
+    }
+    return model;
 }

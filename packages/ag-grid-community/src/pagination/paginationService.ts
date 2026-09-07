@@ -1,10 +1,9 @@
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
-import type { RowNode } from '../entities/rowNode';
-import type { RowPosition } from '../interfaces/iRowPosition';
-import { _exists } from '../utils/generic';
-import type { ComponentSelector } from '../widgets/component';
+import type { Component, ComponentSelector } from '../widgets/component';
 import { PaginationSelector } from './paginationComp';
+
+const DEFAULT_PAGE_SIZE = 100;
 
 export class PaginationService extends BeanStub implements NamedBean {
     beanName = 'pagination' as const;
@@ -20,8 +19,8 @@ export class PaginationService extends BeanStub implements NamedBean {
     private pageSizeAutoCalculated?: number; // When paginationAutoPageSize = true or when the pages panel is disabled
     private pageSizeFromPageSizeSelector?: number; // When user selects page size from page size selector.
     private pageSizeFromInitialState?: number; // When the initial grid state is loaded, and a page size rehydrated
+    private pageSizeFromPanel?: number; // When the pageSize pagination panel config sets paginationPageSize.
     private pageSizeFromGridOptions?: number; // When user sets gridOptions.paginationPageSize.
-    private defaultPageSize: 100; // When nothing else set, default page size is 100.
 
     private totalPages: number;
     private currentPage = 0;
@@ -35,13 +34,15 @@ export class PaginationService extends BeanStub implements NamedBean {
         const gos = this.gos;
         this.active = gos.get('pagination');
         this.pageSizeFromGridOptions = gos.get('paginationPageSize');
+        this.pageSizeFromPanel = this.getPanelPageSize();
         this.paginateChildRows = this.isPaginateChildRows();
 
         this.addManagedPropertyListener('pagination', this.onPaginationGridOptionChanged.bind(this));
         this.addManagedPropertyListener('paginationPageSize', this.onPageSizeGridOptionChanged.bind(this));
+        this.addManagedPropertyListener('paginationPanels', this.onPanelsChanged.bind(this));
     }
 
-    public getPaginationSelector(): ComponentSelector {
+    public getPaginationSelector(): ComponentSelector<Component> {
         return PaginationSelector;
     }
 
@@ -71,10 +72,41 @@ export class PaginationService extends BeanStub implements NamedBean {
         this.setPageSize(this.gos.get('paginationPageSize'), 'gridOptions');
     }
 
+    private getPanelPageSize(): number | undefined {
+        const panels = this.gos.get('paginationPanels');
+        if (!panels) {
+            return undefined;
+        }
+        for (let i = 0, len = panels.length; i < len; ++i) {
+            const panel = panels[i];
+            if (typeof panel === 'object' && panel.type === 'pageSize') {
+                return panel.paginationPageSize;
+            }
+        }
+        return undefined;
+    }
+
+    private onPanelsChanged(): void {
+        const newPageSize = this.getPanelPageSize();
+        if (newPageSize !== this.pageSizeFromPanel) {
+            this.setPageSize(newPageSize, 'panel');
+        }
+    }
+
     public goToPage(page: number): void {
         const currentPage = this.currentPage;
         if (!this.active || currentPage === page || typeof currentPage !== 'number') {
             return;
+        }
+
+        const { editSvc } = this.beans;
+
+        if (editSvc?.isEditing()) {
+            if (editSvc.isBatchEditing()) {
+                editSvc.cleanupEditors();
+            } else {
+                editSvc.stopEditing(undefined, { source: 'api' });
+            }
         }
 
         this.currentPage = page;
@@ -83,31 +115,24 @@ export class PaginationService extends BeanStub implements NamedBean {
         this.dispatchPaginationChangedEvent({ newPage: true });
     }
 
-    public isRowPresent(rowNode: RowNode): boolean {
-        const nodeIsInPage =
-            rowNode.rowIndex! >= this.topDisplayedRowIndex && rowNode.rowIndex! <= this.bottomDisplayedRowIndex;
-        return nodeIsInPage;
-    }
-
-    private getPageForIndex(index: number): number {
-        return Math.floor(index / this.pageSize);
-    }
-
-    public goToPageWithIndex(index: any): void {
+    public goToPageWithIndex(index: number): void {
         if (!this.active) {
             return;
         }
 
-        const pageNumber = this.getPageForIndex(index);
-        this.goToPage(pageNumber);
+        let adjustedIndex = index;
+        if (!this.paginateChildRows) {
+            adjustedIndex = this.beans.rowModel.getTopLevelIndexFromDisplayedIndex?.(index) ?? index;
+        }
+
+        this.goToPage(Math.floor(adjustedIndex / this.pageSize));
     }
 
-    public isRowInPage(row: RowPosition): boolean {
+    public isRowInPage(rowIndex: number): boolean {
         if (!this.active) {
             return true;
         }
-        const rowPage = this.getPageForIndex(row.rowIndex);
-        return rowPage === this.currentPage;
+        return rowIndex >= this.topDisplayedRowIndex && rowIndex <= this.bottomDisplayedRowIndex;
     }
 
     public getCurrentPage(): number {
@@ -127,9 +152,7 @@ export class PaginationService extends BeanStub implements NamedBean {
     }
 
     public goToLastPage(): void {
-        const rowCount = this.beans.rowModel.getRowCount();
-        const lastPage = Math.floor(rowCount / this.pageSize);
-        this.goToPage(lastPage);
+        this.goToPage(Math.max(0, this.totalPages - 1));
     }
 
     public getPageSize(): number {
@@ -146,21 +169,26 @@ export class PaginationService extends BeanStub implements NamedBean {
     }
 
     private get pageSize(): number {
+        const {
+            pageSizeAutoCalculated,
+            pageSizeFromInitialState,
+            pageSizeFromPanel,
+            pageSizeFromGridOptions,
+            pageSizeFromPageSizeSelector,
+            gos,
+        } = this;
+
         // Explicitly check for autosize status as this can be set to false before the calculated value is cleared.
         // Due to a race condition in when event listeners are added.
-        if (_exists(this.pageSizeAutoCalculated) && this.gos.get('paginationAutoPageSize')) {
-            return this.pageSizeAutoCalculated;
-        }
-        if (_exists(this.pageSizeFromPageSizeSelector)) {
-            return this.pageSizeFromPageSizeSelector;
-        }
-        if (_exists(this.pageSizeFromInitialState)) {
-            return this.pageSizeFromInitialState;
-        }
-        if (_exists(this.pageSizeFromGridOptions)) {
-            return this.pageSizeFromGridOptions;
-        }
-        return this.defaultPageSize;
+        const autoValue = gos.get('paginationAutoPageSize') ? pageSizeAutoCalculated : undefined;
+        return (
+            autoValue ??
+            pageSizeFromPageSizeSelector ??
+            pageSizeFromInitialState ??
+            pageSizeFromPanel ??
+            pageSizeFromGridOptions ??
+            DEFAULT_PAGE_SIZE
+        );
     }
 
     public calculatePages(): void {
@@ -196,7 +224,7 @@ export class PaginationService extends BeanStub implements NamedBean {
 
     public setPageSize(
         size: number | undefined,
-        source: 'autoCalculated' | 'pageSizeSelector' | 'initialState' | 'gridOptions'
+        source: 'autoCalculated' | 'pageSizeSelector' | 'initialState' | 'panel' | 'gridOptions'
     ): void {
         const currentSize = this.pageSize;
         switch (source) {
@@ -212,13 +240,13 @@ export class PaginationService extends BeanStub implements NamedBean {
             case 'initialState':
                 this.pageSizeFromInitialState = size;
                 break;
+            case 'panel':
+                this.pageSizeFromPanel = size;
+                this.applyExplicitPageSize(size);
+                break;
             case 'gridOptions':
                 this.pageSizeFromGridOptions = size;
-                this.pageSizeFromInitialState = undefined;
-                this.pageSizeFromPageSizeSelector = undefined;
-                if (this.currentPage !== 0) {
-                    this.goToFirstPage();
-                }
+                this.applyExplicitPageSize(size);
                 break;
         }
 
@@ -226,6 +254,19 @@ export class PaginationService extends BeanStub implements NamedBean {
             this.calculatePages();
 
             this.dispatchPaginationChangedEvent({ newPageSize: true, keepRenderedRows: true });
+        }
+    }
+
+    // Only a concrete page size overrides the user's selector/initial-state choice. When the override
+    // is removed (size undefined), keep those values so the previously selected page size is preserved.
+    private applyExplicitPageSize(size: number | undefined): void {
+        if (size === undefined) {
+            return;
+        }
+        this.pageSizeFromInitialState = undefined;
+        this.pageSizeFromPageSizeSelector = undefined;
+        if (this.currentPage !== 0) {
+            this.goToFirstPage();
         }
     }
 
@@ -269,6 +310,9 @@ export class PaginationService extends BeanStub implements NamedBean {
 
         this.adjustCurrentPageIfInvalid();
 
+        // Read `currentPage` only after `adjustCurrentPageIfInvalid()`, as it may clamp the current
+        // page (e.g. when jumping to the last page). Using the pre-clamp value here computes the
+        // wrong row bounds and can leave the viewport stuck, so keep this read below the adjust call.
         const currentPage = this.currentPage;
 
         const masterPageStartIndex = pageSize * currentPage;
@@ -279,14 +323,12 @@ export class PaginationService extends BeanStub implements NamedBean {
         }
 
         this.topDisplayedRowIndex = rowModel.getTopLevelRowDisplayedIndex(masterPageStartIndex);
-        // masterRows[masterPageStartIndex].rowIndex;
 
         if (masterPageEndIndex === masterLastRowIndex) {
             // if showing the last master row, then we want to show the very last row of the model
             this.bottomDisplayedRowIndex = rowModel.getRowCount() - 1;
         } else {
             const firstIndexNotToShow = rowModel.getTopLevelRowDisplayedIndex(masterPageEndIndex + 1);
-            //masterRows[masterPageEndIndex + 1].rowIndex;
             // this gets the index of the last child - eg current row is open, we want to display all children,
             // the index of the last child is one less than the index of the next parent row.
             this.bottomDisplayedRowIndex = firstIndexNotToShow - 1;
@@ -306,12 +348,16 @@ export class PaginationService extends BeanStub implements NamedBean {
             return;
         }
 
-        const { pageSize, currentPage } = this;
+        const pageSize = this.pageSize;
         const maxRowIndex = masterRowCount - 1;
         this.totalPages = Math.floor(maxRowIndex / pageSize) + 1;
 
         this.adjustCurrentPageIfInvalid();
 
+        // Read `currentPage` only after `adjustCurrentPageIfInvalid()`, as it may clamp the current
+        // page (e.g. when jumping to the last page). Using the pre-clamp value here computes the
+        // wrong row bounds and can leave the viewport stuck, so keep this read below the adjust call.
+        const currentPage = this.currentPage;
         this.topDisplayedRowIndex = pageSize * currentPage;
         this.bottomDisplayedRowIndex = pageSize * (currentPage + 1) - 1;
 

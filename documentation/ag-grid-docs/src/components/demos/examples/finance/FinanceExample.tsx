@@ -1,28 +1,27 @@
+import { useIntersectionObserver } from '@ag-website-shared/utils/hooks/useIntersectionObserver';
 import { AgChartsEnterpriseModule } from 'ag-charts-enterprise';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
     AllCommunityModule,
-    ClientSideRowModelModule,
     type ColDef,
     type GetRowIdFunc,
     type GetRowIdParams,
     type GridSizeChangedEvent,
-    ModuleRegistry,
     type ValueFormatterFunc,
     type ValueGetterParams,
 } from 'ag-grid-community';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
 import {
     AdvancedFilterModule,
     CellSelectionModule,
+    ClipboardModule,
     ColumnMenuModule,
     ColumnsToolPanelModule,
     ContextMenuModule,
     ExcelExportModule,
     FiltersToolPanelModule,
     IntegratedChartsModule,
+    PdfExportModule,
     RichSelectModule,
     RowGroupingModule,
     RowGroupingPanelModule,
@@ -30,12 +29,11 @@ import {
     SparklinesModule,
     StatusBarModule,
 } from 'ag-grid-enterprise';
-import { AgGridReact } from 'ag-grid-react';
+import { AgGridProvider, AgGridReact } from 'ag-grid-react';
 
 import styles from './FinanceExample.module.css';
 import { getData } from './data';
 import { getTickerCellRenderer } from './renderers/getTickerCellRenderer';
-import { sparklineTooltipRenderer } from './renderers/sparklineTooltipRenderer';
 
 export interface Props {
     gridTheme?: string;
@@ -94,9 +92,8 @@ const BREAKPOINT_CONFIG: Record<
     },
 };
 
-ModuleRegistry.registerModules([
+const modules = [
     AllCommunityModule,
-    ClientSideRowModelModule,
     AdvancedFilterModule,
     ColumnsToolPanelModule,
     ExcelExportModule,
@@ -111,7 +108,9 @@ ModuleRegistry.registerModules([
     StatusBarModule,
     IntegratedChartsModule.with(AgChartsEnterpriseModule),
     SparklinesModule.with(AgChartsEnterpriseModule),
-]);
+    ClipboardModule,
+    PdfExportModule,
+];
 
 const numberFormatter: ValueFormatterFunc = ({ value }) => {
     const formatter = new Intl.NumberFormat('en-US', {
@@ -131,10 +130,11 @@ export const FinanceExample: React.FC<Props> = ({
 }) => {
     const [rowData, setRowData] = useState(getData());
     const gridRef = useRef<AgGridReact>(null);
+    const gridWrapperRef = useRef<HTMLDivElement>(null);
+    const intervalId = useRef<ReturnType<typeof setInterval>>();
     const [breakpoint, setBreakpoint] = useState<Breakpoint>('xlarge');
-
-    useEffect(() => {
-        const intervalId = setInterval(() => {
+    const createUpdater = useCallback(() => {
+        return setInterval(() => {
             setRowData((rowData) =>
                 rowData.map((item) => {
                     const isRandomChance = Math.random() < 0.1;
@@ -160,9 +160,18 @@ export const FinanceExample: React.FC<Props> = ({
                 })
             );
         }, updateInterval);
-
-        return () => clearInterval(intervalId);
     }, [updateInterval]);
+
+    useIntersectionObserver({
+        elementRef: gridWrapperRef as any,
+        onChange: ({ isIntersecting }: { isIntersecting: boolean }) => {
+            if (isIntersecting) {
+                intervalId.current = createUpdater();
+            } else {
+                clearInterval(intervalId.current);
+            }
+        },
+    });
 
     const colDefs = useMemo<ColDef[]>(() => {
         const breakpointConfig = BREAKPOINT_CONFIG[breakpoint];
@@ -184,6 +193,7 @@ export const FinanceExample: React.FC<Props> = ({
             {
                 field: 'ticker',
                 cellRenderer: getTickerCellRenderer(Boolean(breakpointConfig.hideTickerName)),
+                enableRowGroup: false,
                 ...tickerWidthDefs,
             },
             {
@@ -191,6 +201,7 @@ export const FinanceExample: React.FC<Props> = ({
                 field: 'timeline',
                 sortable: false,
                 filter: false,
+                enableRowGroup: false,
                 cellRenderer: 'agSparklineCellRenderer',
                 cellRendererParams: {
                     sparklineOptions: {
@@ -198,9 +209,6 @@ export const FinanceExample: React.FC<Props> = ({
                         direction: 'vertical',
                         axis: {
                             strokeWidth: 0,
-                        },
-                        tooltip: {
-                            renderer: sparklineTooltipRenderer,
                         },
                     },
                 },
@@ -219,6 +227,7 @@ export const FinanceExample: React.FC<Props> = ({
                 cellDataType: 'number',
                 filter: 'agNumberColumnFilter',
                 type: 'rightAligned',
+                enableRowGroup: false,
                 cellRenderer: 'agAnimateShowChangeCellRenderer',
                 valueGetter: ({ data }: ValueGetterParams) => data && data.quantity * (data.price / data.purchasePrice),
                 valueFormatter: numberFormatter,
@@ -230,6 +239,7 @@ export const FinanceExample: React.FC<Props> = ({
                 colId: 'totalValue',
                 headerName: 'Total Value',
                 type: 'rightAligned',
+                enableRowGroup: false,
                 cellDataType: 'number',
                 filter: 'agNumberColumnFilter',
                 valueGetter: ({ data }: ValueGetterParams) => data && data.quantity * data.price,
@@ -245,18 +255,20 @@ export const FinanceExample: React.FC<Props> = ({
             allColDefs.push(
                 {
                     field: 'quantity',
+                    enableRowGroup: false,
                     cellDataType: 'number',
                     type: 'rightAligned',
                     valueFormatter: numberFormatter,
-                    maxWidth: 75,
+                    minWidth: 75,
                 },
                 {
                     headerName: 'Price',
                     field: 'purchasePrice',
+                    enableRowGroup: false,
                     cellDataType: 'number',
                     type: 'rightAligned',
                     valueFormatter: numberFormatter,
-                    maxWidth: 75,
+                    minWidth: 75,
                 }
             );
         }
@@ -307,29 +319,31 @@ export const FinanceExample: React.FC<Props> = ({
     );
 
     const themeClass = `${gridTheme}${isDarkMode ? '-dark' : ''}`;
-    const chartThemes = isDarkMode ? ['ag-default-dark'] : ['ag-default'];
+    const chartThemes = useMemo(() => (isDarkMode ? ['ag-default-dark'] : ['ag-default']), [isDarkMode]);
 
     return (
-        <div
-            style={gridHeight ? { height: gridHeight } : {}}
-            className={`${themeClass} ${styles.grid} ${gridHeight ? '' : styles.gridHeight}`}
-        >
-            <AgGridReact
-                theme="legacy"
-                chartThemes={chartThemes}
-                ref={gridRef}
-                getRowId={getRowId}
-                rowData={rowData}
-                columnDefs={colDefs}
-                defaultColDef={defaultColDef}
-                cellSelection={true}
-                enableCharts
-                rowGroupPanelShow={enableRowGroup ? 'always' : 'never'}
-                suppressAggFuncInHeader
-                groupDefaultExpanded={-1}
-                statusBar={statusBar}
-                onGridSizeChanged={onGridSizeChanged}
-            />
-        </div>
+        <AgGridProvider modules={modules}>
+            <div
+                ref={gridWrapperRef}
+                style={gridHeight ? { height: gridHeight } : {}}
+                className={`${themeClass} ${styles.grid} ${gridHeight ? '' : styles.gridHeight}`}
+            >
+                <AgGridReact
+                    chartThemes={chartThemes}
+                    ref={gridRef}
+                    getRowId={getRowId}
+                    rowData={rowData}
+                    columnDefs={colDefs}
+                    defaultColDef={defaultColDef}
+                    cellSelection={true}
+                    enableCharts
+                    rowGroupPanelShow={enableRowGroup ? 'always' : 'never'}
+                    suppressAggFuncInHeader
+                    groupDefaultExpanded={-1}
+                    statusBar={statusBar}
+                    onGridSizeChanged={onGridSizeChanged}
+                />
+            </div>
+        </AgGridProvider>
     );
 };

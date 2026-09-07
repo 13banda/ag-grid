@@ -1,20 +1,21 @@
 {
   "name": "@ag-grid-community/locale",
-  "version": "33.0.1",
+  "version": "36.1.0-beta.20260904.1143",
+  "description": "Localisation Module for AG Grid, providing translations in 31 languages.",
   "main": "./dist/package/main.cjs.js",
   "types": "./dist/types/src/main.d.ts",
   "module": "./dist/package/main.esm.mjs",
   "exports": {
     ".": {
       "import": "./dist/package/main.esm.mjs",
-      "require": "./dist/package/main.cjs.js",
       "types": "./dist/types/src/main.d.ts",
+      "require": "./dist/package/main.cjs.js",
       "default": "./dist/package/main.cjs.js"
     },
     "./*.js": {
       "import": "./dist/package/*.esm.mjs",
-      "require": "./dist/package/*.cjs.js",
       "types": "./dist/types/src/*.d.ts",
+      "require": "./dist/package/*.cjs.js",
       "default": "./dist/package/*.cjs.js"
     }
   },
@@ -37,18 +38,12 @@
     "not op_mini all",
     "not operamobile >= 0"
   ],
-  "homepage": "https://ag-grid.com/",
+  "homepage": "https://www.ag-grid.com/",
   "devDependencies": {
-    "@jest/globals": "29.6.1",
-    "@types/jest": "^29.5.0",
-    "@types/node": "^16.0.0",
-    "@typescript-eslint/eslint-plugin": "^5.51.0",
-    "@typescript-eslint/parser": "^5.51.0",
-    "jest": "^29.5.0",
-    "jest-runner": "^29.5.0",
-    "jest-serial-runner": "^1.2.1",
-    "ts-jest": "^29.1.0",
-    "typescript": "~5.2.2"
+    "@types/node": "^22.15.3",
+    "@typescript-eslint/eslint-plugin": "8.59.0",
+    "@typescript-eslint/parser": "8.59.0",
+    "typescript": "~5.8.3"
   },
   "publishConfig": {
     "access": "public"

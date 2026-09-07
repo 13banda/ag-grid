@@ -1,23 +1,23 @@
-import type { ColKey } from '../columns/columnModel';
-import type { HorizontalDirection } from '../constants/direction';
+import type { HorizontalDirection } from 'ag-stack';
+import { _last, _moveInArray, _removeFromArray } from 'ag-stack';
+
+import { _setColsVisible } from '../columns/columnStateUtils';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
-import type { DragSource } from '../dragAndDrop/dragAndDropService';
+import type { GridDragSource } from '../dragAndDrop/dragAndDropService';
 import { DragSourceType } from '../dragAndDrop/dragAndDropService';
 import type { AgColumn } from '../entities/agColumn';
 import type { AgColumnGroup } from '../entities/agColumnGroup';
 import { isColumnGroup } from '../entities/agColumnGroup';
-import type { ColDef } from '../entities/colDef';
+import type { ColDef, ColKey } from '../entities/colDef';
 import type { ColumnEventType } from '../events';
-import type { Column, ColumnPinnedType } from '../interfaces/iColumn';
+import type { ColumnPinnedType } from '../interfaces/iColumn';
 import type { DragItem } from '../interfaces/iDragItem';
-import { _last, _moveInArray, _removeFromArray } from '../utils/array';
-import { _warn } from '../validation/logging';
 import { BodyDropTarget } from './columnDrag/bodyDropTarget';
 import { doesMovePassMarryChildren } from './columnMoveUtils';
-import { attemptMoveColumns, normaliseX, setColumnsMoving } from './internalColumnMoveUtils';
+import { attemptMoveColumns, clientXToSectionX, normaliseX, setColumnsMoving } from './internalColumnMoveUtils';
 
-enum Direction {
+enum MoveDirection {
     LEFT = -1,
     NONE = 0,
     RIGHT = 1,
@@ -26,12 +26,7 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
     beanName = 'colMoves' as const;
 
     public moveColumnByIndex(fromIndex: number, toIndex: number, source: ColumnEventType): void {
-        const gridColumns = this.beans.colModel.getCols();
-        if (!gridColumns) {
-            return;
-        }
-
-        const column = gridColumns[fromIndex];
+        const column = this.beans.colModel.colsList[fromIndex];
         this.moveColumns([column], toIndex, source);
     }
 
@@ -41,36 +36,43 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
         source: ColumnEventType,
         finished: boolean = true
     ): void {
-        const { colModel, colAnimation, visibleCols, eventSvc } = this.beans;
-        const gridColumns = colModel.getCols();
-        if (!gridColumns) {
-            return;
-        }
+        const { colModel, visibleCols } = this.beans;
+        const colAnimation = this.beans.colAnimation;
+        const gridColumns = colModel.colsList;
 
         if (toIndex > gridColumns.length - columnsToMoveKeys.length) {
             // Trying to insert in invalid position
-            _warn(30, { toIndex });
+            this.warn(30, { toIndex });
             return;
         }
 
         colAnimation?.start();
-        // we want to pull all the columns out first and put them into an ordered list
-        const movedColumns = colModel.getColsForKeys(columnsToMoveKeys);
+        try {
+            // we want to pull all the columns out first and put them into an ordered list
+            const movedColumns: AgColumn[] = [];
+            for (let i = 0, len = columnsToMoveKeys.length; i < len; ++i) {
+                const col = colModel.getCol(columnsToMoveKeys[i]);
+                if (col) {
+                    movedColumns.push(col);
+                }
+            }
 
-        if (this.doesMovePassRules(movedColumns, toIndex)) {
-            _moveInArray(colModel.getCols(), movedColumns, toIndex);
-            visibleCols.refresh(source);
-            eventSvc.dispatchEvent({
-                type: 'columnMoved',
-                columns: movedColumns,
-                column: movedColumns.length === 1 ? movedColumns[0] : null,
-                toIndex,
-                finished,
-                source,
-            });
+            if (this.doesMovePassRules(movedColumns, toIndex)) {
+                _moveInArray(colModel.colsList, movedColumns, toIndex);
+                colModel.markColsListIndexDirty();
+                visibleCols.refresh(source, false);
+                this.eventSvc.dispatchEvent({
+                    type: 'columnMoved',
+                    columns: movedColumns,
+                    column: movedColumns.length === 1 ? movedColumns[0] : null,
+                    toIndex,
+                    finished,
+                    source,
+                });
+            }
+        } finally {
+            colAnimation?.finish();
         }
-
-        colAnimation?.finish();
     }
 
     private doesMovePassRules(columnsToMove: AgColumn[], toIndex: number): boolean {
@@ -81,36 +83,34 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
 
     public doesOrderPassRules(gridOrder: AgColumn[]) {
         const { colModel, gos } = this.beans;
-        if (!doesMovePassMarryChildren(gridOrder, colModel.getColTree())) {
+        if (colModel.hasMarryChildren && !doesMovePassMarryChildren(gridOrder, colModel.colsTree)) {
             return false;
         }
 
         const doesMovePassLockedPositions = (proposedColumnOrder: AgColumn[]) => {
             const lockPositionToPlacement = (position: ColDef['lockPosition']) => {
                 if (!position) {
-                    return Direction.NONE;
+                    return MoveDirection.NONE;
                 }
-                return position === 'left' || position === true ? Direction.LEFT : Direction.RIGHT;
+                return position === 'left' || position === true ? MoveDirection.LEFT : MoveDirection.RIGHT;
             };
 
             const isRtl = gos.get('enableRtl');
-            let lastPlacement = isRtl ? Direction.RIGHT : Direction.LEFT;
+            let lastPlacement = isRtl ? MoveDirection.RIGHT : MoveDirection.LEFT;
             let rulePassed = true;
-            proposedColumnOrder.forEach((col) => {
-                const placement = lockPositionToPlacement(col.getColDef().lockPosition);
+            for (const col of proposedColumnOrder) {
+                const placement = lockPositionToPlacement(col.colDef.lockPosition);
                 if (isRtl) {
                     if (placement > lastPlacement) {
                         // If placement goes up, we're not in the correct order
                         rulePassed = false;
                     }
-                } else {
-                    if (placement < lastPlacement) {
-                        // If placement goes down, we're not in the correct order
-                        rulePassed = false;
-                    }
+                } else if (placement < lastPlacement) {
+                    // If placement goes down, we're not in the correct order
+                    rulePassed = false;
                 }
                 lastPlacement = placement;
-            });
+            }
 
             return rulePassed;
         };
@@ -122,14 +122,13 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
     }
 
     public getProposedColumnOrder(columnsToMove: AgColumn[], toIndex: number): AgColumn[] {
-        const gridColumns = this.beans.colModel.getCols();
-        const proposedColumnOrder = gridColumns.slice();
-        _moveInArray(proposedColumnOrder, columnsToMove as AgColumn[], toIndex);
+        const proposedColumnOrder = this.beans.colModel.colsList.slice();
+        _moveInArray(proposedColumnOrder, columnsToMove, toIndex);
         return proposedColumnOrder;
     }
 
-    public createBodyDropTarget(pinned: ColumnPinnedType, dropContainer: HTMLElement): BodyDropTarget {
-        return new BodyDropTarget(pinned, dropContainer);
+    public createBodyDropTarget(dropContainer: HTMLElement): BodyDropTarget {
+        return new BodyDropTarget(dropContainer);
     }
 
     public moveHeader(
@@ -144,15 +143,12 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
         const left = rect.left;
         const isGroup = isColumnGroup(column);
         const width = isGroup ? rect.width : column.getActualWidth();
-        const isLeft = (hDirection === 'left') !== gos.get('enableRtl');
+        const isRtl = gos.get('enableRtl');
+        const isLeft = (hDirection === 'left') !== isRtl;
 
-        const xPosition = normaliseX({
-            x: isLeft ? left - 20 : left + width + 20,
-            pinned,
-            fromKeyboard: true,
-            gos,
-            ctrlsSvc,
-        });
+        const screenX = isLeft ? left - 20 : left + width + 20;
+        const sectionX = clientXToSectionX(screenX, pinned, ctrlsSvc);
+        const xPosition = normaliseX({ x: sectionX, pinned, isRtl, ctrlsSvc });
         const headerPosition = focusSvc.focusedHeader;
 
         attemptMoveColumns({
@@ -188,7 +184,7 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
                 if (!leafCols.length) {
                     return;
                 }
-                const parent = leafCols[0].getParent();
+                const parent = leafCols[0].parent;
                 if (!parent) {
                     return;
                 }
@@ -212,15 +208,16 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
         eSource: HTMLElement,
         column: AgColumn | AgColumnGroup,
         displayName: string | null
-    ): DragSource {
-        const { gos, colModel, dragAndDrop, visibleCols } = this.beans;
+    ): GridDragSource {
+        const beans = this.beans;
+        const { gos, dragAndDrop, visibleCols } = beans;
         let hideColumnOnExit = !gos.get('suppressDragLeaveHidesColumns');
         const isGroup = isColumnGroup(column);
         const columns = isGroup ? column.getProvidedColumnGroup().getLeafColumns() : [column];
         const getDragItem = isGroup
             ? () => createDragItemForGroup(column, visibleCols.allCols)
             : () => createDragItem(column);
-        const dragSource: DragSource = {
+        const dragSource: GridDragSource = {
             type: DragSourceType.HeaderCell,
             eElement: eSource,
             getDefaultIconName: () => (hideColumnOnExit ? 'hide' : 'notAllowed'),
@@ -235,19 +232,15 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
             onGridEnter: (dragItem) => {
                 if (hideColumnOnExit) {
                     const { columns = [], visibleState } = dragItem ?? {};
-                    const hasVisibleState = isGroup
-                        ? (col: Column) => !visibleState || visibleState[col.getColId()]
-                        : () => true;
-                    const unlockedColumns = columns.filter(
-                        (col) => !col.getColDef().lockVisible && hasVisibleState(col)
-                    );
-                    colModel.setColsVisible(unlockedColumns as AgColumn[], true, 'uiColumnMoved');
+                    const visibleStateCols = isGroup
+                        ? columns.filter((col: AgColumn) => !visibleState || visibleState[col.colId])
+                        : columns;
+                    _setColsVisible(beans, visibleStateCols as AgColumn[], true, 'uiColumnMoved', true);
                 }
             },
             onGridExit: (dragItem) => {
                 if (hideColumnOnExit) {
-                    const unlockedColumns = dragItem?.columns?.filter((col) => !col.getColDef().lockVisible) || [];
-                    colModel.setColsVisible(unlockedColumns as AgColumn[], false, 'uiColumnMoved');
+                    _setColsVisible(beans, (dragItem?.columns ?? []) as AgColumn[], false, 'uiColumnMoved', true);
                 }
             },
         };
@@ -260,22 +253,23 @@ export class ColumnMoveService extends BeanStub implements NamedBean {
 
 function findGroupWidthId(columnGroup: AgColumnGroup | null, id: any): AgColumnGroup | undefined {
     while (columnGroup) {
-        if (columnGroup.getGroupId() === id) {
+        if (columnGroup.groupId === id) {
             return columnGroup;
         }
-        columnGroup = columnGroup.getParent();
+        columnGroup = columnGroup.parent;
     }
 
     return undefined;
 }
 
 function createDragItem(column: AgColumn): DragItem {
-    const visibleState: { [key: string]: boolean } = {};
+    const visibleState: { [key: string]: boolean } = Object.create(null);
     visibleState[column.getId()] = column.isVisible();
 
     return {
         columns: [column],
         visibleState: visibleState,
+        containerType: column.pinned,
     };
 }
 
@@ -285,19 +279,23 @@ function createDragItemForGroup(columnGroup: AgColumnGroup, allCols: AgColumn[])
     const allColumnsOriginalOrder = columnGroup.getProvidedColumnGroup().getLeafColumns();
 
     // capture visible state, used when re-entering grid to dictate which columns should be visible
-    const visibleState: { [key: string]: boolean } = {};
-    allColumnsOriginalOrder.forEach((column) => (visibleState[column.getId()] = column.isVisible()));
+    const visibleState: { [key: string]: boolean } = Object.create(null);
+    for (const column of allColumnsOriginalOrder) {
+        visibleState[column.getId()] = column.isVisible();
+    }
 
     const allColumnsCurrentOrder: AgColumn[] = [];
-    allCols.forEach((column) => {
+    for (const column of allCols) {
         if (allColumnsOriginalOrder.indexOf(column) >= 0) {
             allColumnsCurrentOrder.push(column);
             _removeFromArray(allColumnsOriginalOrder, column);
         }
-    });
+    }
 
     // we are left with non-visible columns, stick these in at the end
-    allColumnsOriginalOrder.forEach((column) => allColumnsCurrentOrder.push(column));
+    for (const column of allColumnsOriginalOrder) {
+        allColumnsCurrentOrder.push(column);
+    }
 
     const columnsInSplit: AgColumn[] = [];
     const columnGroupColumns = columnGroup.getLeafColumns();
@@ -313,5 +311,6 @@ function createDragItemForGroup(columnGroup: AgColumnGroup, allCols: AgColumn[])
         columns: allColumnsCurrentOrder,
         columnsInSplit,
         visibleState: visibleState,
+        containerType: columnsInSplit[0]?.pinned,
     };
 }

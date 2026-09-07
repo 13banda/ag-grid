@@ -1,28 +1,46 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
 import type { ICellRendererAngularComp } from 'ag-grid-angular';
 import type { ICellRendererParams } from 'ag-grid-community';
 
 @Component({
     standalone: true,
-    template: ` <div [class]="cssClass">
-        <button (click)="clicked()">Click</button>
-        {{ message }}
-    </div>`,
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    template: `
+        @if (!hidden()) {
+            <div [class]="cssClass()">
+                <button (click)="clicked()">Click</button>
+                {{ message() }}
+            </div>
+        }
+    `,
 })
 export class FullWidthCellRenderer implements ICellRendererAngularComp {
-    public cssClass!: string;
-    public message!: string;
+    hidden = signal(false);
+    cssClass = signal('');
+    message = signal('');
 
     agInit(params: ICellRendererParams): void {
-        this.cssClass = params.pinned ? 'example-full-width-pinned' : 'example-full-width-row';
-        this.message = params.pinned
-            ? `Pinned full width on ${params.pinned} - index ${params.node.rowIndex}`
-            : `Non pinned full width row at index ${params.node.rowIndex}`;
+        const {
+            pinned,
+            node: { rowIndex },
+        } = params;
+
+        if ((pinned === 'left' && rowIndex! % 4 === 0) || (pinned === 'right' && rowIndex! % 2 === 0)) {
+            this.hidden.set(true);
+            return;
+        }
+
+        this.cssClass.set(pinned ? 'example-full-width-pinned' : 'example-full-width-row');
+        this.message.set(
+            pinned
+                ? `Pinned full width on ${pinned} - index ${rowIndex}`
+                : `Non pinned full width row at index ${rowIndex}`
+        );
     }
 
     clicked() {
-        alert('button clicked');
+        console.log('button clicked');
     }
 
     refresh() {

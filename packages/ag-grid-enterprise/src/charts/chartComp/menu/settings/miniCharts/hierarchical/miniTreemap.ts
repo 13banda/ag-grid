@@ -1,13 +1,10 @@
 import type { Rect } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
-import type { ThemeTemplateParameters } from '../../miniChartsContainer';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChart } from '../miniChart';
 
-export class MiniTreemap extends MiniChart {
-    static chartType: ChartType = 'treemap';
+export class MiniTreemapClass extends MiniChart {
     private readonly rects: Rect[];
 
     constructor(
@@ -15,7 +12,6 @@ export class MiniTreemap extends MiniChart {
         agChartsExports: AgChartsExports,
         fills: string[],
         strokes: string[],
-        themeTemplate: ThemeTemplateParameters,
         isCustomTheme: boolean
     ) {
         super(container, agChartsExports, 'treemapTooltip');
@@ -50,7 +46,7 @@ export class MiniTreemap extends MiniChart {
             const width = availableWidth * widthRatio;
 
             const rows = d.length;
-            const rowParts = d.reduce((parts, ratio) => (parts += ratio), 0);
+            const rowParts = d.reduce((parts, ratio) => parts + ratio, 0);
             const rowPadding = treePadding / (rows - 1 || 1);
             const availableHeight = rows > 1 ? availableRange - treePadding : availableRange;
 
@@ -78,7 +74,7 @@ export class MiniTreemap extends MiniChart {
             return rects;
         }, [] as Rect[]);
 
-        this.updateColors(fills, strokes, themeTemplate, isCustomTheme);
+        this.updateColors(fills, strokes, isCustomTheme);
 
         const rectGroup = new _Scene.Group();
         rectGroup.setClipRect(new _Scene.BBox(padding, padding, size - padding, size - padding));
@@ -86,16 +82,19 @@ export class MiniTreemap extends MiniChart {
         this.root.append(rectGroup);
     }
 
-    updateColors(fills: string[], strokes: string[], themeTemplate?: ThemeTemplateParameters, isCustomTheme?: boolean) {
-        const defaultBackgroundColor = themeTemplate?.get(
-            this.agChartsExports._Theme.themeSymbols.DEFAULT_BACKGROUND_COLOUR
-        );
-        const backgroundFill =
-            (Array.isArray(defaultBackgroundColor) ? defaultBackgroundColor[0] : defaultBackgroundColor) ?? 'white';
+    updateColors(fills: string[], strokes: string[], isCustomTheme?: boolean) {
+        const { _Theme } = this.agChartsExports;
 
         this.rects.forEach((rect, i) => {
             rect.fill = fills[i % strokes.length];
-            rect.stroke = isCustomTheme ? strokes[i % strokes.length] : backgroundFill;
+            rect.stroke = isCustomTheme
+                ? strokes[i % strokes.length]
+                : _Theme.resolveOperation({ $ref: 'backgroundColor' });
         });
     }
 }
+
+export const MiniTreemap: MiniChartSelector = {
+    chartType: 'treemap',
+    miniChart: MiniTreemapClass,
+};

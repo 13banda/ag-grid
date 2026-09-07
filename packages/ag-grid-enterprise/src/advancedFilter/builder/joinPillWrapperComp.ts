@@ -6,9 +6,8 @@ import type {
     AdvancedFilterBuilderEvents,
     AdvancedFilterBuilderItem,
     CreatePillParams,
+    Pill,
 } from './iAdvancedFilterBuilder';
-import type { InputPillComp } from './inputPillComp';
-import type { SelectPillComp } from './selectPillComp';
 
 export class JoinPillWrapperComp extends Component<AdvancedFilterBuilderEvents> {
     private advFilterExpSvc: AdvancedFilterExpressionService;
@@ -18,18 +17,17 @@ export class JoinPillWrapperComp extends Component<AdvancedFilterBuilderEvents> 
     }
 
     private filterModel: JoinAdvancedFilterModel;
-    private ePill: SelectPillComp | InputPillComp;
+    private ePill: Pill;
 
     constructor() {
-        super(/* html */ `
-            <div class="ag-advanced-filter-builder-item-condition" role="presentation"></div>
-        `);
+        super({
+            tag: 'div',
+            cls: 'ag-advanced-filter-builder-item-condition',
+            role: 'presentation',
+        });
     }
 
-    public init(params: {
-        item: AdvancedFilterBuilderItem;
-        createPill: (params: CreatePillParams) => SelectPillComp | InputPillComp;
-    }): void {
+    public init(params: { item: AdvancedFilterBuilderItem; createPill: (params: CreatePillParams) => Pill }): void {
         const { item, createPill } = params;
         const filterModel = item.filterModel as JoinAdvancedFilterModel;
         this.filterModel = filterModel;

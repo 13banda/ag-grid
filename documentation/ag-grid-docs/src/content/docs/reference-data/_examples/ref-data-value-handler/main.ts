@@ -11,8 +11,8 @@ import {
     ModuleRegistry,
     SelectEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -25,6 +25,11 @@ import {
 import { ColourCellRenderer } from './colourCellRenderer_typescript';
 import { getData } from './data';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
@@ -34,7 +39,6 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     SelectEditorModule,
     TextEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const carMappings = {

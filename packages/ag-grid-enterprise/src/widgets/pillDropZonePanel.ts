@@ -1,26 +1,38 @@
-import type { DragAndDropIcon, DragItem, DragSourceType, DraggingEvent, DropTarget } from 'ag-grid-community';
 import {
-    Component,
-    KeyCode,
-    ManagedFocusFeature,
-    PositionableFeature,
     _areEqual,
     _clearElement,
-    _createIconNoSpan,
     _findFocusableElements,
     _findNextFocusableElement,
     _getActiveDomElement,
     _isKeyboardMode,
     _last,
+    _scrollHorizontallyToShow,
     _setAriaHidden,
     _setAriaLabel,
     _setAriaPosInSet,
     _setAriaRole,
     _setAriaSetSize,
+} from 'ag-stack';
+
+import type {
+    DragAndDropIcon,
+    DragItem,
+    DragSourceType,
+    DropTarget,
+    ElementParams,
+    GridDraggingEvent,
+} from 'ag-grid-community';
+import {
+    Component,
+    KeyCode,
+    ManagedFocusFeature,
+    PositionableFeature,
+    _createElement,
+    _createIconNoSpan,
 } from 'ag-grid-community';
 
 import type { PillDragComp } from './pillDragComp';
-import { pillDropZonePanelCSS } from './pillDropZonePanel.css-GENERATED';
+import pillDropZonePanelCSS from './pillDropZonePanel.css';
 
 export interface PillDropZonePanelParams {
     emptyMessage?: string;
@@ -38,6 +50,7 @@ function _insertArrayIntoArray<T>(dest: T[], src: T[], toIndex: number) {
     dest.splice(toIndex, 0, ...src);
 }
 
+const PillDropZonePanelElement: ElementParams = { tag: 'div', cls: 'ag-unselectable', role: 'presentation' };
 export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem> extends Component {
     private state: PillState = 'notDragging';
 
@@ -47,23 +60,23 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
     // the items to be dropped go in here
     private potentialDndItems: TItem[];
 
-    private guiDestroyFunctions: (() => void)[] = [];
+    private readonly guiDestroyFunctions: (() => void)[] = [];
 
     private params: PillDropZonePanelParams;
 
-    private childPillComponents: TPill[] = [];
+    private readonly childPillComponents: TPill[] = [];
     private insertIndex: number;
 
     // when this component is refreshed, we rip out all DOM elements and build it up
     // again from scratch. one exception is ePillDropList, as we want to maintain the
     // scroll position between the refreshes, so we create one instance of it here and
     // reuse it.
-    private ePillDropList: HTMLElement;
+    private readonly ePillDropList: HTMLElement;
 
     private positionableFeature: PositionableFeature;
     private resizeEnabled: boolean = false;
 
-    protected abstract isItemDroppable(item: TItem, draggingEvent: DraggingEvent): boolean;
+    protected abstract isItemDroppable(item: TItem, draggingEvent: GridDraggingEvent): boolean;
     protected abstract updateItems(items: TItem[]): void;
     protected abstract getExistingItems(): TItem[];
     protected abstract getIconName(): DragAndDropIcon;
@@ -75,14 +88,13 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         horizontal: boolean
     ): TPill;
     protected abstract getItems(dragItem: DragItem<TItem>): TItem[];
-    protected abstract isInterestedIn(type: DragSourceType): boolean;
+    protected abstract isInterestedIn(type: DragSourceType, sourceElement: Element): boolean;
 
     constructor(protected readonly horizontal: boolean) {
-        super(/* html */ `<div class="ag-unselectable" role="presentation"></div>`);
+        super(PillDropZonePanelElement);
         this.addElementClasses(this.getGui());
-        this.ePillDropList = document.createElement('div');
+        this.ePillDropList = _createElement({ tag: 'div' });
         this.addElementClasses(this.ePillDropList, 'list');
-        _setAriaRole(this.ePillDropList, 'listbox');
         this.registerCSS(pillDropZonePanelCSS);
     }
 
@@ -91,7 +103,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         this.resizeEnabled = resizable;
     }
 
-    protected isSourceEventFromTarget(draggingEvent: DraggingEvent): boolean {
+    protected isSourceEventFromTarget(draggingEvent: GridDraggingEvent): boolean {
         const { dropZoneTarget, dragSource } = draggingEvent;
         return dropZoneTarget.contains(dragSource.eElement);
     }
@@ -102,7 +114,9 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
     }
 
     private destroyGui(): void {
-        this.guiDestroyFunctions.forEach((func) => func());
+        for (const func of this.guiDestroyFunctions) {
+            func();
+        }
         this.guiDestroyFunctions.length = 0;
         this.childPillComponents.length = 0;
         _clearElement(this.getGui());
@@ -125,7 +139,10 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         this.createManagedBean(this.positionableFeature);
 
         this.refreshGui();
-        _setAriaLabel(this.ePillDropList, this.getAriaLabel());
+
+        this.addManagedElementListeners(this.getFocusableElement(), {
+            focusin: this.onFocusIn.bind(this),
+        });
     }
 
     private onTabKeyDown(e: KeyboardEvent): void {
@@ -144,19 +161,33 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         const shouldAllowDefaultTab = len === 1 || (isFirstFocused && shiftKey) || (isLastFocused && !shiftKey);
 
         if (!shouldAllowDefaultTab) {
-            focusableElements[shiftKey ? 0 : len - 1].focus();
+            // We want tab to jump out of the container, not select the next item, so focus the last item
+            focusableElements[shiftKey ? 0 : len - 1].focus({ preventScroll: true });
+        }
+    }
+
+    private onFocusIn(e: FocusEvent): void {
+        const root = this.getFocusableElement();
+        if (root.contains(e.relatedTarget as Node | null)) {
+            // don't scroll when we focus the last item item in order to tab out of the container
+            return;
+        }
+        const target = e.target as HTMLElement | null;
+        if (target) {
+            _scrollHorizontallyToShow(target);
         }
     }
 
     private onKeyDown(e: KeyboardEvent) {
         const { key } = e;
-        const isVertical = !this.horizontal;
+        const { beans, horizontal, gos } = this;
+        const isVertical = !horizontal;
 
         let isNext = key === KeyCode.DOWN;
         let isPrevious = key === KeyCode.UP;
 
         if (!isVertical) {
-            const isRtl = this.gos.get('enableRtl');
+            const isRtl = gos.get('enableRtl');
             isNext = (!isRtl && key === KeyCode.RIGHT) || (isRtl && key === KeyCode.LEFT);
             isPrevious = (!isRtl && key === KeyCode.LEFT) || (isRtl && key === KeyCode.RIGHT);
         }
@@ -165,12 +196,47 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
             return;
         }
 
-        const el = _findNextFocusableElement(this.beans, this.getFocusableElement(), false, isPrevious);
+        e.preventDefault();
 
-        if (el) {
-            e.preventDefault();
-            el.focus();
+        if (e.shiftKey) {
+            this.moveFocusedItem(isPrevious);
+        } else {
+            const root = this.getFocusableElement();
+            const el = _findNextFocusableElement({ beans, rootNode: root, backwards: isPrevious });
+
+            if (el) {
+                el.focus();
+                _scrollHorizontallyToShow(el);
+            }
         }
+    }
+
+    private moveFocusedItem(isPrevious: boolean): void {
+        const currentItemIndex = this.getFocusedItem();
+
+        if (currentItemIndex === -1) {
+            return;
+        }
+
+        const diff = isPrevious ? -1 : 1;
+        const changed = this.normalizeAndUpdateInsertIndex(currentItemIndex, currentItemIndex + diff);
+
+        if (!changed) {
+            return;
+        }
+
+        const comp = this.childPillComponents[currentItemIndex];
+
+        if (!comp.isMovable()) {
+            return;
+        }
+
+        const currentItem = comp.getItem();
+
+        // this will focus the target position before we call rearrangeItems
+        // rearrange items will then call refresh which will refocus the target index.
+        this.focusItemAtIndex(this.insertIndex);
+        this.rearrangeItems([currentItem], true);
     }
 
     protected addElementClasses(el: Element, suffix?: string) {
@@ -198,7 +264,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         return 0;
     }
 
-    private checkInsertIndex(draggingEvent: DraggingEvent): boolean {
+    private checkInsertIndex(draggingEvent: GridDraggingEvent): boolean {
         const newIndex = this.getNewInsertIndex(draggingEvent);
 
         // <0 happens when drag is no a direction we are interested in, eg drag is up/down but in horizontal panel
@@ -206,10 +272,14 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
             return false;
         }
 
-        const minimumAllowedIndex = this.minimumAllowedNewInsertIndex();
-        const newAdjustedIndex = Math.max(minimumAllowedIndex, newIndex);
+        return this.normalizeAndUpdateInsertIndex(this.insertIndex, newIndex);
+    }
 
-        const changed = newAdjustedIndex !== this.insertIndex;
+    private normalizeAndUpdateInsertIndex(currentIndex: number, index: number): boolean {
+        const minimumAllowedIndex = this.minimumAllowedNewInsertIndex();
+        const newAdjustedIndex = Math.max(minimumAllowedIndex, index);
+
+        const changed = newAdjustedIndex !== currentIndex;
 
         if (changed) {
             this.insertIndex = newAdjustedIndex;
@@ -218,7 +288,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         return changed;
     }
 
-    private getNewInsertIndex(draggingEvent: DraggingEvent): number {
+    private getNewInsertIndex(draggingEvent: GridDraggingEvent): number {
         const mouseEvent = draggingEvent.event;
         const mouseLocation = this.horizontal ? mouseEvent.clientX : mouseEvent.clientY;
 
@@ -260,7 +330,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         return hoveredIndex;
     }
 
-    private checkDragStartedBySelf(draggingEvent: DraggingEvent): void {
+    private checkDragStartedBySelf(draggingEvent: GridDraggingEvent): void {
         if (this.state !== 'notDragging') {
             return;
         }
@@ -274,7 +344,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         this.refreshGui();
     }
 
-    private onDragging(draggingEvent: DraggingEvent): void {
+    private onDragging(draggingEvent: GridDraggingEvent): void {
         this.checkDragStartedBySelf(draggingEvent);
 
         if (this.checkInsertIndex(draggingEvent)) {
@@ -282,9 +352,9 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         }
     }
 
-    protected handleDragEnterEnd(_: DraggingEvent): void {}
+    protected handleDragEnterEnd(_: GridDraggingEvent): void {}
 
-    private onDragEnter(draggingEvent: DraggingEvent): void {
+    private onDragEnter(draggingEvent: GridDraggingEvent): void {
         // this will contain all items that are potential drops
         const dragItems = this.getItems(draggingEvent.dragSource.getDragItem());
         this.state = 'newItemsIn';
@@ -315,9 +385,9 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         return !!this.potentialDndItems?.length;
     }
 
-    protected handleDragLeaveEnd(_: DraggingEvent): void {}
+    protected handleDragLeaveEnd(_: GridDraggingEvent): void {}
 
-    private onDragLeave(draggingEvent: DraggingEvent): void {
+    private onDragLeave(draggingEvent: GridDraggingEvent): void {
         // if the dragging started from us, we remove the group, however if it started
         // some place else, then we don't, as it was only 'asking'
 
@@ -336,7 +406,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         this.state = 'notDragging';
     }
 
-    private onDragCancel(draggingEvent: DraggingEvent): void {
+    private onDragCancel(draggingEvent: GridDraggingEvent): void {
         if (this.isPotentialDndItems()) {
             if (this.state === 'newItemsIn') {
                 this.handleDragLeaveEnd(draggingEvent);
@@ -367,6 +437,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
     private removeItems(itemsToRemove: TItem[]): void {
         const newItemList = this.getExistingItems().filter((item) => !itemsToRemove.includes(item));
         this.updateItems(newItemList);
+        this.refreshGui();
     }
 
     private addItems(itemsToAdd: TItem[]): void {
@@ -377,16 +448,23 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         const itemsToAddNoDuplicates = itemsToAdd.filter((item) => newItemList.indexOf(item) < 0);
         _insertArrayIntoArray(newItemList, itemsToAddNoDuplicates, this.insertIndex);
         this.updateItems(newItemList);
+        this.refreshGui();
     }
 
     public addItem(item: TItem): void {
         this.insertIndex = this.getExistingItems().length;
         this.addItems([item]);
-        this.refreshGui();
     }
 
-    private rearrangeItems(itemsToAdd: TItem[]): boolean {
-        const newItemList = this.getNonGhostItems().slice();
+    private rearrangeItems(itemsToAdd: TItem[], fromKeyboard?: boolean): boolean {
+        let newItemList: TItem[];
+
+        if (!fromKeyboard) {
+            newItemList = this.getNonGhostItems().slice();
+        } else {
+            newItemList = this.getExistingItems().filter((item) => itemsToAdd.indexOf(item) === -1);
+        }
+
         _insertArrayIntoArray(newItemList, itemsToAdd, this.insertIndex);
 
         if (_areEqual(newItemList, this.getExistingItems())) {
@@ -394,6 +472,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         }
 
         this.updateItems(newItemList);
+        this.refreshGui();
         return true;
     }
 
@@ -404,15 +483,22 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         // out the list which sets scroll to zero. so the user could be just
         // reordering the list - we want to prevent the resetting of the scroll.
         // this is relevant for vertical display only (as horizontal has no scroll)
-        const scrollTop = this.ePillDropList.scrollTop;
+        let scrollTop = 0;
+
+        if (!this.horizontal) {
+            scrollTop = this.ePillDropList.scrollTop;
+        }
         const resizeEnabled = this.resizeEnabled;
         const focusedIndex = this.getFocusedItem();
 
-        const { eGridDiv } = this.beans;
-        let alternateElement = _findNextFocusableElement(this.beans, eGridDiv);
-
-        if (!alternateElement) {
-            alternateElement = _findNextFocusableElement(this.beans, eGridDiv, false, true);
+        const beans = this.beans;
+        const { eGridDiv: rootNode } = beans;
+        const isKeyboardMode = _isKeyboardMode();
+        let alternateElement: HTMLElement | null = null;
+        if (isKeyboardMode) {
+            alternateElement =
+                _findNextFocusableElement({ beans, rootNode }) ??
+                _findNextFocusableElement({ beans, rootNode, backwards: true });
         }
 
         this.toggleResizable(false);
@@ -422,7 +508,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         this.addEmptyMessageToGui();
         this.addItemsToGui();
 
-        if (!this.horizontal) {
+        if (scrollTop !== 0) {
             this.ePillDropList.scrollTop = scrollTop;
         }
 
@@ -433,7 +519,7 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         // focus should only be restored when keyboard mode
         // otherwise mouse clicks will cause containers to scroll
         // without no apparent reason.
-        if (_isKeyboardMode()) {
+        if (isKeyboardMode) {
             this.restoreFocus(focusedIndex, alternateElement!);
         }
     }
@@ -449,6 +535,18 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         const items = Array.from(eGui.querySelectorAll('.ag-column-drop-cell'));
 
         return items.indexOf(activeElement as HTMLElement);
+    }
+
+    private focusItemAtIndex(index: number): void {
+        const eGui = this.getGui();
+        const items = Array.from(eGui.querySelectorAll('.ag-column-drop-cell'));
+        const item = items[index] as HTMLElement;
+
+        if (!item) {
+            return;
+        }
+
+        item.focus({ preventScroll: true });
     }
 
     private restoreFocus(index: number, alternateElement: HTMLElement): void {
@@ -512,11 +610,20 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
     }
 
     private addAriaLabelsToComponents(): void {
-        this.childPillComponents.forEach((comp, idx) => {
+        const { childPillComponents, ePillDropList } = this;
+        const len = childPillComponents.length;
+
+        // A presentational element must not carry an accessible name.
+        const empty = len === 0;
+        _setAriaRole(ePillDropList, empty ? 'presentation' : 'listbox');
+        _setAriaLabel(ePillDropList, empty ? null : this.getAriaLabel());
+
+        for (let i = 0; i < len; i++) {
+            const comp = childPillComponents[i];
             const eGui = comp.getGui();
-            _setAriaPosInSet(eGui, idx + 1);
-            _setAriaSetSize(eGui, this.childPillComponents.length);
-        });
+            _setAriaPosInSet(eGui, i + 1);
+            _setAriaSetSize(eGui, len);
+        }
     }
 
     private createItemComponent(item: TItem, ghost: boolean): TPill {
@@ -538,18 +645,18 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
         if (!title || !eGroupIcon) {
             return;
         }
-        const eTitleBar = document.createElement('div');
+        const eTitleBar = _createElement({ tag: 'div' });
         _setAriaHidden(eTitleBar, true);
         this.addElementClasses(eTitleBar, 'title-bar');
         this.addElementClasses(eGroupIcon, 'icon');
-        this.addOrRemoveCssClass('ag-column-drop-empty', this.isExistingItemsEmpty());
+        this.toggleCss('ag-column-drop-empty', this.isExistingItemsEmpty());
 
         eTitleBar.appendChild(eGroupIcon);
 
         if (!this.horizontal) {
-            const eTitle = document.createElement('span');
+            const eTitle = _createElement({ tag: 'span' });
             this.addElementClasses(eTitle, 'title');
-            eTitle.innerHTML = title;
+            eTitle.textContent = title;
 
             eTitleBar.appendChild(eTitle);
         }
@@ -567,8 +674,8 @@ export abstract class PillDropZonePanel<TPill extends PillDragComp<TItem>, TItem
             return;
         }
 
-        const eMessage = document.createElement('span');
-        eMessage.innerHTML = emptyMessage;
+        const eMessage = _createElement({ tag: 'span' });
+        eMessage.textContent = emptyMessage;
         this.addElementClasses(eMessage, 'empty-message');
         this.ePillDropList.appendChild(eMessage);
     }

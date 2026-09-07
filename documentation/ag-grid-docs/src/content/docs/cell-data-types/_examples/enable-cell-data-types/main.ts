@@ -1,5 +1,6 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
 import {
+    BigIntFilterModule,
     CheckboxEditorModule,
     ClientSideRowModelModule,
     DateEditorModule,
@@ -9,11 +10,17 @@ import {
     NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
+    BigIntFilterModule,
     NumberEditorModule,
     NumberFilterModule,
     CheckboxEditorModule,
@@ -22,13 +29,15 @@ ModuleRegistry.registerModules([
     TextEditorModule,
     TextFilterModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 interface IOlympicDataTypes extends IOlympicData {
     dateObject: Date;
+    dateTime: Date;
+    dateTimeString: string;
     hasGold: boolean;
     hasSilver: boolean;
+    medalsBigInt: bigint;
     countryObject: {
         name: string;
     };
@@ -40,10 +49,13 @@ const gridOptions: GridOptions<IOlympicDataTypes> = {
     columnDefs: [
         { field: 'athlete' },
         { field: 'age', minWidth: 100 },
+        { field: 'medalsBigInt', headerName: 'Total (BigInt)', minWidth: 160, cellDataType: 'bigint' },
         { field: 'hasGold', minWidth: 100, headerName: 'Gold' },
         { field: 'hasSilver', minWidth: 100, headerName: 'Silver', cellRendererParams: { disabled: true } },
         { field: 'dateObject', headerName: 'Date' },
+        { field: 'dateTime', headerName: 'DateTime', cellDataType: 'dateTime', minWidth: 250 },
         { field: 'date', headerName: 'Date (String)' },
+        { field: 'dateTimeString', headerName: 'DateTime (String)', minWidth: 250 },
         { field: 'countryObject', headerName: 'Country' },
     ],
     defaultColDef: {
@@ -75,19 +87,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 'rowData',
                 data.map((rowData) => {
                     const dateParts = rowData.date.split('/');
+                    const [year, month, day] = dateParts.reverse().map((e) => parseInt(e, 10));
+                    const [h, m, s] = [
+                        Math.floor(Math.random() * 24),
+                        Math.floor(Math.random() * 60),
+                        Math.floor(Math.random() * 60),
+                    ];
+                    const paddedDateTimeStrings = [month, day, h, m, s].map((e) => e.toString().padStart(2, '0'));
+                    const dateString = `${year}-${paddedDateTimeStrings[0]}-${paddedDateTimeStrings[1]}`;
+                    const dateTimeString = `${year}-${paddedDateTimeStrings[0]}-${paddedDateTimeStrings[1]}T${paddedDateTimeStrings.slice(2).join(':')}`;
                     return {
                         ...rowData,
-                        date: `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`,
-                        dateObject: new Date(
-                            parseInt(dateParts[2]),
-                            parseInt(dateParts[1]) - 1,
-                            parseInt(dateParts[0])
-                        ),
+                        date: dateString,
+                        dateObject: new Date(year, month - 1, day),
+                        dateTimeString,
+                        dateTime: new Date(year, month - 1, day, h, m, s),
                         countryObject: {
                             name: rowData.country,
                         },
                         hasGold: rowData.gold > 0,
                         hasSilver: rowData.silver > 0,
+                        medalsBigInt: BigInt(rowData.gold + rowData.silver + rowData.bronze),
                     };
                 })
             )

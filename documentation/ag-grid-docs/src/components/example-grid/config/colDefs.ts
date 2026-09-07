@@ -1,0 +1,384 @@
+import type {
+    CellClassParams,
+    CellClassRules,
+    CellStyleFunc,
+    ColDef,
+    ColGroupDef,
+    GridOptions,
+    ValueFormatterParams,
+    ValueGetterParams,
+} from 'ag-grid-community';
+
+import { COUNTRY_NAMES, LANGUAGES, type RowItem, games, months } from '../data';
+import { CountryCellRenderer, RatingRenderer } from './renderers';
+
+// Function-based cell class rules rather than string expressions: string
+// expressions are evaluated with `new Function`, which requires the CSP
+// `script-src 'unsafe-eval'` that this site no longer allows.
+const isCurrency = (params: CellClassParams): boolean => typeof params.value === 'number';
+
+const currencyCellClassRules: CellClassRules = {
+    'currency-cell': isCurrency,
+};
+
+const scoreCellClassRules: CellClassRules = {
+    'good-score': (params) => typeof params.value === 'number' && params.value > 50000,
+    'bad-score': (params) => typeof params.value === 'number' && params.value < 10000,
+    'currency-cell': (params) => typeof params.value === 'number' && params.value >= 10000 && params.value <= 50000,
+};
+
+const monthColBase: ColDef = {
+    width: 120,
+    minWidth: 120,
+    enableValue: true,
+    cellClassRules: scoreCellClassRules,
+    cellDataType: 'currency',
+    filter: 'agNumberColumnFilter',
+    filterParams: {
+        buttons: ['reset'],
+        inRangeInclusive: true,
+    },
+};
+
+const monthCols = months.map((month): ColDef => ({ ...monthColBase, field: month, aggFunc: 'sum' }));
+
+const currencyCssFunc: CellStyleFunc = (params) => {
+    if (params.value != null && params.value < 0) {
+        return { color: 'red', fontWeight: 'bold' };
+    }
+    return undefined;
+};
+
+const currencyFormatter = (params: ValueFormatterParams) => {
+    if (params.value == null) {
+        return '';
+    }
+
+    if (isNaN(params.value)) {
+        return 'NaN';
+    }
+
+    // if we are doing 'count', then we do not show pound sign
+    if (params.node?.group && params.column.getAggFunc() === 'count') {
+        return params.value;
+    }
+
+    let result = '$' + Math.floor(Math.abs(params.value)).toLocaleString();
+
+    if (params.value < 0) {
+        result = '(' + result + ')';
+    }
+
+    return result;
+};
+
+export const columnTypes: GridOptions['columnTypes'] = {
+    currencyType: {
+        useValueFormatterForExport: false,
+        valueFormatter: currencyFormatter,
+    },
+};
+
+export const dataTypeDefinitions: GridOptions['dataTypeDefinitions'] = {
+    currency: {
+        extendsDataType: 'number',
+        baseDataType: 'number',
+
+        valueParser: (params) => {
+            if (params.newValue == null) {
+                return null;
+            }
+            let newValue = String(params.newValue)?.trim?.();
+            if (newValue === '') {
+                return null;
+            }
+            newValue = newValue.replace('$', '').replace(',', '');
+            if (newValue.includes('(')) {
+                newValue = newValue.replace('(', '').replace(')', '');
+                newValue = '-' + newValue;
+            }
+            return Number(newValue);
+        },
+        columnTypes: ['currencyType', 'numericColumn'],
+    },
+};
+
+const mobileDefaultCols: ColDef<RowItem>[] = [
+    {
+        rowDrag: true,
+        field: 'name',
+        width: 200,
+        cellClass: 'v-align',
+    },
+    {
+        field: 'language',
+        width: 150,
+        filter: 'agSetColumnFilter',
+        cellEditor: 'agRichSelectCellEditor',
+        cellClass: 'v-align',
+        cellEditorParams: {
+            values: LANGUAGES,
+        },
+    },
+    {
+        field: 'country',
+        width: 150,
+        cellRenderer: CountryCellRenderer,
+        cellClass: 'v-align',
+        cellEditor: 'agRichSelectCellEditor',
+        cellEditorParams: {
+            cellRenderer: CountryCellRenderer,
+            values: COUNTRY_NAMES,
+        },
+    },
+    {
+        field: 'game.name',
+        width: 180,
+        cellEditor: 'agRichSelectCellEditor',
+        cellEditorParams: {
+            values: [...games].sort(),
+        },
+        filter: 'agSetColumnFilter',
+        cellClass: () => 'alphabet',
+    },
+    {
+        field: 'bankBalance',
+        width: 180,
+        cellClassRules: currencyCellClassRules,
+        enableValue: true,
+        cellDataType: 'currency',
+        filter: 'agNumberColumnFilter',
+    },
+    {
+        field: 'totalWinnings',
+        filter: 'agNumberColumnFilter',
+        width: 170,
+        enableValue: true,
+        cellClassRules: currencyCellClassRules,
+        cellStyle: currencyCssFunc,
+        cellDataType: 'currency',
+    },
+    ...monthCols, // Add flat month columns to the mobile default columns
+];
+
+const desktopDefaultCols: (ColDef<RowItem> | ColGroupDef<RowItem>)[] = [
+    {
+        headerName: 'Participant',
+        children: [
+            {
+                rowDrag: true,
+                field: 'name',
+                width: 200,
+                enableRowGroup: true,
+                cellClass: 'v-align',
+            },
+            {
+                field: 'language',
+                width: 150,
+                cellEditor: 'agRichSelectCellEditor',
+                cellClass: 'v-align',
+                enableRowGroup: true,
+                enablePivot: true,
+                cellEditorParams: {
+                    values: LANGUAGES,
+                },
+                filter: 'agMultiColumnFilter',
+                filterParams: {
+                    filters: [
+                        {
+                            filter: 'agTextColumnFilter',
+                            display: 'subMenu',
+                        },
+                        {
+                            filter: 'agSetColumnFilter',
+                            filterParams: {
+                                buttons: ['reset'],
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                field: 'country',
+                width: 150,
+                cellRenderer: CountryCellRenderer,
+                cellClass: ['country-cell', 'v-align'],
+                enableRowGroup: true,
+                enablePivot: true,
+                cellEditor: 'agRichSelectCellEditor',
+                cellEditorParams: {
+                    cellRenderer: CountryCellRenderer,
+                    values: COUNTRY_NAMES,
+                },
+                filter: 'agSetColumnFilter',
+                filterParams: {
+                    cellRenderer: CountryCellRenderer,
+                    buttons: ['reset'],
+                },
+            },
+        ],
+    },
+    {
+        headerName: 'Game of Choice',
+        children: [
+            {
+                field: 'game.name',
+                width: 180,
+                filter: 'agMultiColumnFilter',
+                cellEditor: 'agRichSelectCellEditor',
+                cellEditorParams: {
+                    values: [...games].sort(),
+                    allowTyping: true,
+                    searchType: 'matchAny',
+                    filterList: true,
+                    highlightMatch: true,
+                },
+                tooltip: true,
+                cellClass: () => 'alphabet',
+                filterParams: {
+                    filters: [
+                        {
+                            filter: 'agTextColumnFilter',
+                            display: 'subMenu',
+                        },
+                        {
+                            filter: 'agSetColumnFilter',
+                            filterParams: {
+                                buttons: ['reset'],
+                            },
+                        },
+                    ],
+                },
+                enableRowGroup: true,
+                enablePivot: true,
+            },
+            {
+                headerName: 'Bought',
+                field: 'game.bought',
+                filter: 'agSetColumnFilter',
+                width: 110,
+                enableRowGroup: true,
+                enablePivot: true,
+                cellClass: 'boolean-type',
+                filterParams: {
+                    cellRendererParams: { isFilterRenderer: true },
+                    buttons: ['reset'],
+                },
+            },
+        ],
+    },
+    {
+        headerName: 'Performance',
+        groupId: 'performance',
+        children: [
+            {
+                field: 'bankBalance',
+                width: 150,
+                cellClassRules: currencyCellClassRules,
+                enableValue: true,
+                aggFunc: 'avg',
+                cellDataType: 'currency',
+                filter: 'agNumberColumnFilter',
+            },
+        ],
+    },
+    {
+        field: 'rating',
+        width: 120,
+        cellRenderer: RatingRenderer,
+        cellClass: 'v-align',
+        enableRowGroup: true,
+        enablePivot: true,
+        enableValue: true,
+        aggFunc: 'avg',
+        chartDataType: 'category',
+        cellEditor: 'agNumberCellEditor',
+        cellEditorParams: {
+            min: 0,
+            max: 5,
+        },
+        filterParams: { cellRenderer: RatingRenderer, cellRendererParams: { isFilterRenderer: true } },
+    },
+    {
+        field: 'totalWinnings',
+        filter: 'agNumberColumnFilter',
+        width: 200,
+        enableValue: true,
+        aggFunc: 'sum',
+        cellClassRules: currencyCellClassRules,
+        cellDataType: 'currency',
+        cellStyle: currencyCssFunc,
+    },
+    {
+        headerName: 'Monthly Breakdown',
+        openByDefault: true,
+        children: [
+            {
+                headerName: 'Winning Trends',
+                colId: 'winningTrends',
+                sortable: false,
+                columnGroupShow: 'closed',
+                cellRenderer: 'agSparklineCellRenderer',
+                cellRendererParams: {
+                    deferRender: true,
+                    sparklineOptions: {
+                        type: 'area',
+                        xKey: 'month',
+                        yKey: 'value',
+                        tooltip: {
+                            renderer: (params: { datum: { month: string; value: number } }) => {
+                                const { month, value } = params.datum;
+                                const formatted = '$' + Math.floor(Math.abs(value)).toLocaleString();
+                                const currency = value < 0 ? `(${formatted})` : formatted;
+                                return { content: `${month.charAt(0).toUpperCase() + month.slice(1)}: ${currency}` };
+                            },
+                        },
+                    },
+                },
+                valueGetter: (params: ValueGetterParams) => {
+                    const data = params.data;
+                    if (!data) {
+                        return undefined;
+                    }
+                    return months.map((month) => ({ month, value: data[month] }));
+                },
+                width: 200,
+                minWidth: 200,
+            } as ColDef,
+            ...monthCols.map((col) => ({
+                ...col,
+                columnGroupShow: 'open' as const,
+            })),
+            {
+                ...monthColBase,
+                headerName: 'Average',
+                colId: 'monthlyAverage',
+                aggFunc: 'avg',
+                valueGetter: (params: ValueGetterParams) => {
+                    const data = params.data;
+                    if (!data) {
+                        return undefined;
+                    }
+                    const values = months.map((month) => data[month]).filter((val) => val != null);
+                    if (values.length === 0) {
+                        return undefined;
+                    }
+                    return values.reduce((sum, val) => sum + val, 0) / values.length;
+                },
+            } as ColDef,
+        ],
+    },
+];
+
+export const autoGroupColDef: ColDef = {
+    headerName: 'Group',
+    width: 250,
+    field: 'name',
+};
+
+export const smallDefaultCols = mobileDefaultCols;
+export const largeDefaultCols = desktopDefaultCols;
+
+export const smallColCount = smallDefaultCols.length;
+// Set the default column count taking into account if there are group columns
+export const largeColCount = 22;

@@ -4,27 +4,27 @@ import {
     ModuleRegistry,
     RowApiModule,
     TooltipModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { CustomTooltip } from './customTooltip_typescript';
 
-ModuleRegistry.registerModules([
-    TooltipModule,
-    ClientSideRowModelModule,
-    RowApiModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TooltipModule, ClientSideRowModelModule, RowApiModule]);
 
 const columnDefs: ColDef[] = [
     {
         field: 'athlete',
         minWidth: 150,
-        tooltipField: 'athlete',
+        tooltip: true,
         tooltipComponentParams: { type: 'success' },
     },
-    { field: 'age', minWidth: 130, tooltipField: 'age' },
+    { field: 'age', minWidth: 130, tooltip: true },
     { field: 'year' },
     { field: 'sport' },
 ];

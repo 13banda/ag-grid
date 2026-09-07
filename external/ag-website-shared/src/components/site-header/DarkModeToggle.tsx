@@ -11,11 +11,12 @@ export const DarkModeToggle = () => {
             <button
                 className={classNames(styles.navLink, 'button-style-none')}
                 aria-label="Dark mode selector"
+                tabIndex={0}
                 onClick={() => setDarkmode(!darkmode)}
             >
                 <div className={classNames(styles.icon, styles.pseudoIcon)} />
 
-                <span>{darkmode ? 'Light Mode' : 'Dark Mode'}</span>
+                <span suppressHydrationWarning={true}>{darkmode ? 'Light Mode' : 'Dark Mode'}</span>
             </button>
         </li>
     );

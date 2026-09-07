@@ -1,12 +1,16 @@
 export const WORKING_DIR = '../ag-grid-docs';
 export const DOC_SOURCE_DIR = `${WORKING_DIR}/src/content/docs`;
+export const BRYNTUM_CAMPAIGN_CONTENT_DIR = `${WORKING_DIR}/src/content/campaigns/bryntum-products`;
 export const API_SOURCE_DIR = `${WORKING_DIR}/src/content/api-documentation`;
 export const DIST_DIR = `${WORKING_DIR}/dist`;
 export const API_REFERENCE_DIR = `${DIST_DIR}/files/reference`;
 
-export const MENU_FILE_PATH = `${WORKING_DIR}/src/content/docs-nav/docsNav.json`;
-export const API_FILE_PATH = `${WORKING_DIR}/src/content/api-nav/apiNav.json`;
+export const MENU_FILE_PATH = `${WORKING_DIR}/src/content/docs-nav/nav.json`;
+export const API_FILE_PATH = `${WORKING_DIR}/src/content/api-nav/nav.json`;
 
 export const SUPPORTED_FRAMEWORKS = ['react', 'angular', 'vue', 'javascript'] as const;
+
+export const MIGRATION_DOC_BREADCRUMB_PREFIX = 'Getting Started > Setup > Migration';
+export const MIGRATION_DOC_PREFIX = 'upgrading-to-ag-grid-';
 
 export type SupportedFrameworks = (typeof SUPPORTED_FRAMEWORKS)[number];

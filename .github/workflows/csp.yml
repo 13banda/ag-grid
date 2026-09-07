@@ -1,0 +1,60 @@
+name: Content Security Policy (CSP)
+description: Content Security Policy Testing
+
+env:
+    # Disable git's post-fetch background gc/maintenance for every git invocation in this
+    # workflow (via git's GIT_CONFIG_* protocol); otherwise it rewrites .git/shallow
+    # concurrently with the next chained `git fetch --depth 1`, intermittently failing job
+    # setup with "fatal: shallow file has changed since we read it". Fixed in git >= 2.55.
+    GIT_CONFIG_COUNT: 2
+    GIT_CONFIG_KEY_0: gc.auto
+    GIT_CONFIG_VALUE_0: '0'
+    GIT_CONFIG_KEY_1: maintenance.auto
+    GIT_CONFIG_VALUE_1: 'false'
+    NX_NO_CLOUD: true
+    CI: true
+    DEFAULT_RETENTION_DAYS: 30
+
+on:
+    workflow_dispatch:
+    schedule:
+        - cron: '30 1 * * *' # Run daily at 1:30am UTC
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+    csp-test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              id: checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                fetch-depth: 1
+
+            - name: Setup
+              id: setup
+              uses: ./.github/actions/setup-nx
+              with:
+                cache_mode: ro
+
+            - name: CSP test
+              id: cspTest
+              run: |
+                yarn nx run ag-grid-csp:test:e2e:csp
+
+            - name: Upload CSP Report
+              id: upload-report
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: ${{ !cancelled() }}
+              with:
+                name: playwright-report
+                path: reports/
+                retention-days: ${{env.DEFAULT_RETENTION_DAYS}}
+            - name: Publish CSP Report
+              uses: ctrf-io/github-test-reporter@e500b992f936420eb633c91644cf10d4d71df700 # v1.1.0
+              if: always()
+              with:
+                report-path: './reports/*.json'

@@ -16,17 +16,17 @@ import {
     Column,
     ColumnApiModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { PivotModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ColumnApiModule,
-    ClientSideRowModelModule,
-    PivotModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnApiModule, ClientSideRowModelModule, PivotModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete' },
@@ -81,7 +81,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
     onSortChanged: onSortChanged,
     onColumnResized: onColumnResized,
     onColumnVisible: onColumnVisible,
@@ -216,7 +215,7 @@ function onBtPinnedOn() {
     gridApi!.applyColumnState({
         state: [
             { colId: 'athlete', pinned: 'left' },
-            { colId: 'age', pinned: 'right' },
+            { colId: 'sport', pinned: 'right' },
         ],
     });
 }

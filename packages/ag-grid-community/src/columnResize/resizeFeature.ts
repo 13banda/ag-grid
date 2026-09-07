@@ -1,9 +1,9 @@
+import { _setDisplayed } from 'ag-stack';
+
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { IHeaderResizeFeature } from '../headerRendering/cells/abstractCell/abstractHeaderCellCtrl';
 import type { HeaderCellCtrl, IHeaderCellComp } from '../headerRendering/cells/column/headerCellCtrl';
-import type { ColumnPinnedType } from '../interfaces/iColumn';
-import { _getInnerWidth, _setDisplayed } from '../utils/dom';
 
 export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
     private lastResizeAmount: number;
@@ -11,11 +11,10 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
     private resizeWithShiftKey: boolean;
 
     constructor(
-        private pinned: ColumnPinnedType,
-        private column: AgColumn,
-        private eResize: HTMLElement,
-        private comp: IHeaderCellComp,
-        private ctrl: HeaderCellCtrl
+        private readonly column: AgColumn,
+        private readonly eResize: HTMLElement,
+        private readonly comp: IHeaderCellComp,
+        private readonly ctrl: HeaderCellCtrl
     ) {
         super();
     }
@@ -37,6 +36,7 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
 
             const finishedWithResizeFunc = horizontalResizeSvc!.addResizeBar({
                 eResizeBar: this.eResize,
+                isColumn: true,
                 onResizeStart: this.onResizeStart.bind(this),
                 onResizing: this.onResizing.bind(this, false),
                 onResizeEnd: this.onResizing.bind(this, true),
@@ -44,18 +44,20 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
             destroyResizeFuncs.push(finishedWithResizeFunc);
 
             if (canAutosize && colAutosize) {
-                destroyResizeFuncs.push(colAutosize.addColumnAutosize(this.eResize, this.column));
+                destroyResizeFuncs.push(colAutosize.addColumnAutosizeListeners(this.eResize, this.column));
             }
         };
 
         const removeResize = () => {
-            destroyResizeFuncs.forEach((f) => f());
+            for (const f of destroyResizeFuncs) {
+                f();
+            }
             destroyResizeFuncs.length = 0;
         };
 
         const refresh = () => {
             const resize = this.column.isResizable();
-            const autoSize = !this.gos.get('suppressAutoSize') && !this.column.getColDef().suppressAutoSize;
+            const autoSize = !this.gos.get('suppressAutoSize') && !this.column.colDef.suppressAutoSize;
             const propertyChange = resize !== canResize || autoSize !== canAutosize;
             if (propertyChange) {
                 canResize = resize;
@@ -83,7 +85,7 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
         if (this.column.getPinned()) {
             const leftWidth = pinnedCols?.leftWidth ?? 0;
             const rightWidth = pinnedCols?.rightWidth ?? 0;
-            const bodyWidth = _getInnerWidth(ctrlsSvc.getGridBodyCtrl().eBodyViewport) - 50;
+            const bodyWidth = ctrlsSvc.getGridBodyCtrl().getViewportWidthWithoutScrollbar() - 50;
 
             if (leftWidth + rightWidth + (resizeAmountNormalised - lastResizeAmount) > bodyWidth) {
                 return;
@@ -108,7 +110,8 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
     }
 
     public toggleColumnResizing(resizing: boolean): void {
-        this.comp.addOrRemoveCssClass('ag-column-resizing', resizing);
+        this.column.resizing = resizing;
+        this.comp.toggleCss('ag-column-resizing', resizing);
     }
 
     // optionally inverts the drag, depending on pinned and RTL
@@ -116,19 +119,19 @@ export class ResizeFeature extends BeanStub implements IHeaderResizeFeature {
     private normaliseResizeAmount(dragChange: number): number {
         let result = dragChange;
 
-        const notPinningLeft = this.pinned !== 'left';
-        const pinningRight = this.pinned === 'right';
+        const pinned = this.column.getPinned();
+        const notPinningLeft = pinned !== 'left';
+        const pinningRight = pinned === 'right';
 
         if (this.gos.get('enableRtl')) {
             // for RTL, dragging left makes the col bigger, except when pinning left
             if (notPinningLeft) {
                 result *= -1;
             }
-        } else {
-            // for LTR (ie normal), dragging left makes the col smaller, except when pinning right
-            if (pinningRight) {
-                result *= -1;
-            }
+        }
+        // for LTR (ie normal), dragging left makes the col smaller, except when pinning right
+        else if (pinningRight) {
+            result *= -1;
         }
 
         return result;

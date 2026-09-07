@@ -5,11 +5,11 @@
         <button onclick="updateRowData(50)">50 Rows</button>
     </div>
     <div>
-        <button onclick="setAutoHeight()">Auto Height</button>
-        <button onclick="setFixedHeight()">Fixed Height</button>
+        <button onclick="setDomLayoutAutoHeight()">Auto Height</button>
+        <button onclick="setDomLayoutNormal()">Fixed Height</button>
     </div>
     <div>
-        <input name="pinned-rows" type="checkbox" id="floating-rows" onclick="cbFloatingRows()" />
+        <input name="pinned-rows" type="checkbox" id="floating-rows" onclick="toggleFloatingRows()" />
         <label for="pinned-rows"> Pinned Rows </label>
     </div>
     <div>Row Count = <span id="currentRowCount"></span></div>
@@ -20,29 +20,5 @@
 <div style="border: 10px solid #eee; padding: 10px; margin-top: 20px">
     <p style="text-align: center">
         This text is under the grid and should move up and down as the height of the grid changes.
-    </p>
-
-    <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-        magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-        consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-        pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-        laborum.
-    </p>
-
-    <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-        magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-        consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-        pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-        laborum.
-    </p>
-
-    <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-        magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-        consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-        pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-        laborum.
     </p>
 </div>

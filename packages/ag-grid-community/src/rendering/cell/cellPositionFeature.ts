@@ -1,191 +1,199 @@
-import { BeanStub } from '../../context/beanStub';
+import { _areEqual, _missing } from 'ag-stack';
+
 import type { BeanCollection } from '../../context/context';
 import type { AgColumn } from '../../entities/agColumn';
-import type { RowNode } from '../../entities/rowNode';
 import { _getRowHeightAsNumber } from '../../gridOptionsUtils';
-import { _areEqual, _last } from '../../utils/array';
-import { _missing } from '../../utils/generic';
+import { applyHorizontalPosition, getResolvedHorizontalOffset } from '../features/horizontalPositionUtils';
 import type { CellCtrl } from './cellCtrl';
 
 /**
- * Takes care of:
- *  #) Cell Width (including when doing cell spanning, which makes width cover many columns)
- *  #) Cell Height (when doing row span, otherwise we don't touch the height as it's just row height)
- *  #) Cell Left (the horizontal positioning of the cell, the vertical positioning is on the row)
+ * Wires the listeners that keep a cell's width and left position in sync, including col spanning
+ * (which makes width cover many columns). Height is only ever touched for row-spanned cells, and is
+ * applied on attach in _initCellPosition (via legacyApplyRowSpan or _applySpanHeight), not here.
  */
-export class CellPositionFeature extends BeanStub {
-    private eGui: HTMLElement;
+export function _setupCellPosition(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    // Listener setup runs from the CellCtrl constructor (before the cell component attaches) so that
+    // getColSpanningList() is available as soon as the CellCtrl exists. This is required in
+    // React, where setComp() is called asynchronously, but navigation normalisation may query
+    // the cell position synchronously before the first render completes.
+    //
+    // A row-spanned cell keeps its own height and aria-rowspan in sync (see SpannedCellCtrl's
+    // constructor, which wires the refresh listeners) and must not also run the col/row span setup
+    // below. Gate on isCellSpanning() rather than getCellSpan(): the latter reads cellSpan, a
+    // constructor parameter property still unassigned while this runs inside super(), whereas
+    // isCellSpanning() is a prototype method that resolves correctly during super().
+    if (cellCtrl.isCellSpanning()) {
+        return;
+    }
+    setupColSpan(beans, cellCtrl);
+    setupRowSpan(beans, cellCtrl);
+}
 
-    private readonly column: AgColumn;
-    private readonly rowNode: RowNode;
+function setupRowSpan(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    cellCtrl.rowSpan = cellCtrl.column.getRowSpan(cellCtrl.rowNode);
 
-    private colsSpanning: AgColumn[];
-    private rowSpan: number;
+    cellCtrl.addManagedListeners(beans.eventSvc, { newColumnsLoaded: () => onNewColumnsLoaded(beans, cellCtrl) });
+}
 
-    constructor(
-        private readonly cellCtrl: CellCtrl,
-        beans: BeanCollection
-    ) {
-        super();
+// Called each time the cell component attaches (initial mount and any remount).
+export function _initCellPosition(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    _onCellLeftChanged(beans, cellCtrl);
+    _onCellWidthChanged(cellCtrl);
+    if (cellCtrl.getCellSpan()) {
+        _applySpanHeight(cellCtrl);
+    } else {
+        legacyApplyRowSpan(beans, cellCtrl);
+    }
+}
 
-        this.beans = beans;
+/** Sets a row-spanned cell's rendered height to cover its spanned rows. No-op when not spanning. */
+export function _applySpanHeight(cellCtrl: CellCtrl): void {
+    const spanHeight = cellCtrl.getCellSpan()?.getCellHeight();
+    const eContent = cellCtrl.eGui;
+    if (spanHeight != null && eContent) {
+        eContent.style.height = `${spanHeight}px`;
+    }
+}
 
-        this.column = cellCtrl.column;
-        this.rowNode = cellCtrl.rowNode;
+function onNewColumnsLoaded(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    const rowSpan = cellCtrl.column.getRowSpan(cellCtrl.rowNode);
+    if (cellCtrl.rowSpan === rowSpan) {
+        return;
     }
 
-    private setupRowSpan(): void {
-        this.rowSpan = this.column.getRowSpan(this.rowNode);
+    cellCtrl.rowSpan = rowSpan;
+    legacyApplyRowSpan(beans, cellCtrl, true);
+}
 
-        this.addManagedListeners(this.beans.eventSvc, { newColumnsLoaded: () => this.onNewColumnsLoaded() });
+function onDisplayColumnsChanged(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    const colsSpanning = _getColSpanningList(beans, cellCtrl);
+
+    if (!_areEqual(cellCtrl.colsSpanning, colsSpanning)) {
+        cellCtrl.colsSpanning = colsSpanning;
+        _onCellWidthChanged(cellCtrl);
+        _onCellLeftChanged(beans, cellCtrl); // left changes when doing RTL
+    }
+}
+
+function setupColSpan(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    // if no col span is active, then we don't set it up, as it would be wasteful of CPU
+    if (cellCtrl.column.colDef.colSpan == null) {
+        return;
     }
 
-    public setComp(eGui: HTMLElement): void {
-        this.eGui = eGui;
+    cellCtrl.colsSpanning = _getColSpanningList(beans, cellCtrl);
 
-        // add event handlers only after GUI is attached,
-        // so we don't get events before we are ready
-        this.setupColSpan();
-        this.setupRowSpan();
+    cellCtrl.addManagedListeners(beans.eventSvc, {
+        // because we are col spanning, a reorder of the cols can change what cols we are spanning over
+        displayedColumnsChanged: () => onDisplayColumnsChanged(beans, cellCtrl),
+        // because we are spanning over multiple cols, we check for width any time any cols width changes.
+        // this is expensive - really we should be explicitly checking only the cols we are spanning over
+        // instead of every col, however it would be tricky code to track the cols we are spanning over, so
+        // because hardly anyone will be using colSpan, am favouring this easier way for more maintainable code.
+        displayedColumnsWidthChanged: () => _onCellWidthChanged(cellCtrl),
+    });
+}
 
-        this.onLeftChanged();
-        this.onWidthChanged();
-        this.applyRowSpan();
+export function _onCellWidthChanged(cellCtrl: CellCtrl): void {
+    const eContent = cellCtrl.eGui;
+    if (!eContent) {
+        return;
     }
+    eContent.style.width = `${getCellWidth(cellCtrl)}px`;
+}
 
-    private onNewColumnsLoaded(): void {
-        const rowSpan = this.column.getRowSpan(this.rowNode);
-        if (this.rowSpan === rowSpan) {
-            return;
-        }
-
-        this.rowSpan = rowSpan;
-        this.applyRowSpan(true);
+function getCellWidth(cellCtrl: CellCtrl): number {
+    const { colsSpanning, column } = cellCtrl;
+    if (!colsSpanning) {
+        return column.getActualWidth();
     }
-
-    private onDisplayColumnsChanged(): void {
-        const colsSpanning: AgColumn[] = this.getColSpanningList();
-
-        if (!_areEqual(this.colsSpanning, colsSpanning)) {
-            this.colsSpanning = colsSpanning;
-            this.onWidthChanged();
-            this.onLeftChanged(); // left changes when doing RTL
-        }
+    let width = 0;
+    for (let i = 0, len = colsSpanning.length; i < len; ++i) {
+        width += colsSpanning[i].actualWidth;
     }
+    return width;
+}
 
-    private setupColSpan(): void {
-        // if no col span is active, then we don't set it up, as it would be wasteful of CPU
-        if (this.column.getColDef().colSpan == null) {
-            return;
-        }
+export function _getColSpanningList(beans: BeanCollection, cellCtrl: CellCtrl): AgColumn[] {
+    const { column, rowNode } = cellCtrl;
+    const colSpan = column.getColSpan(rowNode);
+    const colsSpanning: AgColumn[] = [];
 
-        this.colsSpanning = this.getColSpanningList();
-
-        this.addManagedListeners(this.beans.eventSvc, {
-            // because we are col spanning, a reorder of the cols can change what cols we are spanning over
-            displayedColumnsChanged: this.onDisplayColumnsChanged.bind(this),
-            // because we are spanning over multiple cols, we check for width any time any cols width changes.
-            // this is expensive - really we should be explicitly checking only the cols we are spanning over
-            // instead of every col, however it would be tricky code to track the cols we are spanning over, so
-            // because hardly anyone will be using colSpan, am favouring this easier way for more maintainable code.
-            displayedColumnsWidthChanged: this.onWidthChanged.bind(this),
-        });
-    }
-
-    public onWidthChanged(): void {
-        if (!this.eGui) {
-            return;
-        }
-        const width = this.getCellWidth();
-        this.eGui.style.width = `${width}px`;
-    }
-
-    private getCellWidth(): number {
-        if (!this.colsSpanning) {
-            return this.column.getActualWidth();
-        }
-
-        return this.colsSpanning.reduce((width, col) => width + col.getActualWidth(), 0);
-    }
-
-    public getColSpanningList(): AgColumn[] {
-        const { column, rowNode } = this;
-        const colSpan = column.getColSpan(rowNode);
-        const colsSpanning: AgColumn[] = [];
-
-        // if just one col, the col span is just the column we are in
-        if (colSpan === 1) {
-            colsSpanning.push(column);
-        } else {
-            let pointer: AgColumn | null = column;
-            const pinned = column.getPinned();
-            for (let i = 0; pointer && i < colSpan; i++) {
-                colsSpanning.push(pointer);
-                pointer = this.beans.visibleCols.getColAfter(pointer);
-                if (!pointer || _missing(pointer)) {
-                    break;
-                }
-                // we do not allow col spanning to span outside of pinned areas
-                if (pinned !== pointer.getPinned()) {
-                    break;
-                }
+    // if just one col, the col span is just the column we are in
+    if (colSpan === 1) {
+        colsSpanning.push(column);
+    } else {
+        let pointer: AgColumn | null = column;
+        const pinned = column.getPinned();
+        for (let i = 0; pointer && i < colSpan; i++) {
+            colsSpanning.push(pointer);
+            pointer = beans.visibleCols.getColAfter(pointer);
+            if (!pointer || _missing(pointer)) {
+                break;
+            }
+            // we do not allow col spanning to span outside of pinned areas
+            if (pinned !== pointer.getPinned()) {
+                break;
             }
         }
-
-        return colsSpanning;
     }
 
-    public onLeftChanged(): void {
-        if (!this.eGui) {
-            return;
-        }
-        const left = this.modifyLeftForPrintLayout(this.getCellLeft());
-        this.eGui.style.left = left + 'px';
+    return colsSpanning;
+}
+
+export function _onCellLeftChanged(beans: BeanCollection, cellCtrl: CellCtrl): void {
+    const eSetLeft = cellCtrl.getRootElement();
+    if (!eSetLeft) {
+        return;
+    }
+    const { gos, visibleCols } = beans;
+    const left = getResolvedHorizontalOffset({
+        left: getCellLeft(cellCtrl),
+        pinned: cellCtrl.column.getPinned(),
+        width: getCellWidth(cellCtrl),
+        isPrintLayout: cellCtrl.printLayout,
+        isRtl: gos.get('enableRtl'),
+        visibleCols,
+    });
+    if (left == null) {
+        return;
     }
 
-    private getCellLeft(): number | null {
-        let mostLeftCol: AgColumn;
+    setHorizontalPosition(beans, cellCtrl, eSetLeft, left);
+}
 
-        if (this.beans.gos.get('enableRtl') && this.colsSpanning) {
-            mostLeftCol = _last(this.colsSpanning);
-        } else {
-            mostLeftCol = this.column;
-        }
+function getCellLeft(cellCtrl: CellCtrl): number | null {
+    // column.getLeft() is "distance from start edge" — in both LTR and RTL,
+    // the cell's column is the start-edge column of any col-spanning range.
+    return cellCtrl.column.getLeft();
+}
 
-        return mostLeftCol.getLeft();
+function setHorizontalPosition(beans: BeanCollection, cellCtrl: CellCtrl, eSetLeft: HTMLElement, left: number): void {
+    const { gos, visibleCols } = beans;
+    applyHorizontalPosition(eSetLeft, {
+        offset: left,
+        pinned: cellCtrl.column.getPinned(),
+        width: getCellWidth(cellCtrl),
+        isPrintLayout: cellCtrl.printLayout,
+        isRtl: gos.get('enableRtl'),
+        visibleCols,
+    });
+}
+
+function legacyApplyRowSpan(beans: BeanCollection, cellCtrl: CellCtrl, force?: boolean): void {
+    if (cellCtrl.rowSpan === 1 && !force) {
+        return;
     }
 
-    private modifyLeftForPrintLayout(leftPosition: number | null): number | null {
-        if (!this.cellCtrl.printLayout || this.column.getPinned() === 'left') {
-            return leftPosition;
-        }
-
-        const { visibleCols } = this.beans;
-        const leftWidth = visibleCols.getColsLeftWidth();
-
-        if (this.column.getPinned() === 'right') {
-            const bodyWidth = visibleCols.bodyWidth;
-            return leftWidth + bodyWidth + (leftPosition || 0);
-        }
-
-        // is in body
-        return leftWidth + (leftPosition || 0);
+    const eContent = cellCtrl.eGui;
+    if (!eContent) {
+        return;
     }
 
-    private applyRowSpan(force?: boolean): void {
-        if (this.rowSpan === 1 && !force) {
-            return;
-        }
+    const singleRowHeight = _getRowHeightAsNumber(beans);
+    const totalRowHeight = singleRowHeight * cellCtrl.rowSpan;
 
-        const singleRowHeight = _getRowHeightAsNumber(this.beans);
-        const totalRowHeight = singleRowHeight * this.rowSpan;
-
-        this.eGui.style.height = `${totalRowHeight}px`;
-        this.eGui.style.zIndex = '1';
-    }
-
-    // overriding to make public, as we don't dispose this bean via context
-    public override destroy() {
-        super.destroy();
-    }
+    eContent.style.height = `${totalRowHeight}px`;
+    // row-spanned cell content must sit above normal cells in the same row.
+    eContent.style.zIndex = '1';
 }

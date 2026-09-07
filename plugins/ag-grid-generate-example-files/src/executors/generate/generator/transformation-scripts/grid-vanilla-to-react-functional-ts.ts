@@ -1,24 +1,26 @@
+/* eslint-disable no-lonely-if */
 import { basename } from 'path';
 
 import type { ExampleConfig, ParsedBindings } from '../types';
 import { templatePlaceholder } from './grid-vanilla-src-parser';
 import {
-    DARK_INTEGRATED_END,
-    DARK_INTEGRATED_START,
     addBindingImports,
     addGenericInterfaceImport,
     addLicenseManager,
     convertFunctionToConstPropertyTs,
     findLocaleImport,
+    getEnableAGTestIdLogic,
     getFunctionName,
-    getIntegratedDarkModeCode,
     getPropertyInterfaces,
     handleRowGenericInterface,
     isInstanceMethod,
     preferParamsApi,
+    removeCreateGridImport,
+    wrapTearDownExample,
 } from './parser-utils';
 import {
     EventAndCallbackNames,
+    addChartsDarkModeIfRequired,
     convertFunctionToConstCallbackTs,
     convertFunctionalTemplate,
     getImport,
@@ -35,7 +37,7 @@ function getModuleImports(
     const imports = [
         "import React, { useCallback, useMemo, useRef, useState, StrictMode } from 'react';",
         "import { createRoot } from 'react-dom/client';",
-        "import { AgGridReact } from 'ag-grid-react';",
+        "import { AgGridReact, AgGridProvider } from 'ag-grid-react';",
     ];
 
     if (allStylesheets && allStylesheets.length > 0) {
@@ -62,10 +64,9 @@ function getModuleImports(
 
     addGenericInterfaceImport(imports, bindings.tData, bindings);
 
-    if (bindings.moduleRegistration) {
-        imports.push(bindings.moduleRegistration);
-    }
-    return imports;
+    imports.push(getEnableAGTestIdLogic());
+
+    return removeCreateGridImport(imports);
 }
 
 function getImports(
@@ -73,16 +74,30 @@ function getImports(
     exampleConfig: ExampleConfig,
     componentFileNames: string[],
     extraCoreTypes: string[],
-    allStylesheets: string[]
+    allStylesheets: string[],
+    useFetchHook: boolean = false
 ): string[] {
     const imports = [];
     const localeImport = findLocaleImport(bindings.imports);
     if (localeImport) {
-        imports.push(`import { ${localeImport.imports[0]} } from '@ag-grid-community/locale';`);
+        imports.push(`import { ${localeImport.imports.join(', ')} } from '@ag-grid-community/locale';`);
     }
 
     imports.push(...getModuleImports(bindings, exampleConfig, componentFileNames, extraCoreTypes, allStylesheets));
 
+    if (useFetchHook) {
+        imports.push(`import { useFetchJson } from './useFetchJson';`);
+    }
+
+    if (bindings.moduleRegistration) {
+        // Modules registration is different in React - we just export the modules array and pass it to AgGridProvider
+        const reactModuleRegistration = bindings.moduleRegistration.replace(
+            /ModuleRegistry\.registerModules\(\s*\[([\s\S]*?)\]\s*\);/,
+            'const modules = [$1];'
+        );
+        imports.push('\n');
+        imports.push(reactModuleRegistration);
+    }
     return imports;
 }
 
@@ -171,55 +186,55 @@ export function vanillaToReactFunctionalTs(
         const componentProps = ['rowData={rowData}'];
 
         const additionalInReady = [];
-        if (data) {
-            additionalInReady.push(`${getIntegratedDarkModeCode(bindings.exampleName, true)}`);
 
-            const setRowDataBlock = data.callback.replace("gridApi!.setGridOption('rowData',", 'setRowData(');
-            additionalInReady.push(`
-                fetch(${data.url})
-                .then(resp => resp.json())
-                .then((data: ${rowDataType}[]) => ${setRowDataBlock});`);
+        let useFetchHook = undefined;
+        if (data) {
+            const callback = data.callback
+                .replace(/^{|}$/g, '')
+                .replace(/(gridApi|params\.api)(!?\.setGridOption\('rowData',\s*)/g, 'setRowData(');
+
+            const cleanedCallback = callback.replaceAll('\n', '').trim();
+            if (
+                cleanedCallback.match(/^setRowData\(data\)(;?)$/) ||
+                cleanedCallback.match(/^setRowData\(data\.slice\((\d+), (\d+)\)\)(;?)$/)
+            ) {
+                // get url from data
+                useFetchHook = `    const { data, loading } = useFetchJson<${rowDataType}>(
+                ${data.url}${data.totalRows ? `, ${data.totalRows}` : ''}
+            );`;
+                componentProps.push('rowData={data}');
+                componentProps.push('loading={loading}');
+            } else {
+                const setRowDataBlock = data.callback.replace("gridApi!.setGridOption('rowData',", 'setRowData(');
+                additionalInReady.push(`
+                    fetch(${data.url})
+                    .then(resp => resp.json())
+                    .then((data: ${rowDataType}[]) => ${setRowDataBlock});`);
+            }
         }
 
         if (onGridReady) {
-            additionalInReady.push(`${getIntegratedDarkModeCode(bindings.exampleName, true)}`);
             const hackedHandler = onGridReady
                 .replace(/^{|}$/g, '')
-                .replace("gridApi!.setGridOption('rowData',", 'setRowData(');
+                .replace(/(gridApi|params\.api)(!?\.setGridOption\('rowData',\s*)/g, 'setRowData(');
             additionalInReady.push(hackedHandler);
         }
 
         let extraCoreTypes = [];
-        let darkModeWithGridRef = undefined;
         if (additionalInReady.length > 0) {
             extraCoreTypes = ['GridReadyEvent'];
-        } else {
-            // We need to check if we need to add integrated dark mode code for and example that does not have data or onGridReady
-            darkModeWithGridRef = getIntegratedDarkModeCode(bindings.exampleName, true, 'gridRef.current?.api');
         }
 
-        const imports = getImports(bindings, exampleConfig, componentFilenames, extraCoreTypes, allStylesheets);
+        const imports = getImports(
+            bindings,
+            exampleConfig,
+            componentFilenames,
+            extraCoreTypes,
+            allStylesheets,
+            useFetchHook !== undefined
+        );
 
-        if (bindings.exampleName.includes('sparklines')) {
-            // TEMPORARY ONLY APPLY TO SPARKLINES EXAMPLES
-
-            const reactImportIdx = imports.findIndex((i) => i.includes('useState'));
-            if (darkModeWithGridRef) {
-                // wrap in useEffect
-                darkModeWithGridRef = darkModeWithGridRef.replace(
-                    DARK_INTEGRATED_START,
-                    `${DARK_INTEGRATED_START} const [tick, setTick] = useState(0);\nuseEffect(() => { setTick(1); `
-                );
-                darkModeWithGridRef = darkModeWithGridRef.replace(
-                    DARK_INTEGRATED_END,
-                    `}, [gridRef.current]); ${DARK_INTEGRATED_END}`
-                );
-
-                if (!imports[reactImportIdx].includes('useEffect')) {
-                    imports[reactImportIdx] = imports[reactImportIdx].replace('useState', 'useState, useEffect');
-                }
-            }
-        }
+        const darkModeWithGridRef = addChartsDarkModeIfRequired(bindings, imports, true);
 
         const components: { [componentName: string]: string } = extractComponentInformation(
             properties,
@@ -361,20 +376,23 @@ const GridExample = () => {
     ${gridRefHook}
     ${stateProperties.join('\n    ')}
 
-${gridReady}${darkModeWithGridRef ? '\n' + darkModeWithGridRef : ''}
+${gridReady}${useFetchHook ?? ''}${darkModeWithGridRef ? '\n' + darkModeWithGridRef : ''}
 
 ${[].concat(eventHandlers, externalEventHandlers, instanceMethods).join('\n\n   ')}
 
     return  (
-            <div ${containerStyle}>
-                ${template}
-            </div>
+            <AgGridProvider modules={modules}>
+                <div ${containerStyle}>
+                    ${template}
+                </div>
+            </AgGridProvider>
         );
 
 }
 
 const root = createRoot(document.getElementById('root')!);
 root.render(<StrictMode><GridExample /></StrictMode>);
+${wrapTearDownExample('(window as any).tearDownExample = () => root.unmount();')}
 `;
 
         if ((generatedOutput.match(/gridRef\.current/g) || []).length === 0) {

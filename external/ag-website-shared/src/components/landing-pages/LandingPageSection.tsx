@@ -31,7 +31,17 @@ const FRAMEWORK_CONFIGS: Record<Framework, { Icon: any; name: string }> = {
     },
 };
 
+/** An additional CTA rendered alongside the section's main CTA. */
+export interface SecondaryCta {
+    title: string;
+    url: string;
+    id?: string;
+    /** Resolve `url` against the visitor's selected framework, as the main CTA does when `isFramework`. */
+    isFramework?: boolean;
+}
+
 interface Props {
+    id: string;
     tag: string;
     heading?: string;
     headingHtml?: string;
@@ -40,18 +50,26 @@ interface Props {
     learnMoreTitle?: string;
     ctaTitle?: string;
     ctaUrl?: string;
+    ctaId?: string;
+    /** One extra CTA, or several, rendered after the main CTA in the order given. */
+    secondaryCta?: SecondaryCta | SecondaryCta[];
     sectionClass?: string;
     showBackgroundGradient?: boolean;
     children: ReactNode;
     isFramework?: boolean;
+    maxWidth?: string;
 }
 
-const CTAWithFrameworks: FunctionComponent<{ ctaTitle: string; ctaUrl: string }> = ({ ctaTitle, ctaUrl }) => {
+const CTAWithFrameworks: FunctionComponent<{ ctaId: string; ctaTitle: string; ctaUrl: string }> = ({
+    ctaId,
+    ctaTitle,
+    ctaUrl,
+}) => {
     const { framework, internalFramework, handleFrameworkChange } = useFrameworkSelector();
     const [isHovering, setIsHovering] = useState(false);
     const [isHiding, setIsHiding] = useState(false);
     const frameworkContainerRef = useRef<HTMLDivElement>(null);
-    const overlayTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const CurrentIcon = FRAMEWORK_CONFIGS[framework]?.Icon;
 
@@ -86,6 +104,7 @@ const CTAWithFrameworks: FunctionComponent<{ ctaTitle: string; ctaUrl: string }>
     return (
         <div className={styles.CTAWithFrameworks}>
             <a
+                id={ctaId}
                 href={gridUrlWithPrefix({ framework, url: ctaUrl })}
                 className={classnames([styles.ctaButton, 'button-tertiary'])}
             >
@@ -107,7 +126,7 @@ const CTAWithFrameworks: FunctionComponent<{ ctaTitle: string; ctaUrl: string }>
                 >
                     {CurrentIcon && <CurrentIcon className={styles.frameworkIcon} />}
 
-                    <span className={styles.frameworkName}>{framework}</span>
+                    <span className={styles.frameworkName}>{FRAMEWORK_CONFIGS[framework].name}</span>
 
                     <Icon name="chevronDown" svgClasses={styles.frameworkChevronDown} />
                 </div>
@@ -152,7 +171,23 @@ const CTAWithFrameworks: FunctionComponent<{ ctaTitle: string; ctaUrl: string }>
     );
 };
 
+/**
+ * A secondary CTA. Carries no framework picker of its own — when `isFramework` is set it follows
+ * whichever framework the visitor has already selected, so it stays in step with the main CTA.
+ */
+const SecondaryCtaLink: FunctionComponent<{ cta: SecondaryCta }> = ({ cta }) => {
+    const { framework } = useFrameworkSelector();
+    const href = cta.isFramework ? gridUrlWithPrefix({ framework, url: cta.url }) : cta.url;
+
+    return (
+        <a id={cta.id} href={href} className={classnames([styles.ctaButton, 'button-tertiary'])}>
+            {cta.title} <Icon name="chevronRight" />
+        </a>
+    );
+};
+
 export const LandingPageSection: FunctionComponent<Props> = ({
+    id,
     tag,
     heading,
     headingHtml,
@@ -160,43 +195,72 @@ export const LandingPageSection: FunctionComponent<Props> = ({
     subHeadingHtml,
     ctaTitle = 'Learn more',
     ctaUrl,
+    ctaId,
+    secondaryCta,
     isFramework = false,
     sectionClass,
     showBackgroundGradient,
     children,
+    maxWidth,
 }) => {
+    // Only emit heading elements that have content — sections such as the customer-logos
+    // strip pass no tag/heading/subHeading and must not render empty <h2>/<h3>/<h4> tags.
+    const hasHeading = Boolean(heading || headingHtml);
+    const hasSubHeading = Boolean(subHeading || subHeadingHtml);
+    const secondaryCtas = secondaryCta ? [secondaryCta].flat() : [];
+    const hasHeader = Boolean(tag) || hasHeading || hasSubHeading || Boolean(ctaUrl) || secondaryCtas.length > 0;
+
     return (
         <div
+            id={id}
             className={classnames(styles.sectionContent, sectionClass, {
                 [styles.withBackgroundGradient]: showBackgroundGradient,
             })}
         >
-            <header className={styles.headingContainer}>
-                <h2 className={styles.tag}>{tag}</h2>
+            {hasHeader && (
+                <header className={styles.headingContainer} style={{ maxWidth: maxWidth }}>
+                    {tag && <h2 className={styles.tag}>{tag}</h2>}
 
-                {headingHtml ? (
-                    <h3
-                        className={styles.heading}
-                        dangerouslySetInnerHTML={{ __html: decodeURIComponent(headingHtml) }}
-                    />
-                ) : (
-                    <h3 className={styles.heading}>{heading}</h3>
-                )}
+                    {hasHeading &&
+                        (headingHtml ? (
+                            <h3
+                                className={styles.heading}
+                                dangerouslySetInnerHTML={{ __html: decodeURIComponent(headingHtml) }}
+                            />
+                        ) : (
+                            <h3 className={styles.heading}>{heading}</h3>
+                        ))}
 
-                {subHeadingHtml ? (
-                    <h4 className={styles.subHeading} dangerouslySetInnerHTML={{ __html: subHeadingHtml }}></h4>
-                ) : (
-                    <h4 className={styles.subHeading}>{subHeading}</h4>
-                )}
+                    {hasSubHeading &&
+                        (subHeadingHtml ? (
+                            <h4 className={styles.subHeading} dangerouslySetInnerHTML={{ __html: subHeadingHtml }}></h4>
+                        ) : (
+                            <h4 className={styles.subHeading}>{subHeading}</h4>
+                        ))}
 
-                {ctaUrl && isFramework && <CTAWithFrameworks ctaTitle={ctaTitle} ctaUrl={ctaUrl} />}
+                    {(ctaUrl || secondaryCtas.length > 0) && (
+                        <div className={styles.ctaGroup}>
+                            {ctaUrl && isFramework && (
+                                <CTAWithFrameworks ctaId={ctaId} ctaTitle={ctaTitle} ctaUrl={ctaUrl} />
+                            )}
 
-                {ctaUrl && !isFramework && (
-                    <a href={ctaUrl} className={classnames([styles.ctaButton, 'button-tertiary'])}>
-                        {ctaTitle} <Icon name="chevronRight" />
-                    </a>
-                )}
-            </header>
+                            {ctaUrl && !isFramework && (
+                                <a
+                                    id={ctaId}
+                                    href={ctaUrl}
+                                    className={classnames([styles.ctaButton, 'button-tertiary'])}
+                                >
+                                    {ctaTitle} <Icon name="chevronRight" />
+                                </a>
+                            )}
+
+                            {secondaryCtas.map((cta) => (
+                                <SecondaryCtaLink key={cta.id ?? cta.title} cta={cta} />
+                            ))}
+                        </div>
+                    )}
+                </header>
+            )}
 
             {children}
         </div>

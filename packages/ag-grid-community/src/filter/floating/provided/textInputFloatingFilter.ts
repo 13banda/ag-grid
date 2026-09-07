@@ -1,109 +1,136 @@
-import { KeyCode } from '../../../constants/keyCode';
-import type { FilterChangedEvent } from '../../../events';
-import { _clearElement } from '../../../utils/dom';
-import { _debounce } from '../../../utils/function';
-import { RefPlaceholder } from '../../../widgets/component';
+import { KeyCode, RefPlaceholder, _clearElement, _debounce } from 'ag-stack';
+
+import type { AgColumn } from '../../../entities/agColumn';
+import type { ElementParams } from '../../../utils/element';
+import type { BigIntFilterModel } from '../../provided/bigInt/iBigIntFilter';
+import type { FilterOptionKey, ISimpleFilterParams } from '../../provided/iSimpleFilter';
 import type { NumberFilterModel } from '../../provided/number/iNumberFilter';
+import { _isUseApplyButton, getDebounceMs, getPlaceholderText } from '../../provided/providedFilterUtils';
 import type {
     ITextInputFloatingFilterParams,
     TextFilterModel,
     TextFilterParams,
 } from '../../provided/text/iTextFilter';
 import { trimInputForFilter } from '../../provided/text/textFilterUtils';
+import type { FloatingFilterDisplayParams } from '../floatingFilter';
 import type { FloatingFilterInputService } from './iFloatingFilterInputService';
-import { getDebounceMs, isUseApplyButton } from './providedFilterUtils';
 import { SimpleFloatingFilter } from './simpleFloatingFilter';
 
-type ModelUnion = TextFilterModel | NumberFilterModel;
-export abstract class TextInputFloatingFilter<M extends ModelUnion> extends SimpleFloatingFilter {
+type ModelUnion = TextFilterModel | NumberFilterModel | BigIntFilterModel;
+
+const TextInputFloatingFilterElement: ElementParams = {
+    tag: 'div',
+    ref: 'eFloatingFilterInputContainer',
+    cls: 'ag-floating-filter-input',
+    role: 'presentation',
+};
+
+export abstract class TextInputFloatingFilter<
+    TParams extends ITextInputFloatingFilterParams,
+    M extends ModelUnion,
+> extends SimpleFloatingFilter<TParams> {
     private readonly eFloatingFilterInputContainer: HTMLElement = RefPlaceholder;
     private inputSvc: FloatingFilterInputService;
 
-    protected params: ITextInputFloatingFilterParams;
-
     private applyActive: boolean;
+    private pendingEdit = false;
 
-    protected abstract createFloatingFilterInputService(
-        params: ITextInputFloatingFilterParams
-    ): FloatingFilterInputService;
+    protected abstract createFloatingFilterInputService(params: TParams): FloatingFilterInputService;
 
     public postConstruct(): void {
-        this.setTemplate(/* html */ `
-            <div class="ag-floating-filter-input" role="presentation" data-ref="eFloatingFilterInputContainer"></div>
-        `);
+        this.setTemplate(TextInputFloatingFilterElement);
     }
     protected override defaultDebounceMs: number = 500;
 
-    public onParentModelChanged(model: M, event: FilterChangedEvent): void {
-        if (event?.afterFloatingFilter || event?.afterDataChange) {
-            // if the floating filter triggered the change, it is already in sync.
-            // Data changes also do not affect provided text floating filters
-            return;
-        }
-
+    protected onModelUpdated(model: M): void {
+        const { inputSvc } = this;
         this.setLastTypeFromModel(model);
         this.setEditable(this.canWeEditAfterModelFromParentFilter(model));
-        this.inputSvc.setValue(this.filterModelFormatter.getModelAsString(model));
+
+        // Don't clobber a keystroke the user is mid-typing: an interleaving non-floating
+        // filter-changed cycle can deliver a stale model while the input is focused.
+        if (inputSvc.isFocused() && this.pendingEdit) {
+            return;
+        }
+        inputSvc.setValue(this.filterModelFormatter.getModelAsString(model));
+        this.pendingEdit = false;
     }
 
-    public override init(params: ITextInputFloatingFilterParams): void {
+    protected override setParams(params: TParams): void {
         this.setupFloatingFilterInputService(params);
-        super.init(params);
+        super.setParams(params);
         this.setTextInputParams(params);
     }
 
-    private setupFloatingFilterInputService(params: ITextInputFloatingFilterParams): void {
+    private setupFloatingFilterInputService(params: TParams): void {
         this.inputSvc = this.createFloatingFilterInputService(params);
         this.inputSvc.setupGui(this.eFloatingFilterInputContainer);
     }
 
-    private setTextInputParams(params: ITextInputFloatingFilterParams): void {
-        this.params = params;
-
-        const autoComplete = params.browserAutoComplete ?? false;
+    private setTextInputParams(params: TParams): void {
         const { inputSvc, defaultDebounceMs, readOnly } = this;
+        const { filterPlaceholder, column, browserAutoComplete, filterParams } = params;
+
+        const filterOptionKey = (this.lastType ?? this.optionsFactory.defaultOption!) as FilterOptionKey;
+        const parentFilterPlaceholder = (params.filterParams as ISimpleFilterParams).filterPlaceholder;
+        const placeholder =
+            filterPlaceholder === true
+                ? getPlaceholderText(this, parentFilterPlaceholder, 'filterOoo', filterOptionKey, this.optionsFactory)
+                : filterPlaceholder || undefined;
 
         inputSvc.setParams({
-            ariaLabel: this.getAriaLabel(params),
-            autoComplete,
+            ariaLabel: this.getAriaLabel(column as AgColumn),
+            autoComplete: browserAutoComplete ?? (filterParams as TextFilterParams).browserAutoComplete,
+            placeholder,
         });
 
-        this.applyActive = isUseApplyButton(params.filterParams);
+        this.applyActive = _isUseApplyButton(filterParams as TextFilterParams);
 
         if (!readOnly) {
-            const debounceMs = getDebounceMs(params.filterParams, defaultDebounceMs);
-            const toDebounce: (e: KeyboardEvent) => void = _debounce(
-                this,
-                this.syncUpWithParentFilter.bind(this),
-                debounceMs
-            );
-
-            inputSvc.setValueChangedListener(toDebounce);
+            const debounceMs = getDebounceMs(this.beans.log, filterParams as TextFilterParams, defaultDebounceMs);
+            const debouncedSync = _debounce(this, this.syncUpWithParentFilter.bind(this), debounceMs);
+            let debounceTimeout: number | undefined;
+            inputSvc.setValueChangedListener((e) => {
+                this.pendingEdit = true;
+                debounceTimeout = debouncedSync(e);
+            });
+            inputSvc.setValueClearedListener(() => {
+                clearTimeout(debounceTimeout);
+                this.syncUpWithParentFilter();
+            });
         }
     }
 
-    public override refresh(params: ITextInputFloatingFilterParams): void {
-        super.refresh(params);
+    protected override updateParams(params: TParams): void {
+        super.updateParams(params);
         this.setTextInputParams(params);
     }
 
-    protected recreateFloatingFilterInputService(params: ITextInputFloatingFilterParams): void {
-        const { inputSvc } = this;
-        const value = inputSvc.getValue();
+    protected recreateFloatingFilterInputService(params: TParams): void {
+        const previous = this.inputSvc;
+        // The text as typed, which the widget's own reader drops once the input calls it invalid.
+        const value = previous.getInputText();
         _clearElement(this.eFloatingFilterInputContainer);
-        this.destroyBean(inputSvc);
+        this.destroyBean(previous);
         this.setupFloatingFilterInputService(params);
-        inputSvc.setValue(value, true);
+        this.inputSvc.setValue(value, true);
     }
 
-    private syncUpWithParentFilter(e: KeyboardEvent): void {
-        const isEnterKey = e.key === KeyCode.ENTER;
+    private syncUpWithParentFilter(e?: KeyboardEvent): void {
+        const isEnterKey = e?.key === KeyCode.ENTER;
+
+        const reactive = this.reactive;
+        if (reactive) {
+            const reactiveParams = this.params as unknown as FloatingFilterDisplayParams<any, any, M>;
+            reactiveParams.onUiChange();
+        }
 
         if (this.applyActive && !isEnterKey) {
             return;
         }
+        this.pendingEdit = false;
 
-        const { inputSvc, params } = this;
+        const { inputSvc, params, lastType } = this;
         let value = inputSvc.getValue();
 
         if ((params.filterParams as TextFilterParams).trimInput) {
@@ -111,10 +138,31 @@ export abstract class TextInputFloatingFilter<M extends ModelUnion> extends Simp
             inputSvc.setValue(value, true); // ensure visible value is trimmed
         }
 
-        params.parentFilterInstance((filterInstance) => {
-            // NumberFilter is typed as number, but actually receives string values
-            filterInstance?.onFloatingFilterChanged(this.lastType || null, (value as never) || null);
-        });
+        if (reactive) {
+            const reactiveParams = params as unknown as FloatingFilterDisplayParams<any, any, M>;
+            const model = reactiveParams.model;
+            const parsedValue = this.convertValue(value);
+            const newModel =
+                parsedValue == null
+                    ? null
+                    : ({
+                          ...(model ?? {
+                              filterType: this.filterType,
+                              type: lastType ?? this.optionsFactory.defaultOption,
+                          }),
+                          filter: parsedValue,
+                      } as M);
+            reactiveParams.onModelChange(newModel, { afterFloatingFilter: true });
+        } else {
+            params.parentFilterInstance((filterInstance) => {
+                // NumberFilter is typed as number, but actually receives string values
+                filterInstance?.onFloatingFilterChanged(lastType || null, (value as never) || null);
+            });
+        }
+    }
+
+    protected convertValue<TValue>(value: string | null | undefined): TValue | null {
+        return (value as TValue) || null; // '' to null
     }
 
     protected setEditable(editable: boolean): void {

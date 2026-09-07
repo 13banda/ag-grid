@@ -1,18 +1,16 @@
-import type { Framework } from '@ag-grid-types';
-import type { ModuleMappings as ModuleMappingsType } from '@ag-grid-types';
+import type { Framework, ModuleMappings as ModuleMappingsType } from '@ag-grid-types';
 import { Snippet } from '@ag-website-shared/components/snippet/Snippet';
 import { type FunctionComponent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AllCommunityModule, ClientSideRowModelModule, ModuleRegistry, RowSelectionModule } from 'ag-grid-community';
 import type {
     ColDef,
     GetRowIdParams,
-    GridOptions,
     IRowNode,
     RowSelectedEvent,
     RowSelectionOptions,
     ValueGetterParams,
 } from 'ag-grid-community';
+import { AllCommunityModule, ClientSideRowModelModule, ModuleRegistry, RowSelectionModule } from 'ag-grid-community';
 import { ClipboardModule, ContextMenuModule, TreeDataModule } from 'ag-grid-enterprise';
 import { AgGridReact } from 'ag-grid-react';
 
@@ -40,11 +38,13 @@ ModuleRegistry.registerModules([
 
 export const ModuleMappings: FunctionComponent<Props> = ({ framework, modules }) => {
     const gridRef = useRef<AgGridReact>(null);
-    const moduleConfig = useModuleConfig(gridRef);
+    const moduleConfig = useModuleConfig(gridRef, framework);
     const { selectedDependenciesSnippet, setSelectedModules, bundleOption, rowModelOption } = moduleConfig;
 
     const rowData = useMemo(() => {
-        const groups = modules.groups;
+        const groups = modules.groups.filter((group) => {
+            return !group.hideFromSelection;
+        });
         // update data to hide/unhide modules that are included as part of SSRM
         if (rowModelOption === 'ServerSideRowModelModule') {
             const modifyData = (row: any) => ({
@@ -142,7 +142,7 @@ export const ModuleMappings: FunctionComponent<Props> = ({ framework, modules })
                 // when deselecting a group with all community selected, we need to prevent deselecting disabled children
                 const nodesToReselect: IRowNode[] = [];
                 node.allLeafChildren?.forEach((child) => {
-                    if (!child.isSelected() && !child.data.isEnterprise) {
+                    if (!child.isSelected() && !child.data.isEnterprise && !child.group) {
                         nodesToReselect.push(child);
                     }
                     api.setNodesSelected({
@@ -191,7 +191,7 @@ export const ModuleMappings: FunctionComponent<Props> = ({ framework, modules })
             <div style={{ height: '410px' }}>
                 <AgGridReact
                     ref={gridRef}
-                    gridOptions={{ treeDataChildrenField: 'children' } as GridOptions}
+                    treeDataChildrenField="children"
                     defaultColDef={defaultColDef}
                     columnDefs={columnDefs}
                     autoGroupColumnDef={autoGroupColumnDef}

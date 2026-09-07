@@ -139,7 +139,7 @@
     $index: string.index($string, $search);
     @if $index {
         @return string.slice($string, 1, $index - 1) + $replace +
-            -replace-substring(str-slice($string, $index + str-length($search)), $search, $replace);
+            -replace-substring(string.slice($string, $index + string.length($search)), $search, $replace);
     }
     @return $string;
 }
@@ -150,7 +150,7 @@
     $selector-list: ();
     @each $selector in $selectors {
         $result: ();
-        @for $i from 1 through length($selector) {
+        @for $i from 1 through list.length($selector) {
             $item: list.nth($selector, $i);
             $result: list.append($result, $item);
             @if $i == 1 {

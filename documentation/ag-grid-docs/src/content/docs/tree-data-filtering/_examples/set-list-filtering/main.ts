@@ -2,9 +2,9 @@ import type { GridApi, GridOptions } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     ValueFormatterParams,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -17,6 +17,11 @@ import {
 
 import { getData } from './data';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
@@ -25,7 +30,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     TreeDataModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -40,6 +44,10 @@ const gridOptions: GridOptions = {
             filter: 'agSetColumnFilter',
             filterParams: {
                 valueFormatter: (params: ValueFormatterParams) => {
+                    if (params.value == null) {
+                        return ''; // params.value can be null/undefined here (e.g. no size for this row)
+                    }
+
                     const sizeInKb = params.value / 1024;
 
                     if (sizeInKb > 1024) {
@@ -50,6 +58,10 @@ const gridOptions: GridOptions = {
                 },
             },
             valueFormatter: (params) => {
+                if (params.value == null) {
+                    return ''; // params.value can be null/undefined here (e.g. no size for this row)
+                }
+
                 const sizeInKb = params.value / 1024;
 
                 if (sizeInKb > 1024) {

@@ -5,17 +5,16 @@ import {
     HighlightChangesModule,
     ModuleRegistry,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    RowApiModule,
-    HighlightChangesModule,
-    CellStyleModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowApiModule, HighlightChangesModule, CellStyleModule, ClientSideRowModelModule]);
 
 function formatNumber(number: number) {
     return Math.floor(number).toLocaleString();

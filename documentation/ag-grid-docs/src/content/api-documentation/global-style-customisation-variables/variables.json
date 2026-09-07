@@ -50,7 +50,7 @@
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-disabled-foreground-color": {
-            "description": "Color of elements that can't be interacted with because they are in a disabled state",
+            "description": "Colour of elements that can't be interacted with because they are in a disabled state",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-subheader-background-color": {
@@ -73,8 +73,12 @@
             "description": "Background color of selected rows in the grid and in dropdown menus",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
+        "--ag-data-background-color": {
+            "description": "Background colour applied to rows",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
         "--ag-odd-row-background-color": {
-            "description": "Background colour applied to every other row",
+            "description": "Alternative background colour applied to every other row to create a striped effect",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-modal-overlay-background-color": {
@@ -93,12 +97,28 @@
             "description": "Background color when hovering over rows in the grid and in dropdown menus. Set to `transparent` to disable the hover effect. Note: if you want a rollover on one but not the other, use CSS selectors instead of this property",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
+        "--ag-row-drag-indicator-color": {
+            "description": "Color of the indicator line used to show where a row will be inserted when dragging to reorder rows",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-row-drag-indicator-width": {
+            "description": "Width of the indicator line used to show where a row will be inserted when dragging to reorder rows",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-column-drag-indicator-color": {
+            "description": "Color of the indicator line used to show where a row will be inserted when dragging to reorder columns",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-column-drag-indicator-width": {
+            "description": "Width of the indicator line used to show where a row will be inserted when dragging to reorder columns",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
         "--ag-column-hover-color": {
             "description": "Background color when hovering over columns in the grid",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-range-selection-border-color": {
-            "description": "Color to draw around selected cell ranges",
+            "description": "Colour to draw around selected cell ranges",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-range-selection-border-style": {
@@ -123,6 +143,14 @@
         },
         "--ag-range-selection-highlight-color": {
             "description": "Background colour to briefly apply to a cell range when it is copied from or pasted into",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-range-header-highlight-color": {
+            "description": "Background colour of the grid header when any cell of that header is part of a range. This is not visible unless enabled in the cell selection options.",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-calculated-column-highlight-color": {
+            "description": "Background colour of the calculated column currently being edited. This is not visible unless calculated column highlighting is enabled.",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-selected-tab-underline-color": {
@@ -201,6 +229,10 @@
             "description": "Colour of the border between grid rows, or `transparent` to display no border",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
+        "--ag-row-numbers-selected-color": {
+            "description": "Background color of the Row Numbers cells when the range selects all cells for that row.",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
         "--ag-menu-border-color": {
             "description": "Colour of the border around menus including the column menu and right-click context menu",
             "type": "CSS color (e.g. `red` or `#fff`)"
@@ -227,6 +259,10 @@
         },
         "--ag-input-border-color-invalid": {
             "description": "The color for the border around invalid inputs, if enabled with --ag-borders-input-invalid",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-full-row-invalid-background-color": {
+            "description": "The background color for a row with invalid editor status",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-borders-side-button": {
@@ -314,11 +350,11 @@
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-minichart-selected-chart-color": {
-            "description": "Color of border around selected chart style",
+            "description": "Colour of border around selected chart style",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-minichart-selected-page-color": {
-            "description": "Color of dot representing selected page of chart styles",
+            "description": "Colour of dot representing selected page of chart styles",
             "type": "CSS color (e.g. `red` or `#fff`)"
         },
         "--ag-grid-size": {
@@ -331,7 +367,7 @@
         },
         "--ag-icon-font-weight": {
             "description": "The font weight to apply to icon elements, used for icon fonts that require a specific weight to work",
-            "type": "CSS length (e.g. `0`, `4px` or `50%`)"
+            "type": "CSS font weight value (e.g. `100`, `bold` or `normal`)"
         },
         "--ag-widget-container-horizontal-padding": {
             "description": "The horizontal padding of containers that contain stacked widgets, such as menus and tool panels",
@@ -361,12 +397,20 @@
             "description": "Height of grid rows",
             "type": "CSS length (e.g. `0`, `4px` or `50%`)"
         },
+        "--ag-auto-height-min-body-height": {
+            "description": "Minimum height of the grid's rows section when using auto-height or print layout. This prevents an empty grid from collapsing to nothing. Set to `0` to remove the minimum height.",
+            "type": "CSS length (e.g. `0`, `4px` or `50%`)"
+        },
         "--ag-header-height": {
             "description": "Height of header rows",
             "type": "CSS length (e.g. `0`, `4px` or `50%`)"
         },
         "--ag-list-item-height": {
             "description": "Height of items in lists (example of lists are dropdown select inputs and column menu set filters)",
+            "type": "CSS length (e.g. `0`, `4px` or `50%`)"
+        },
+        "--ag-pagination-panel-height": {
+            "description": "Height of the pagination panel at the bottom of the grid. Defaults to the header height.",
             "type": "CSS length (e.g. `0`, `4px` or `50%`)"
         },
         "--ag-header-column-separator-display": {
@@ -476,6 +520,50 @@
         "--ag-row-loading-skeleton-effect-color": {
             "description": "Colour of the skeleton loading effect used in the SSRM",
             "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-find-match-color": {
+            "description": "Colour of matches used in Find",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-find-match-background-color": {
+            "description": "Background colour of matches used in Find",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-find-active-match-color": {
+            "description": "Colour of the active match used in Find",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-find-active-match-background-color": {
+            "description": "Background colour of the active match used in Find",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-pinned-row-border": {
+            "description": "Border style for pinned row containers, e.g. `1px solid black` or `3rem dashed #ggg`.",
+            "type": "a CSS border style, size and color (e.g. `1px dotted black`, `3rem solid #fff` or `none`)"
+        },
+        "--ag-pinned-row-text-color": {
+            "description": "Text colour of the rows that have been pinned to the top or bottom",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-pinned-row-background-color": {
+            "description": "Background colour of the rows that have been pinned to the top or bottom",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-pinned-row-font-weight": {
+            "description": "Font weight of the rows that have been pinned to the top or bottom",
+            "type": "CSS font weight value (e.g. `100`, `bold` or `normal`)"
+        },
+        "--ag-pinned-source-row-text-color": {
+            "description": "Text colour of the source row that has been pinned",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-pinned-source-row-background-color": {
+            "description": "Background colour of the source row that has been pinned",
+            "type": "CSS color (e.g. `red` or `#fff`)"
+        },
+        "--ag-pinned-source-row-font-weight": {
+            "description": "Font weight of the source row that has been pinned",
+            "type": "CSS font weight value (e.g. `100`, `bold` or `normal`)"
         }
     }
 }

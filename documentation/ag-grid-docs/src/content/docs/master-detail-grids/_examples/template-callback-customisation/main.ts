@@ -3,10 +3,15 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowApiModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, MasterDetailModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowApiModule,
@@ -15,7 +20,6 @@ ModuleRegistry.registerModules([
     MasterDetailModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IAccount>;
@@ -51,7 +55,7 @@ const gridOptions: GridOptions<IAccount> = {
         template: (params) => {
             const personName = params.data ? params.data.name : undefined;
             return (
-                '<div style="height: 100%; background-color: #2244CC44; padding: 20px; box-sizing: border-box;">' +
+                '<div style="height: 100%; background-color: #2244cc44; padding: 20px; box-sizing: border-box;">' +
                 '  <div style="height: 10%; padding: 2px; font-weight: bold;">###### Name: ' +
                 personName +
                 '</div>' +

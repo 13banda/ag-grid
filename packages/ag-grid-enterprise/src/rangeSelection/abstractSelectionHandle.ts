@@ -1,13 +1,7 @@
-import type { CellCtrl, CellPosition, CellRange, RowPosition } from 'ag-grid-community';
-import {
-    Component,
-    _areCellsEqual,
-    _getCellPositionForEvent,
-    _isRowBefore,
-    _isVisible,
-    _last,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { _getPageBody, _isVisible, _last, _setDisplayed } from 'ag-stack';
+
+import type { CellCtrl, CellPosition, CellRange, CellSelectionChangedEvent, RowPosition } from 'ag-grid-community';
+import { Component, _areCellsEqual, _getCellPositionForEvent, _isRowBefore } from 'ag-grid-community';
 
 import type { RangeService } from './rangeService';
 
@@ -23,37 +17,48 @@ export abstract class AbstractSelectionHandle extends Component {
     protected rangeStartRow: RowPosition;
     protected rangeEndRow: RowPosition;
 
-    private cellHoverListener: (() => void) | undefined;
-    private lastCellHovered: CellPosition | null | undefined;
     protected changedCalculatedValues: boolean = false;
+    private lastCellHovered: CellPosition | null | undefined;
     private dragging: boolean = false;
 
     protected abstract type: SelectionHandleType;
+    protected abstract shouldSkipCell(cell: CellPosition): boolean;
     protected shouldDestroyOnEndDragging: boolean = false;
 
     public postConstruct() {
-        const { dragSvc, rangeSvc } = this.beans;
-        dragSvc!.addDragSource({
+        this.beans.dragSvc!.addDragSource({
             dragStartPixels: 0,
             eElement: this.getGui(),
-            onDragStart: this.onDragStart.bind(this),
-            onDragging: (e: MouseEvent | Touch) => {
-                this.dragging = true;
-                (rangeSvc as RangeService).autoScrollService.check(e as MouseEvent);
+            onDragging: (e) => {
+                let startingMove = false;
+                if (!this.dragging) {
+                    startingMove = true;
+                    this.dragging = true;
+                    const pageBody = _getPageBody(this.beans) as Partial<HTMLElement>;
+                    pageBody.classList?.add(this.getDraggingCssClass());
+                }
+
+                this.updateValuesOnMove(e);
+
+                // if this is simply starting the drag, we only need to call `updateValuesOnMove`
+                // to update the last hovered cell. If we call `onDrag` here, then the range will be
+                // updated and trigger events unnecessarily.
+                if (startingMove) {
+                    this.changedCalculatedValues = false;
+                    return;
+                }
+
+                this.beans.rangeSvc!.autoScrollService.check(e);
 
                 if (this.changedCalculatedValues) {
                     this.onDrag(e);
                     this.changedCalculatedValues = false;
                 }
             },
-            onDragStop: (e: MouseEvent | Touch) => {
+            onDragStop: (e) => {
                 this.dragging = false;
                 this.onDragEnd(e);
                 this.clearDragProperties();
-
-                if (this.shouldDestroyOnEndDragging) {
-                    this.destroy();
-                }
             },
             onDragCancel: () => {
                 this.dragging = false;
@@ -62,7 +67,14 @@ export abstract class AbstractSelectionHandle extends Component {
             },
         });
 
-        this.addManagedElementListeners(this.getGui(), { mousedown: this.preventRangeExtension.bind(this) });
+        this.addManagedEventListeners({
+            cellSelectionChanged: this.updateLocalRangeIfNeeded.bind(this),
+        });
+
+        this.addManagedElementListeners(this.getGui(), {
+            pointerdown: stopEventPropagation,
+            mousedown: stopEventPropagation,
+        });
     }
 
     protected abstract onDrag(e: MouseEvent | Touch): void;
@@ -73,26 +85,18 @@ export abstract class AbstractSelectionHandle extends Component {
         return this.lastCellHovered;
     }
 
-    private preventRangeExtension(e: MouseEvent) {
-        e.stopPropagation();
-    }
-
-    protected onDragStart(_: MouseEvent) {
-        [this.cellHoverListener] = this.addManagedElementListeners(this.beans.ctrlsSvc.get('gridCtrl').getGui(), {
-            mousemove: this.updateValuesOnMove.bind(this),
-        });
-
-        document.body.classList.add(this.getDraggingCssClass());
-    }
-
     private getDraggingCssClass(): string {
         return `ag-dragging-${this.type === SelectionHandleType.FILL ? 'fill' : 'range'}-handle`;
     }
 
-    protected updateValuesOnMove(e: MouseEvent) {
+    protected updateValuesOnMove(e: MouseEvent | Touch) {
         const cell = _getCellPositionForEvent(this.gos, e);
 
-        if (!cell || (this.lastCellHovered && _areCellsEqual(cell, this.lastCellHovered))) {
+        if (
+            !cell ||
+            this.shouldSkipCell(cell) ||
+            (this.lastCellHovered && _areCellsEqual(cell, this.lastCellHovered))
+        ) {
             return;
         }
 
@@ -106,21 +110,26 @@ export abstract class AbstractSelectionHandle extends Component {
 
         // TODO: this causes a bug where if there are multiple grids in the same page, all of them will
         // be affected by a drag on any. Move it to the root element.
-        document.body.classList.remove(this.getDraggingCssClass());
+        const pageBody = _getPageBody(this.beans) as Partial<HTMLElement>;
+        pageBody.classList?.remove(this.getDraggingCssClass());
+
+        if (this.shouldDestroyOnEndDragging) {
+            this.destroy();
+        }
     }
 
     public getType(): SelectionHandleType {
         return this.type;
     }
 
-    public refresh(cellCtrl: CellCtrl) {
+    public refresh(cellCtrl: CellCtrl, cellRange?: CellRange) {
         const oldCellComp = this.cellCtrl;
         const eGui = this.getGui();
 
-        const cellRange = _last(this.beans.rangeSvc!.getCellRanges());
+        const cellRangeToUse = cellRange ?? _last(this.beans.rangeSvc!.getCellRanges());
 
-        const start = cellRange.startRow;
-        const end = cellRange.endRow;
+        const start = cellRangeToUse.startRow;
+        const end = cellRangeToUse.endRow;
 
         if (start && end) {
             const isBefore = _isRowBefore(end, start);
@@ -142,20 +151,11 @@ export abstract class AbstractSelectionHandle extends Component {
             }
         }
 
-        this.cellRange = cellRange;
+        this.cellRange = cellRangeToUse;
     }
 
     protected clearValues() {
         this.lastCellHovered = undefined;
-        this.removeListeners();
-    }
-
-    private removeListeners() {
-        const cellHoverListener = this.cellHoverListener;
-        if (cellHoverListener) {
-            cellHoverListener();
-            this.cellHoverListener = undefined;
-        }
     }
 
     public override destroy() {
@@ -168,10 +168,27 @@ export abstract class AbstractSelectionHandle extends Component {
         this.shouldDestroyOnEndDragging = false;
 
         super.destroy();
-        this.removeListeners();
 
-        const eGui = this.getGui();
+        this.getGui()?.remove();
+    }
 
-        eGui.parentElement?.removeChild(eGui);
+    private updateLocalRangeIfNeeded(event: CellSelectionChangedEvent) {
+        if (!this.cellRange) {
+            return;
+        }
+        const { id, type } = this.cellRange;
+        if (!id || (event.id != null && id !== event.id)) {
+            return;
+        }
+
+        const newRange = this.beans.rangeSvc?.getCellRanges().find((range) => range.id === id && range.type === type);
+
+        if (newRange && newRange !== this.cellRange) {
+            this.cellRange = newRange;
+        }
     }
 }
+
+const stopEventPropagation = (e: MouseEvent) => {
+    e.stopPropagation();
+};

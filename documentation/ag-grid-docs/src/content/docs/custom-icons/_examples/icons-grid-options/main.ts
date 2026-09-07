@@ -5,17 +5,23 @@ import {
     NumberFilterModule,
     RowDragModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
     ContextMenuModule,
     FiltersToolPanelModule,
+    PivotModule,
     RowGroupingModule,
     SideBarModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowDragModule,
@@ -28,7 +34,7 @@ ModuleRegistry.registerModules([
     SideBarModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
+    PivotModule,
 ]);
 
 const myIcons = {

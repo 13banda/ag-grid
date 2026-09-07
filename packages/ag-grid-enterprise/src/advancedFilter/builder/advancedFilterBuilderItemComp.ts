@@ -1,20 +1,5 @@
-import type {
-    BaseCellDataType,
-    BeanCollection,
-    DragAndDropService,
-    DragSource,
-    FieldPickerValueSelectedEvent,
-    FieldValueEvent,
-    ITooltipCtrl,
-    Registry,
-    TooltipFeature,
-} from 'ag-grid-community';
 import {
-    DragSourceType,
-    KeyCode,
     RefPlaceholder,
-    TabGuardComp,
-    _createIconNoSpan,
     _removeAriaExpanded,
     _setAriaDisabled,
     _setAriaExpanded,
@@ -22,14 +7,34 @@ import {
     _setAriaLevel,
     _setDisplayed,
     _setVisible,
+} from 'ag-stack';
+
+import type {
+    BeanCollection,
+    DragAndDropService,
+    ElementParams,
+    FieldPickerValueSelectedEvent,
+    FieldValueEvent,
+    GridDragSource,
+    TooltipFeature,
+} from 'ag-grid-community';
+import {
+    DragSourceType,
+    KeyCode,
+    TabGuardComp,
+    _createElement,
+    _createIconNoSpan,
     _stopPropagationForAgGrid,
 } from 'ag-grid-community';
 
 import type { AdvancedFilterExpressionService } from '../advancedFilterExpressionService';
 import type { AutocompleteEntry } from '../autocomplete/autocompleteParams';
+import { SetValuesPillComp } from '../set/setValuesPillComp';
 import { AddDropdownComp } from './addDropdownComp';
-import type { AdvancedFilterBuilderDragStartedEvent } from './advancedFilterBuilderDragFeature';
-import type { AdvancedFilterBuilderDragFeature } from './advancedFilterBuilderDragFeature';
+import type {
+    AdvancedFilterBuilderDragFeature,
+    AdvancedFilterBuilderDragStartedEvent,
+} from './advancedFilterBuilderDragFeature';
 import { AdvancedFilterBuilderItemNavigationFeature } from './advancedFilterBuilderItemNavigationFeature';
 import { getAdvancedFilterBuilderAddButtonParams } from './advancedFilterBuilderUtils';
 import { ConditionPillWrapperComp } from './conditionPillWrapperComp';
@@ -40,20 +45,62 @@ import type {
     AdvancedFilterBuilderMoveEvent,
     AdvancedFilterBuilderRemoveEvent,
     CreatePillParams,
+    Pill,
 } from './iAdvancedFilterBuilder';
 import { InputPillComp } from './inputPillComp';
 import { JoinPillWrapperComp } from './joinPillWrapperComp';
 import { SelectPillComp } from './selectPillComp';
 
+const AdvancedFilterBuilderItemElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-advanced-filter-builder-item-wrapper',
+    role: 'presentation',
+    children: [
+        {
+            tag: 'div',
+            cls: 'ag-advanced-filter-builder-item',
+            role: 'presentation',
+            children: [
+                {
+                    tag: 'div',
+                    ref: 'eTreeLines',
+                    cls: 'ag-advanced-filter-builder-item-tree-lines',
+                    attrs: { 'aria-hidden': 'true' },
+                },
+                {
+                    tag: 'span',
+                    ref: 'eDragHandle',
+                    cls: 'ag-drag-handle',
+                    attrs: { 'aria-hidden': 'true' },
+                },
+                {
+                    tag: 'span',
+                    ref: 'eValidation',
+                    cls: 'ag-advanced-filter-builder-item-button ag-advanced-filter-builder-invalid',
+                    attrs: { 'aria-hidden': 'true' },
+                },
+            ],
+        },
+        {
+            tag: 'div',
+            ref: 'eButtons',
+            cls: 'ag-advanced-filter-builder-item-buttons',
+            children: [
+                { tag: 'span', ref: 'eMoveUpButton', cls: 'ag-advanced-filter-builder-item-button', role: 'button' },
+                { tag: 'span', ref: 'eMoveDownButton', cls: 'ag-advanced-filter-builder-item-button', role: 'button' },
+                { tag: 'div', ref: 'eAddButton', role: 'presentation' },
+                { tag: 'span', ref: 'eRemoveButton', cls: 'ag-advanced-filter-builder-item-button', role: 'button' },
+            ],
+        },
+    ],
+};
 export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBuilderEvents> {
     private dragAndDrop: DragAndDropService;
     private advFilterExpSvc: AdvancedFilterExpressionService;
-    private registry: Registry;
 
     public wireBeans(beans: BeanCollection): void {
         this.dragAndDrop = beans.dragAndDrop!;
         this.advFilterExpSvc = beans.advFilterExpSvc as AdvancedFilterExpressionService;
-        this.registry = beans.registry;
     }
 
     private readonly eTreeLines: HTMLElement = RefPlaceholder;
@@ -73,25 +120,12 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
     private moveDownTooltipFeature?: TooltipFeature;
 
     constructor(
-        private readonly item: AdvancedFilterBuilderItem,
+        public readonly item: AdvancedFilterBuilderItem,
         private readonly dragFeature: AdvancedFilterBuilderDragFeature,
-        private readonly focusWrapper: HTMLElement
+        private readonly focusWrapper: HTMLElement,
+        private readonly eBuilder: HTMLElement
     ) {
-        super(/* html */ `
-            <div class="ag-advanced-filter-builder-item-wrapper" role="presentation">
-                <div class="ag-advanced-filter-builder-item" role="presentation">
-                    <div data-ref="eTreeLines" class="ag-advanced-filter-builder-item-tree-lines" aria-hidden="true"></div>
-                    <span data-ref="eDragHandle" class="ag-drag-handle" aria-hidden="true"></span>
-                    <span data-ref="eValidation" class="ag-advanced-filter-builder-item-button ag-advanced-filter-builder-invalid" aria-hidden="true"></span>
-                </div>
-                <div data-ref="eButtons" class="ag-advanced-filter-builder-item-buttons">
-                    <span data-ref="eMoveUpButton" class="ag-advanced-filter-builder-item-button" role="button"></span>
-                    <span data-ref="eMoveDownButton" class="ag-advanced-filter-builder-item-button" role="button"></span>
-                    <div data-ref="eAddButton" role="presentation"></div>
-                    <span data-ref="eRemoveButton" class="ag-advanced-filter-builder-item-button" role="button"></span>
-                </div>
-            </div>
-        `);
+        super(AdvancedFilterBuilderItemElement);
     }
 
     public postConstruct(): void {
@@ -103,9 +137,10 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
         this.eDragHandle.insertAdjacentElement('afterend', this.ePillWrapper.getGui());
 
         if (level === 0) {
-            const eTreeLine = document.createElement('div');
-            eTreeLine.classList.add('ag-advanced-filter-builder-item-tree-line-vertical-bottom');
-            eTreeLine.classList.add('ag-advanced-filter-builder-item-tree-line-root');
+            const eTreeLine = _createElement({
+                tag: 'div',
+                cls: 'ag-advanced-filter-builder-item-tree-line ag-advanced-filter-builder-item-tree-line-vertical-bottom ag-advanced-filter-builder-item-tree-line-root',
+            });
             this.eTreeLines.appendChild(eTreeLine);
 
             _setDisplayed(this.eDragHandle, false);
@@ -179,8 +214,9 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
 
     private setupTreeLines(level: number): void {
         for (let i = 0; i < level; i++) {
-            const eTreeLine = document.createElement('div');
-            this.eTreeLines.appendChild(eTreeLine);
+            this.eTreeLines.appendChild(
+                _createElement({ tag: 'div', cls: 'ag-advanced-filter-builder-item-tree-line' })
+            );
         }
     }
 
@@ -209,12 +245,13 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
     private setupValidation(): void {
         this.eValidation.appendChild(_createIconNoSpan('advancedFilterBuilderInvalid', this.beans)!);
         this.validationTooltipFeature = this.createOptionalManagedBean(
-            this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+            this.beans.tooltipSvc?.createTooltip({
                 getGui: () => this.eValidation,
+                getTooltipComponentDefinition: () => undefined,
                 getLocation: () => 'advancedFilter',
                 getTooltipValue: () => this.ePillWrapper.getValidationMessage(),
                 getTooltipShowDelayOverride: () => 1000,
-            } as ITooltipCtrl)
+            })
         );
         this.updateValidity();
     }
@@ -236,11 +273,12 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
         this.eAddButton.appendChild(eAddButton.getGui());
 
         this.createOptionalManagedBean(
-            this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+            this.beans.tooltipSvc?.createTooltip({
                 getGui: () => this.eAddButton,
+                getTooltipComponentDefinition: () => undefined,
                 getLocation: () => 'advancedFilter',
                 getTooltipValue: () => this.advFilterExpSvc.translate('advancedFilterBuilderAddButtonTooltip'),
-            } as ITooltipCtrl)
+            })
         );
     }
 
@@ -249,22 +287,21 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
         this.addManagedListeners(this.eRemoveButton, {
             click: () => this.removeItem(),
             keydown: (event: KeyboardEvent) => {
-                switch (event.key) {
-                    case KeyCode.ENTER:
-                        event.preventDefault();
-                        _stopPropagationForAgGrid(event);
-                        this.removeItem();
-                        break;
+                if (event.key === KeyCode.ENTER) {
+                    event.preventDefault();
+                    _stopPropagationForAgGrid(event);
+                    this.removeItem();
                 }
             },
         });
 
         this.createOptionalManagedBean(
-            this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+            this.beans.tooltipSvc?.createTooltip({
                 getGui: () => this.eRemoveButton,
+                getTooltipComponentDefinition: () => undefined,
                 getLocation: () => 'advancedFilter',
                 getTooltipValue: () => this.advFilterExpSvc.translate('advancedFilterBuilderRemoveButtonTooltip'),
-            } as ITooltipCtrl)
+            })
         );
         _setAriaLabel(this.eRemoveButton, this.advFilterExpSvc.translate('advancedFilterBuilderRemoveButtonTooltip'));
 
@@ -278,25 +315,24 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
             this.addManagedListeners(this.eMoveUpButton, {
                 click: () => this.moveItem(true),
                 keydown: (event: KeyboardEvent) => {
-                    switch (event.key) {
-                        case KeyCode.ENTER:
-                            event.preventDefault();
-                            _stopPropagationForAgGrid(event);
-                            this.moveItem(true);
-                            break;
+                    if (event.key === KeyCode.ENTER) {
+                        event.preventDefault();
+                        _stopPropagationForAgGrid(event);
+                        this.moveItem(true);
                     }
                 },
             });
 
             this.moveUpTooltipFeature = this.createOptionalManagedBean(
-                this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+                this.beans.tooltipSvc?.createTooltip({
                     getGui: () => this.eMoveUpButton,
+                    getTooltipComponentDefinition: () => undefined,
                     getLocation: () => 'advancedFilter',
                     getTooltipValue: () =>
                         this.moveUpDisabled
                             ? null
                             : this.advFilterExpSvc.translate('advancedFilterBuilderMoveUpButtonTooltip'),
-                } as ITooltipCtrl)
+                })
             );
             _setAriaLabel(
                 this.eMoveUpButton,
@@ -307,25 +343,24 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
             this.addManagedListeners(this.eMoveDownButton, {
                 click: () => this.moveItem(false),
                 keydown: (event: KeyboardEvent) => {
-                    switch (event.key) {
-                        case KeyCode.ENTER:
-                            event.preventDefault();
-                            _stopPropagationForAgGrid(event);
-                            this.moveItem(false);
-                            break;
+                    if (event.key === KeyCode.ENTER) {
+                        event.preventDefault();
+                        _stopPropagationForAgGrid(event);
+                        this.moveItem(false);
                     }
                 },
             });
 
             this.moveDownTooltipFeature = this.createOptionalManagedBean(
-                this.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+                this.beans.tooltipSvc?.createTooltip({
                     getGui: () => this.eMoveDownButton,
+                    getTooltipComponentDefinition: () => undefined,
                     getLocation: () => 'advancedFilter',
                     getTooltipValue: () =>
                         this.moveDownDisabled
                             ? null
                             : this.advFilterExpSvc.translate('advancedFilterBuilderMoveDownButtonTooltip'),
-                } as ITooltipCtrl)
+                })
             );
             _setAriaLabel(
                 this.eMoveDownButton,
@@ -345,22 +380,15 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
         this.updateAriaLabel();
     }
 
-    private createPill(params: CreatePillParams): SelectPillComp | InputPillComp {
-        const { key, cssClass, update, ariaLabel } = params;
-        const onUpdated = (key: string) => {
-            if (key == null) {
-                return;
-            }
-            update(key);
-            this.dispatchLocalEvent({
-                type: 'advancedFilterBuilderValueChanged',
-            });
-        };
-        if (params.isSelect) {
+    private createPill(params: CreatePillParams): Pill {
+        const { key, cssClass, ariaLabel } = params;
+        if (params.isSelect === 'set') {
+            return this.createBean(new SetValuesPillComp({ ...params, update: this.onPillUpdated(params.update) }));
+        }
+        const onUpdated = this.onPillUpdated(params.update);
+        if (params.isSelect === true) {
             const { getEditorParams, pickerAriaLabelKey, pickerAriaLabelValue, displayValue } = params;
-            const advancedFilterBuilderParams = this.gos.get('advancedFilterBuilderParams');
-            const minPickerWidth = `${advancedFilterBuilderParams?.pillSelectMinWidth ?? 140}px`;
-            const maxPickerWidth = `${advancedFilterBuilderParams?.pillSelectMaxWidth ?? 200}px`;
+            const { pillSelectMinWidth, pillSelectMaxWidth } = this.gos.get('advancedFilterBuilderParams') ?? {};
             const comp = this.createBean(
                 new SelectPillComp({
                     pickerAriaLabelKey,
@@ -371,10 +399,11 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
                         displayValue,
                     },
                     valueFormatter: (value: AutocompleteEntry) =>
-                        value == null ? null : value.displayValue ?? value.key,
+                        value == null ? '' : (value.displayValue ?? value.key),
                     variableWidth: true,
-                    minPickerWidth,
-                    maxPickerWidth,
+                    minPickerWidth: pillSelectMinWidth ?? 140,
+                    maxPickerWidth: pillSelectMaxWidth,
+                    eBuilder: this.eBuilder,
                     getEditorParams,
                     wrapperClassName: cssClass,
                     ariaLabel,
@@ -386,13 +415,14 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
             });
             return comp;
         } else {
-            const { baseCellDataType, valueFormatter } = params;
+            const { baseCellDataType, valueFormatter, editValueFormatter } = params;
             const comp = this.createBean(
                 new InputPillComp({
                     value: key,
                     valueFormatter,
+                    editValueFormatter,
                     cssClass,
-                    type: this.getInputType(baseCellDataType),
+                    type: baseCellDataType,
                     ariaLabel,
                 })
             );
@@ -401,22 +431,19 @@ export class AdvancedFilterBuilderItemComp extends TabGuardComp<AdvancedFilterBu
         }
     }
 
-    private getInputType(baseCellDataType: BaseCellDataType): 'text' | 'number' | 'date' {
-        switch (baseCellDataType) {
-            case 'text':
-            case 'object':
-            case 'boolean':
-                return 'text';
-            case 'number':
-                return 'number';
-            case 'date':
-            case 'dateString':
-                return 'date';
-        }
+    /** A pill reports nothing when its editor is emptied, which is not a value to store. */
+    private onPillUpdated<TValue>(update: (value: TValue) => void): (value: TValue | null | undefined) => void {
+        return (value) => {
+            if (value == null) {
+                return;
+            }
+            update(value);
+            this.dispatchLocalEvent({ type: 'advancedFilterBuilderValueChanged' });
+        };
     }
 
     private setupDragging(): void {
-        const dragSource: DragSource = {
+        const dragSource: GridDragSource = {
             type: DragSourceType.AdvancedFilterBuilder,
             eElement: this.eDragHandle,
             dragItemName: () => this.ePillWrapper.getDragName(),

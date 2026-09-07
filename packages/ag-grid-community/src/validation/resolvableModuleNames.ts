@@ -9,6 +9,7 @@ import type { RowModelType } from '../interfaces/iRowModel';
 const ALL_COLUMN_FILTERS = [
     'TextFilter',
     'NumberFilter',
+    'BigIntFilter',
     'DateFilter',
     'SetFilter',
     'MultiFilter',
@@ -19,10 +20,7 @@ const ALL_COLUMN_FILTERS = [
 /**
  * Some of these modules are (for now) included by default in core. For these, we just return AllCommunityModule.
  */
-export const RESOLVABLE_MODULE_NAMES: Record<
-    ResolvableModuleName,
-    readonly (CommunityModuleName | EnterpriseModuleName)[]
-> = {
+const RESOLVABLE_MODULE_NAMES: Record<ResolvableModuleName, readonly (CommunityModuleName | EnterpriseModuleName)[]> = {
     EditCore: [
         'TextEditor',
         'NumberEditor',
@@ -34,7 +32,8 @@ export const RESOLVABLE_MODULE_NAMES: Record<
         'CustomEditor',
     ],
     CheckboxCellRenderer: ['AllCommunity'],
-    ClientSideRowModelHierarchy: ['RowGrouping', 'Pivot', 'TreeData'],
+    CsrmHierarchy: ['RowGrouping', 'Pivot', 'TreeData'],
+    CsrmGroupStages: ['RowGrouping', 'Pivot', 'TreeData'],
     ColumnFilter: ALL_COLUMN_FILTERS,
     ColumnGroupHeaderComp: ['AllCommunity'],
     ColumnGroup: ['AllCommunity'],
@@ -43,6 +42,7 @@ export const RESOLVABLE_MODULE_NAMES: Record<
     ColumnResize: ['AllCommunity'],
     CommunityCore: ['AllCommunity'],
     CsrmSsrmSharedApi: ['ClientSideRowModelApi', 'ServerSideRowModelApi'],
+    RowModelSharedApi: ['ClientSideRowModelApi', 'ServerSideRowModelApi'],
     EnterpriseCore: ['AllEnterprise'],
     FilterCore: [...ALL_COLUMN_FILTERS, 'QuickFilter', 'ExternalFilter', 'AdvancedFilter'],
     GroupCellRenderer: ['RowGrouping', 'Pivot', 'TreeData', 'MasterDetail', 'ServerSideRowModel'],
@@ -65,7 +65,7 @@ export const RESOLVABLE_MODULE_NAMES: Record<
     SharedTreeData: ['TreeData', 'ServerSideRowModel'],
 };
 
-export const MODULES_FOR_ROW_MODELS: Partial<Record<CommunityModuleName | EnterpriseModuleName, RowModelType>> = {
+const MODULES_FOR_ROW_MODELS: Partial<Record<CommunityModuleName | EnterpriseModuleName, RowModelType>> = {
     InfiniteRowModel: 'infinite',
     ClientSideRowModelApi: 'clientSide',
     ClientSideRowModel: 'clientSide',
@@ -79,19 +79,19 @@ export function resolveModuleNames(
     rowModelType: RowModelType
 ): (CommunityModuleName | EnterpriseModuleName)[] {
     const resolvedModuleNames: (CommunityModuleName | EnterpriseModuleName)[] = [];
-    (Array.isArray(moduleName) ? moduleName : [moduleName]).forEach((modName) => {
+    for (const modName of Array.isArray(moduleName) ? moduleName : [moduleName]) {
         const resolved = RESOLVABLE_MODULE_NAMES[modName as ResolvableModuleName];
         if (resolved) {
-            resolved.forEach((resolvedModName) => {
+            for (const resolvedModName of resolved) {
                 const rowModelForModule = MODULES_FOR_ROW_MODELS[resolvedModName];
                 // don't show module for different row models
                 if (!rowModelForModule || rowModelForModule === rowModelType) {
                     resolvedModuleNames.push(resolvedModName);
                 }
-            });
+            }
         } else {
             resolvedModuleNames.push(modName as CommunityModuleName | EnterpriseModuleName);
         }
-    });
+    }
     return resolvedModuleNames;
 }

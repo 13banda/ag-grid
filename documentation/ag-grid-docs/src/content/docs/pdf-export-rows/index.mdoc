@@ -1,0 +1,96 @@
+---
+title: "PDF Export - Rows"
+enterprise: true
+---
+
+PDF Export includes rows after filtering and sorting by default. Export options can select rows, change their order, omit groups, and control pinned rows.
+
+## Export Selected Rows
+
+Set `onlySelected=true` to export selected rows. With pagination, use `onlySelectedAllPages=true` to include selections from every page.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    onlySelected: true,
+});
+```
+
+## Text Wrapping And Row Height
+
+Cells remain on one line by default. Enable wrapping globally with `defaultCellStyle.wrapText`, per column with `colDef.wrapText`, or per element with `processStyleCallback`.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    defaultCellStyle: {
+        wrapText: true,
+        maxLines: 3,
+    },
+});
+```
+
+Without a fixed height, rows grow to fit wrapped content and can continue across pages. An explicit `rowHeight` or `headerRowHeight` fixes the available height and clips overflowing text.
+
+Supported `white-space` values returned by `cellStyle` are also translated into wrapping, line-break preservation, and space preservation.
+
+## Row Order
+
+The default `exportedRows='filteredAndSorted'` follows the displayed row order. Use `'all'` to export the original unfiltered and unsorted row set.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    exportedRows: 'all',
+});
+```
+
+Selection and `shouldRowBeSkipped` can still remove rows from this set.
+
+## Row Groups
+
+Row groups are exported with indentation based on their displayed level. Set `rowGroupIndentSize` to change the indentation, or `skipRowGroups=true` to omit group rows.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    rowGroupIndentSize: 12,
+});
+```
+
+## Pinned Rows
+
+Pinned top and bottom rows are exported by default. Use `skipPinnedTop` or `skipPinnedBottom` to omit them.
+
+Manually pinned rows can also appear in the body. Set `skipPinnedRowDuplicates=true` to keep only their pinned copies.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    skipPinnedTop: true,
+    skipPinnedRowDuplicates: true,
+});
+```
+
+{% gridExampleRunner title="Wrapping, Grouping And Pinning" name="pdf-wrapping-grouping-pinning" exampleHeight=580 /%}
+
+## Choose Rows Programmatically
+
+Use `rowPositions` to export specific row positions, or `shouldRowBeSkipped` to omit rows conditionally.
+
+```{% frameworkTransform=true %}
+api.exportDataAsPdf({
+    shouldRowBeSkipped: ({ node }) => node.data?.status === 'Archived',
+});
+```
+
+{% gridExampleRunner title="PDF Export - Rows" name="pdf-export-rows" exampleHeight=600 /%}
+
+## API
+
+### Export Options
+
+{% interfaceDocumentation interfaceName="PdfExportParams" overrideSrc="pdf-export/pdf.json" names=["onlySelected", "onlySelectedAllPages", "defaultCellStyle", "rowHeight", "headerRowHeight", "exportedRows", "rowGroupIndentSize", "skipRowGroups", "skipPinnedTop", "skipPinnedBottom", "skipPinnedRowDuplicates", "rowPositions", "shouldRowBeSkipped"] config={"description":"See below the functions on the `PdfExportParams` interface to customise exported grid values."} /%}
+
+### ShouldRowBeSkippedParams
+
+{% interfaceDocumentation interfaceName="ShouldRowBeSkippedParams" /%}
+
+### RowPosition
+
+{% interfaceDocumentation interfaceName="RowPosition" /%}

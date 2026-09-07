@@ -1,0 +1,416 @@
+name: Jira Agent Pipeline
+
+# Thin per-repo stub for the AI Workflow delivery pipeline: it owns triggers,
+# eligibility gating and the consumer-local prerequisites (setup-nx, the
+# dev-prompts install). All pipeline logic lives in the shared composite actions
+# pulled from the @ag-grid/dev-prompts package.
+#
+# Stages: triage / build / pr-iterate / ci-failure-iterate / recycle. A single
+# `→ In Progress` JIRA rule dispatches `jira-resume`; the `preflight` job routes
+# it. Operator setup, the dispatch contract, the custom-field mapping and the
+# design rationale are all documented privately:
+# ag-dev-prompts docs/ai-workflow.md.
+
+on:
+    # One JIRA-facing entry point; `preflight` picks the stage.
+    repository_dispatch:
+        types: [jira-resume]
+    workflow_dispatch:
+        inputs:
+            issue_key:
+                description: 'JIRA issue key (e.g. AG-12345)'
+                type: string
+                required: true
+            stage:
+                description: 'Pipeline stage to run'
+                type: choice
+                required: true
+                default: resume
+                options:
+                    # `resume` routes as the → In Progress path does; the rest
+                    # force a stage, bypassing the router.
+                    - resume
+                    - triage
+                    - build
+                    - pr-iterate
+    workflow_run:
+        # React to main CI finishing on an agent branch. The `branches:` filter
+        # keeps non-agent PRs out of this workflow's run history.
+        workflows: [CI]
+        types: [completed]
+        branches: ['ghabot-ag-*']
+
+permissions:
+    contents: read
+
+# Concurrency is per JOB, not workflow-level: the group is resolved by the
+# `concurrency-key` job below, and only `jobs.<id>.concurrency` can read `needs`.
+# See ag-dev-prompts docs/ai-workflow.md.
+
+env:
+    # Disable git's post-fetch background gc/maintenance for every git invocation in this
+    # workflow (via git's GIT_CONFIG_* protocol); otherwise it rewrites .git/shallow
+    # concurrently with the next chained `git fetch --depth 1`, intermittently failing job
+    # setup with "fatal: shallow file has changed since we read it". Fixed in git >= 2.55.
+    GIT_CONFIG_COUNT: 2
+    GIT_CONFIG_KEY_0: gc.auto
+    GIT_CONFIG_VALUE_0: '0'
+    GIT_CONFIG_KEY_1: maintenance.auto
+    GIT_CONFIG_VALUE_1: 'false'
+    ISSUE_KEY: ${{ github.event.client_payload.issue_key || inputs.issue_key }}
+    DEV_PROMPTS_CHANNEL: latest
+
+jobs:
+    # -------------------------------------------------- concurrency key
+    # Resolves the ticket so the jobs below can name it in a `concurrency.group`.
+    # Has no group of its own (it computes the group). Must never publish an EMPTY
+    # group — that is one group shared by every run, not "no group" — hence the
+    # `continue-on-error` bootstrap plus the unique-per-run fallback below.
+    concurrency-key:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        permissions:
+            contents: read
+            packages: read
+        outputs:
+            group: ${{ steps.key.outputs.group || steps.fallback.outputs.group }}
+            issue_key: ${{ steps.key.outputs.issue_key }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              continue-on-error: true
+              with:
+                  fetch-depth: 1
+                  sparse-checkout: external/ag-shared/github/actions
+
+            - name: Install @ag-grid/dev-prompts
+              continue-on-error: true
+              uses: ./external/ag-shared/github/actions/install-ag-dev-prompts
+              with:
+                  channel: ${{ env.DEV_PROMPTS_CHANNEL }}
+
+            - id: key
+              continue-on-error: true
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-concurrency-key
+              with:
+                  issue_key: ${{ github.event.client_payload.issue_key || inputs.issue_key }}
+                  head_branch: ${{ github.event.workflow_run.head_branch }}
+
+            # Bootstrap broke: a group of one — unserialised, never shared.
+            - name: Fall back to a unique group (bootstrap failed)
+              id: fallback
+              if: steps.key.outputs.group == ''
+              env:
+                  RUN_ID: ${{ github.run_id }}
+              run: |
+                  echo "::warning title=Concurrency key unresolved::the concurrency-key bootstrap failed; this run gets the unique group claude-run-${RUN_ID} and is NOT serialised against this ticket's other runs."
+                  echo "group=claude-run-${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+    # -------------------------------------------------- preflight
+    # The cheap gate for both human (→ In Progress) and CI-failure re-entry. No
+    # App token, no agent. A forced workflow_dispatch stage bypasses it entirely.
+    preflight:
+        if: |
+            (github.event_name == 'repository_dispatch' && github.event.action == 'jira-resume') ||
+            (github.event_name == 'workflow_dispatch'   && inputs.stage == 'resume') ||
+            (github.event_name == 'workflow_run'        && github.event.workflow_run.conclusion == 'failure')
+        runs-on: ubuntu-latest
+        # GitHub Packages' npm registry resolves @ag-grid/dev-prompts@latest with
+        # highly variable latency (observed 4s-7m across ag-grid/ag-charts/ag-studio
+        # on 2026-09-04, not tied to any change here) — 5m left no slack and this
+        # job was intermittently timing out mid-install. 10m covers the worst
+        # observed case with headroom; the job itself finishes in seconds once the
+        # install completes.
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            pull-requests: read
+            packages: read
+            actions: write
+        outputs:
+            stage: ${{ steps.resume.outputs.stage }}
+            prior_pr_outcome: ${{ steps.resume.outputs.prior_pr_outcome }}
+            ci_failure_eligible: ${{ steps.cifail.outputs.eligible }}
+            ci_failure_run_url: ${{ steps.cifail.outputs.run_url }}
+            issue_key: ${{ steps.resume.outputs.issue_key || steps.cifail.outputs.issue_key }}
+            # Per-effort agent wall clock, read from AI model effort.
+            agent_timeout_minutes: ${{ steps.resume.outputs.agent_timeout_minutes }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+                  sparse-checkout: external/ag-shared/github/actions
+
+            - name: Install @ag-grid/dev-prompts
+              uses: ./external/ag-shared/github/actions/install-ag-dev-prompts
+              with:
+                  channel: ${{ env.DEV_PROMPTS_CHANNEL }}
+
+            # → In Progress router.
+            - id: resume
+              if: github.event_name != 'workflow_run'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-resume-preflight
+              with:
+                  issue_key: ${{ env.ISSUE_KEY }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}
+
+            # CI-failure re-entry eligibility walk.
+            - id: cifail
+              if: github.event_name == 'workflow_run'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-ci-failure-preflight
+              with:
+                  head_branch: ${{ github.event.workflow_run.head_branch }}
+                  head_sha: ${{ github.event.workflow_run.head_sha }}
+                  run_url: ${{ github.event.workflow_run.html_url }}
+                  run_attempt: ${{ github.event.workflow_run.run_attempt }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}
+
+    # -------------------------------------------------- agent-run
+    # One parameterised job for every `/fr` stage — the resume routes and
+    # ci-failure-iterate share the whole bootstrap and differ only in `stage`.
+    agent-run:
+        # One agent per ticket at a time; a fresh stage queues behind a finishing
+        # one rather than cancelling it. All three keys are load-bearing, and the
+        # `||` default must stay unique-per-run: ag-dev-prompts docs/ai-workflow.md.
+        concurrency:
+            group: ${{ needs.concurrency-key.outputs.group || format('claude-fallback-{0}', github.run_id) }}
+            queue: max
+            cancel-in-progress: false
+        # Only one of the two gate jobs runs per event; the other is skipped with
+        # empty outputs, so `!cancelled()` is needed for the `if` to evaluate.
+        needs: [concurrency-key, preflight, ci-success-handler]
+        if: |
+            !cancelled() &&
+            (needs.preflight.outputs.stage != '' ||
+             needs.preflight.outputs.ci_failure_eligible == 'true' ||
+             needs.ci-success-handler.outputs.dispatch_pr_iterate == 'true' ||
+             (github.event_name == 'workflow_dispatch' && inputs.stage != 'resume'))
+        runs-on: ubuntu-latest
+        # Scaled to the ticket's resolved AI model effort; 60 when unset.
+        timeout-minutes: ${{ fromJSON(needs.preflight.outputs.agent_timeout_minutes || '60') }}
+        permissions:
+            contents: read
+            packages: read
+            pull-requests: read
+            checks: read
+            statuses: read
+            actions: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+
+            - name: Mint ag-dev-prompts read token
+              id: prompts-token
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+              with:
+                  app-id: ${{ vars.JIRA_AGENT_APP_ID }}
+                  private-key: ${{ secrets.JIRA_AGENT_APP_PRIVATE_KEY }}
+                  owner: ag-grid
+                  repositories: ag-dev-prompts
+
+            - name: Setup Nx (renders .claude/settings.json)
+              uses: ./.github/actions/setup-nx
+              env:
+                  GITHUB_TOKEN: ${{ steps.prompts-token.outputs.token }}
+              with:
+                  cache_mode: ro
+                  fetch_base: skip
+
+            - name: Install @ag-grid/dev-prompts
+              uses: ./external/ag-shared/github/actions/install-ag-dev-prompts
+              with:
+                  channel: ${{ env.DEV_PROMPTS_CHANNEL }}
+
+            # Post-lock guards. The lock is per JOB, so `preflight` resolved this
+            # run's route OUTSIDE it and a predecessor may have moved things while
+            # this job queued. Both re-checks are shared actions, not stub shell:
+            # ag-dev-prompts docs/ai-workflow.md.
+            # `continue-on-error` is load-bearing on both guards: a step condition
+            # carries an implicit `success()`, so a failure here would skip every
+            # later step. An absent `head_state` reads as `unknown`, which proceeds.
+            - name: Re-check the CI head is still the branch head (post-lock)
+              id: headcheck
+              continue-on-error: true
+              if: github.event_name == 'workflow_run'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-agent-headcheck
+              with:
+                  head_branch: ${{ github.event.workflow_run.head_branch }}
+                  # A branch name is a ref WITHIN a repo, so a fork PR's tip comes
+                  # from the fork, not this repo's same-named branch.
+                  head_repo: ${{ github.event.workflow_run.head_repository.full_name }}
+                  head_sha: ${{ github.event.workflow_run.head_sha }}
+                  github_token: ${{ github.token }}
+
+            - name: Re-resolve the resume route (post-lock)
+              id: revalidate
+              continue-on-error: true
+              if: |
+                  needs.preflight.outputs.stage != '' &&
+                  needs.preflight.outputs.ci_failure_eligible != 'true' &&
+                  needs.ci-success-handler.outputs.dispatch_pr_iterate != 'true'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-resume-preflight
+              with:
+                  issue_key: ${{ needs.preflight.outputs.issue_key || env.ISSUE_KEY }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}
+
+            # Chooses the route all-or-nothing (never per-value) and folds both
+            # post-lock skips into one `proceed`. Deliberately NOT
+            # `continue-on-error`: no `||` chain here can supply its default without
+            # splicing an incoherent route, so it fails loudly instead.
+            - name: Choose the route (post-lock if the re-resolve ran, else pre-lock)
+              id: route
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-agent-route
+              with:
+                  revalidate_outcome: ${{ steps.revalidate.outcome }}
+                  revalidate_stage: ${{ steps.revalidate.outputs.stage }}
+                  revalidate_prior_pr_outcome: ${{ steps.revalidate.outputs.prior_pr_outcome }}
+                  revalidate_issue_key: ${{ steps.revalidate.outputs.issue_key }}
+                  preflight_stage: ${{ needs.preflight.outputs.stage }}
+                  preflight_prior_pr_outcome: ${{ needs.preflight.outputs.prior_pr_outcome }}
+                  preflight_issue_key: ${{ needs.preflight.outputs.issue_key }}
+                  head_state: ${{ steps.headcheck.outputs.head_state }}
+
+            # `!= 'false'` not `== 'true'`: only an explicit skip skips, because an
+            # empty value means the router did not answer.
+            - if: steps.route.outputs.proceed != 'false'
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-pipeline
+              with:
+                  # Stage precedence: ci-failure-iterate (failure preflight eligible)
+                  # → pr-iterate (green CI held on open P0/P1 Codex findings)
+                  # → the route chosen above → a forced workflow_dispatch stage.
+                  stage: ${{ needs.preflight.outputs.ci_failure_eligible == 'true' && 'ci-failure-iterate' || needs.ci-success-handler.outputs.dispatch_pr_iterate == 'true' && 'pr-iterate' || steps.route.outputs.stage || inputs.stage }}
+                  # Every state-dependent value comes from that one route — never a
+                  # post-lock stage married to pre-lock metadata.
+                  issue_key: ${{ steps.route.outputs.issue_key || needs.ci-success-handler.outputs.issue_key || env.ISSUE_KEY }}
+                  ci_failure_run_url: ${{ needs.preflight.outputs.ci_failure_run_url }}
+                  recycle_from: ${{ steps.route.outputs.prior_pr_outcome }}
+                  jira_agent_app_id: ${{ vars.JIRA_AGENT_APP_ID }}
+                  jira_agent_app_private_key: ${{ secrets.JIRA_AGENT_APP_PRIVATE_KEY }}
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}
+
+    # ------------------------------------------------ ci-success-handler
+    # The workflow_run · success counterpart to the failure preflight: promote the
+    # ticket to Needs Review. Pure REST work, no agent.
+    ci-success-handler:
+        # The SAME group as agent-run — a promote must not overlap a promote or an
+        # agent. The old `-promote-<head_sha>` suffix must not come back:
+        # ag-dev-prompts docs/ai-workflow.md.
+        needs: [concurrency-key]
+        concurrency:
+            group: ${{ needs.concurrency-key.outputs.group || format('claude-fallback-{0}', github.run_id) }}
+            queue: max
+            cancel-in-progress: false
+        if: |
+            !cancelled() &&
+            github.event_name == 'workflow_run' &&
+            github.event.workflow_run.conclusion == 'success'
+        runs-on: ubuntu-latest
+        # Queue time is not charged against `timeout-minutes`.
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            actions: read
+            pull-requests: read
+            packages: read
+        outputs:
+            handled: ${{ steps.handler.outputs.handled }}
+            issue_key: ${{ steps.handler.outputs.issue_key }}
+            pr_number: ${{ steps.handler.outputs.pr_number }}
+            # Green CI held on open P0/P1 review findings; routed into agent-run.
+            dispatch_pr_iterate: ${{ steps.handler.outputs.dispatch_pr_iterate }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+
+            - name: Install @ag-grid/dev-prompts
+              uses: ./external/ag-shared/github/actions/install-ag-dev-prompts
+              with:
+                  channel: ${{ env.DEV_PROMPTS_CHANNEL }}
+
+            - id: handler
+              uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-ci-success-handler
+              with:
+                  head_branch: ${{ github.event.workflow_run.head_branch }}
+                  head_sha: ${{ github.event.workflow_run.head_sha }}
+                  run_url: ${{ github.event.workflow_run.html_url }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}
+                  # Effort-estimate write on promote; empty ⇒ skipped, never fatal.
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  # Live-test snippet over this PR's per-PR UMD bundles. `_append`,
+                  # not `_body`: `_body` posts only when AI summary is empty, which
+                  # on a real agent ticket never happens.
+                  success_comment_append: |
+                      Live-test this PR in Plunker — paste these into a vanilla-JS sandbox:
+
+                      <script src="https://ag-grid.github.io/ag-grid/pr-{PR_NUMBER}/ag-grid-community.min.js"></script>
+                      <script src="https://ag-grid.github.io/ag-grid/pr-{PR_NUMBER}/ag-grid-enterprise.min.js"></script>
+
+                      Bundles auto-cleanup on PR close. PR: {PR_URL}
+
+    # ------------------------------------------------------------ pr-plnkr
+    # Re-point the reporter's repro Plunker(s) at this PR's per-PR UMD bundles and
+    # post the fix-pinned links on the ticket. `handled` is true only on the first
+    # promoting green, so this runs once per PR with no marker field.
+    pr-plnkr:
+        needs: ci-success-handler
+        if: needs.ci-success-handler.outputs.handled == 'true'
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            contents: read
+            packages: read
+            # The agent posts a marker comment on the PR (re-run idempotency).
+            pull-requests: write
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 1
+
+            # setup-nx's postinstall renders .claude/settings.json, which the
+            # action verifies. No repo build runs here.
+            - name: Mint ag-dev-prompts read token
+              id: prompts-token
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+              with:
+                  app-id: ${{ vars.JIRA_AGENT_APP_ID }}
+                  private-key: ${{ secrets.JIRA_AGENT_APP_PRIVATE_KEY }}
+                  owner: ag-grid
+                  repositories: ag-dev-prompts
+
+            - name: Setup Nx (renders .claude/settings.json)
+              uses: ./.github/actions/setup-nx
+              env:
+                  GITHUB_TOKEN: ${{ steps.prompts-token.outputs.token }}
+              with:
+                  cache_mode: ro
+                  fetch_base: skip
+
+            - name: Install @ag-grid/dev-prompts
+              uses: ./external/ag-shared/github/actions/install-ag-dev-prompts
+              with:
+                  channel: ${{ env.DEV_PROMPTS_CHANNEL }}
+
+            - uses: ./.ag-dev-prompts/node_modules/@ag-grid/dev-prompts/.github/actions/jira-pr-plnkr
+              with:
+                  issue_key: ${{ needs.ci-success-handler.outputs.issue_key }}
+                  pr_number: ${{ needs.ci-success-handler.outputs.pr_number }}
+                  community_bundle_url: https://ag-grid.github.io/ag-grid/pr-${{ needs.ci-success-handler.outputs.pr_number }}/ag-grid-community.min.js
+                  enterprise_bundle_url: https://ag-grid.github.io/ag-grid/pr-${{ needs.ci-success-handler.outputs.pr_number }}/ag-grid-enterprise.min.js
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  jira_agent_app_id: ${{ vars.JIRA_AGENT_APP_ID }}
+                  jira_agent_app_private_key: ${{ secrets.JIRA_AGENT_APP_PRIVATE_KEY }}
+                  jira_email: ${{ secrets.JIRA_AI_BOT_EMAIL }}
+                  jira_api_token: ${{ secrets.JIRA_AI_BOT_API_TOKEN }}
+                  jira_site_url: ${{ vars.JIRA_SITE_URL }}

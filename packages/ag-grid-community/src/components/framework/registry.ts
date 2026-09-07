@@ -1,32 +1,48 @@
+import type { AgBaseComponent, IconValue } from 'ag-stack';
+import { BaseRegistry } from 'ag-stack';
+
 import type { NamedBean } from '../../context/bean';
-import { BeanStub } from '../../context/beanStub';
-import type { DynamicBeanName, UserComponentName } from '../../context/context';
+import type { BeanCollection, DynamicBeanName, ProcessParamsFunc, UserComponentName } from '../../context/context';
+import { isComponentMetaFunc } from '../../context/context';
+import type { AgEventTypeParams } from '../../events';
+import type { GridOptionsWithDefaults } from '../../gridOptionsDefault';
+import type { GridOptionsService } from '../../gridOptionsService';
+import type { AgGridCommon } from '../../interfaces/iCommon';
 import type { Module } from '../../interfaces/iModule';
-import type { IconName, IconValue } from '../../utils/icon';
+import type { IconName } from '../../utils/icon';
 import { _errMsg } from '../../validation/logging';
-import type { AgComponentSelector, ComponentSelector } from '../../widgets/component';
+import type { AgComponentSelectorType, ComponentSelector } from '../../widgets/component';
 
-export class Registry extends BeanStub implements NamedBean {
-    beanName = 'registry' as const;
-
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export class Registry
+    extends BaseRegistry<
+        BeanCollection,
+        GridOptionsWithDefaults,
+        AgEventTypeParams,
+        AgGridCommon<any, any>,
+        GridOptionsService,
+        DynamicBeanName
+    >
+    implements NamedBean
+{
     private agGridDefaults: { [key in UserComponentName]?: any } = {};
 
-    private agGridDefaultParams: { [key in UserComponentName]?: any } = {};
+    private agGridDefaultOverrides: {
+        [key in UserComponentName]?: { params?: any; processParams?: ProcessParamsFunc };
+    } = {};
 
     private jsComps: { [key: string]: any } = {};
 
-    private dynamicBeans: { [K in DynamicBeanName]?: new (args?: any[]) => object } = {};
-
-    private selectors: { [name in AgComponentSelector]?: ComponentSelector } = {};
+    private selectors: { [name in AgComponentSelectorType]?: ComponentSelector<any> } = {};
 
     private icons: { [K in IconName]?: IconValue } = {};
 
     public postConstruct(): void {
         const comps = this.gos.get('components');
         if (comps != null) {
-            Object.entries(comps).forEach(([key, component]) => {
-                this.jsComps[key] = component;
-            });
+            for (const key of Object.keys(comps)) {
+                this.jsComps[key] = comps[key];
+            }
         }
     }
 
@@ -34,31 +50,36 @@ export class Registry extends BeanStub implements NamedBean {
         const { icons, userComponents, dynamicBeans, selectors } = module;
 
         if (userComponents) {
-            const registerUserComponent = (name: UserComponentName, component: any, params?: any) => {
+            const registerUserComponent = (
+                name: UserComponentName,
+                component: any,
+                params?: any,
+                processParams?: ProcessParamsFunc
+            ) => {
                 this.agGridDefaults[name] = component;
-                if (params) {
-                    this.agGridDefaultParams[name] = params;
+                if (params || processParams) {
+                    this.agGridDefaultOverrides[name] = { params, processParams };
                 }
             };
             for (const name of Object.keys(userComponents) as UserComponentName[]) {
-                const comp = userComponents[name];
+                let comp = userComponents[name]!;
+                if (isComponentMetaFunc(comp)) {
+                    comp = comp.getComp(this.beans);
+                }
                 if (typeof comp === 'object') {
-                    registerUserComponent(name, comp.classImp, comp.params);
+                    const { classImp, params, processParams } = comp;
+                    registerUserComponent(name, classImp, params, processParams);
                 } else {
                     registerUserComponent(name, comp);
                 }
             }
         }
 
-        if (dynamicBeans) {
-            for (const name of Object.keys(dynamicBeans) as DynamicBeanName[]) {
-                this.dynamicBeans[name] = dynamicBeans[name];
-            }
-        }
+        this.registerDynamicBeans(dynamicBeans);
 
-        selectors?.forEach((selector) => {
+        for (const selector of selectors ?? []) {
             this.selectors[selector.selector] = selector;
-        });
+        }
 
         if (icons) {
             for (const name of Object.keys(icons) as IconName[]) {
@@ -70,11 +91,17 @@ export class Registry extends BeanStub implements NamedBean {
     public getUserComponent(
         propertyName: string,
         name: string
-    ): { componentFromFramework: boolean; component: any; params?: any } | null {
-        const createResult = (component: any, componentFromFramework: boolean, params?: any) => ({
+    ): { componentFromFramework: boolean; component: any; params?: any; processParams?: ProcessParamsFunc } | null {
+        const createResult = (
+            component: any,
+            componentFromFramework: boolean,
+            params?: any,
+            processParams?: ProcessParamsFunc
+        ) => ({
             componentFromFramework,
             component,
             params,
+            processParams,
         });
 
         const { frameworkOverrides } = this.beans;
@@ -95,32 +122,28 @@ export class Registry extends BeanStub implements NamedBean {
 
         const defaultComponent = this.agGridDefaults[name as UserComponentName];
         if (defaultComponent) {
-            return createResult(defaultComponent, false, this.agGridDefaultParams[name as UserComponentName]);
+            const overrides = this.agGridDefaultOverrides[name as UserComponentName];
+            return createResult(defaultComponent, false, overrides?.params, overrides?.processParams);
         }
 
         this.beans.validation?.missingUserComponent(propertyName, name, this.agGridDefaults, this.jsComps);
-
         return null;
     }
 
-    public createDynamicBean<T>(name: DynamicBeanName, mandatory: boolean, ...args: any[]): T | undefined {
-        const BeanClass = this.dynamicBeans[name];
-
-        if (BeanClass == null) {
-            if (mandatory) {
-                throw new Error(_errMsg(256));
-            }
-            return undefined;
-        }
-
-        return new BeanClass(...args) as any;
-    }
-
-    public getSelector(name: AgComponentSelector): ComponentSelector | undefined {
+    public getSelector<TComponent extends AgBaseComponent<BeanCollection>>(
+        name: AgComponentSelectorType
+    ): ComponentSelector<TComponent> | undefined {
         return this.selectors[name];
     }
 
     public getIcon(name: IconName): IconValue | undefined {
         return this.icons[name];
+    }
+
+    protected override getDynamicError(name: DynamicBeanName, init: boolean): string {
+        if (init) {
+            return _errMsg(279, { name });
+        }
+        return this.beans.validation?.missingDynamicBean(name) ?? _errMsg(256);
     }
 }

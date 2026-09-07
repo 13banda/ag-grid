@@ -1,5 +1,6 @@
+import { _escapeString } from 'ag-stack';
+
 import type {
-    ExcelCell,
     ExcelColumn,
     ExcelFont,
     ExcelHeaderFooterConfig,
@@ -8,15 +9,16 @@ import type {
     ExcelRow,
     ExcelSheetMargin,
     ExcelSheetPageSetup,
+    ExcelSheetProtection,
     ExcelWorksheet,
     XmlElement,
 } from 'ag-grid-community';
-import { _escapeString } from 'ag-grid-community';
 
-import type { ExcelDataTable, ExcelHeaderFooterPosition } from '../../assets/excelInterfaces';
+import type { ExcelDataTable, ExcelHeaderFooterPosition, InternalExcelCell } from '../../assets/excelInterfaces';
 import { getExcelColumnName } from '../../assets/excelUtils';
 import type { ExcelGridSerializingParams } from '../../excelSerializingSession';
 import {
+    XLSX_WORKSHEET_COMMENTS,
     XLSX_WORKSHEET_DATA_TABLES,
     XLSX_WORKSHEET_HEADER_FOOTER_IMAGES,
     XLSX_WORKSHEET_IMAGES,
@@ -39,16 +41,17 @@ const getMergedCellsAndAddColumnGroups = (
         let merges = 0;
         let lastCol: ExcelColumn;
 
-        cells.forEach((currentCell: ExcelCell, cellIdx: number) => {
+        cells.forEach((currentCell: InternalExcelCell, cellIdx: number) => {
             const min = cellIdx + merges + 1;
             const start = getExcelColumnName(min);
             const outputRow = rowIdx + 1;
 
-            if (currentCell.mergeAcross) {
-                merges += currentCell.mergeAcross;
+            const mergeAcross = currentCell.mergeAcross ?? 0;
+            const mergeDown = currentCell.mergeDown ?? 0;
+            if (mergeAcross || mergeDown) {
+                merges += mergeAcross;
                 const end = getExcelColumnName(cellIdx + merges + 1);
-
-                mergedCells.push(`${start}${outputRow}:${end}${outputRow}`);
+                mergedCells.push(`${start}${outputRow}:${end}${outputRow + mergeDown}`);
             }
 
             if (!cols[min - 1]) {
@@ -70,42 +73,35 @@ const getMergedCellsAndAddColumnGroups = (
         });
     });
 
-    cellsWithCollapsibleGroups.sort((a, b) => {
-        if (a[0] !== b[0]) {
-            return a[0] - b[0];
-        }
-        return b[1] - a[1];
-    });
-
-    const rangeMap = new Map<string, boolean>();
-    const outlineLevel = new Map<number, number>();
-
-    cellsWithCollapsibleGroups
-        .filter((currentRange) => {
-            const rangeString = currentRange.toString();
-            const inMap = rangeMap.get(rangeString);
-
-            if (inMap) {
-                return false;
-            }
-            rangeMap.set(rangeString, true);
-
-            return true;
-        })
-        .forEach((range) => {
-            const refCol = cols.find((col) => col.min == range[0] && col.max == range[1]);
-            const currentOutlineLevel = outlineLevel.get(range[0]);
-            cols.push({
-                min: range[0],
-                max: range[1],
-                outlineLevel: suppressColumnOutline ? undefined : currentOutlineLevel || 1,
-                width: (refCol || { width: 100 }).width,
-            });
-
-            outlineLevel.set(range[0], (currentOutlineLevel || 0) + 1);
-        });
+    if (!suppressColumnOutline) {
+        applyColumnOutlineLevels(cols, cellsWithCollapsibleGroups);
+    }
 
     return mergedCells;
+};
+
+// stamps `outlineLevel` on the per-column entries rather than emitting extra <col> records:
+// overlapping <col> definitions are invalid OOXML and consumers resolve them inconsistently.
+const applyColumnOutlineLevels = (cols: ExcelColumn[], collapsibleRanges: number[][]): void => {
+    const outlineLevelByColumn = new Map<number, number>();
+
+    // each header row contributes one range per collapsible group, so a column covered by
+    // both an outer and an inner group naturally accumulates a deeper nesting level
+    for (let i = 0, len = collapsibleRanges.length; i < len; ++i) {
+        const [rangeStart, rangeEnd] = collapsibleRanges[i];
+        for (let column = rangeStart; column <= rangeEnd; ++column) {
+            outlineLevelByColumn.set(column, (outlineLevelByColumn.get(column) ?? 0) + 1);
+        }
+    }
+
+    outlineLevelByColumn.forEach((level, column) => {
+        if (!cols[column - 1]) {
+            cols[column - 1] = { min: column, max: column };
+        }
+
+        // Excel only supports up to 7 levels of outline
+        cols[column - 1].outlineLevel = Math.min(level, 7);
+    });
 };
 
 const getPageOrientation = (orientation?: 'Portrait' | 'Landscape'): 'portrait' | 'landscape' => {
@@ -165,9 +161,9 @@ const replaceHeaderFooterTokens = (value: string): string => {
         '&[Picture]': '&G',
     };
 
-    Object.entries(map).forEach(([key, val]) => {
-        value = value.replace(key, val);
-    });
+    for (const key of Object.keys(map) as (keyof typeof map)[]) {
+        value = value.replace(key, map[key]);
+    }
 
     return value;
 };
@@ -251,7 +247,8 @@ const buildHeaderFooter = (headerFooterConfig: ExcelHeaderFooterConfig): XmlElem
             return;
         }
 
-        for (const [key, value] of Object.entries<ExcelHeaderFooterContent[]>(headerFooter)) {
+        for (const key of Object.keys(headerFooter)) {
+            const value: ExcelHeaderFooterContent[] = (headerFooter as any)[key];
             const nameSuffix = `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
             const location: 'H' | 'F' = key[0].toUpperCase() as 'H' | 'F';
 
@@ -284,6 +281,34 @@ const addColumns = (columns: ExcelColumn[]) => {
     };
 };
 
+const registerSheetComments = (currentSheet: number, rows: ExcelRow[]) => {
+    const comments = [];
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const cells = rows[rowIndex].cells;
+
+        for (let cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+            const cell = cells[cellIndex];
+
+            if (!cell.note || !cell.ref) {
+                continue;
+            }
+
+            comments.push({
+                ref: cell.ref,
+                text: cell.note.text,
+                author: cell.note.author,
+            });
+        }
+    }
+
+    if (comments.length) {
+        XLSX_WORKSHEET_COMMENTS.set(currentSheet, comments);
+    } else {
+        XLSX_WORKSHEET_COMMENTS.delete(currentSheet);
+    }
+};
+
 const addSheetData = (rows: ExcelRow[], sheetNumber: number) => {
     return (params: ComposedWorksheetParams) => {
         if (rows.length) {
@@ -292,6 +317,82 @@ const addSheetData = (rows: ExcelRow[], sheetNumber: number) => {
                 children: rows.map((row, idx) => rowFactory.getTemplate(row, idx, sheetNumber)),
             });
         }
+        return params;
+    };
+};
+
+const getPasswordHash = (password: string): string => {
+    const passwordLength = password.length;
+    if (!passwordLength) {
+        return '';
+    }
+
+    const passwordArray = new Array<number>(passwordLength + 1);
+    passwordArray[0] = passwordLength;
+    for (let i = 1; i <= passwordLength; i++) {
+        passwordArray[i] = password.charCodeAt(i - 1) & 0xff;
+    }
+
+    let verifier = 0x0000;
+    for (let i = passwordArray.length - 1; i >= 0; i--) {
+        const passwordByte = passwordArray[i];
+        const intermediate1 = (verifier & 0x4000) === 0x0000 ? 0 : 1;
+        const intermediate2 = (verifier << 1) & 0x7fff;
+        verifier = (intermediate1 | intermediate2) ^ passwordByte;
+    }
+
+    return (verifier ^ 0xce4b).toString(16).toUpperCase().padStart(4, '0');
+};
+
+const addSheetProtection = (protectSheet?: boolean | ExcelSheetProtection) => {
+    return (params: ComposedWorksheetParams) => {
+        if (!protectSheet) {
+            return params;
+        }
+
+        const sheetProtection: ExcelSheetProtection = typeof protectSheet === 'boolean' ? {} : protectSheet;
+
+        const rawMap: Record<string, string | number | undefined> = {
+            sheet: 1,
+        };
+
+        const passwordHash = sheetProtection.password ? getPasswordHash(sheetProtection.password) : '';
+        if (passwordHash) {
+            rawMap.password = passwordHash;
+        }
+
+        const defaults: Record<Exclude<keyof ExcelSheetProtection, 'password'>, boolean> = {
+            autoFilter: false,
+            deleteColumns: false,
+            deleteRows: false,
+            formatCells: false,
+            formatColumns: false,
+            formatRows: false,
+            insertColumns: false,
+            insertHyperlinks: false,
+            insertRows: false,
+            pivotTables: false,
+            selectLockedCells: true,
+            selectUnlockedCells: true,
+        };
+
+        (Object.keys(defaults) as Exclude<keyof ExcelSheetProtection, 'password'>[]).forEach(
+            (key: Exclude<keyof ExcelSheetProtection, 'password'>) => {
+                const allow = sheetProtection[key];
+                if (allow == null || allow === defaults[key]) {
+                    return;
+                }
+
+                rawMap[key] = allow ? 0 : 1;
+            }
+        );
+
+        params.children.push({
+            name: 'sheetProtection',
+            properties: {
+                rawMap,
+            },
+        });
         return params;
     };
 };
@@ -415,6 +516,23 @@ const addDrawingRel = (currentSheet: number) => {
     };
 };
 
+const addLegacyDrawingRel = (currentSheet: number) => {
+    return (params: ComposedWorksheetParams) => {
+        if (XLSX_WORKSHEET_COMMENTS.get(currentSheet)?.length) {
+            params.children.push({
+                name: 'legacyDrawing',
+                properties: {
+                    rawMap: {
+                        'r:id': `rId${++params.rIdCounter}`,
+                    },
+                },
+            });
+        }
+
+        return params;
+    };
+};
+
 const addVmlDrawingRel = (currentSheet: number) => {
     return (params: ComposedWorksheetParams) => {
         if (XLSX_WORKSHEET_HEADER_FOOTER_IMAGES.get(currentSheet)) {
@@ -492,11 +610,18 @@ const addSheetPr = () => {
     };
 };
 
-const addSheetFormatPr = (rows: ExcelRow[]) => {
+const addSheetFormatPr = (rows: ExcelRow[], columns: ExcelColumn[]) => {
     return (params: ComposedWorksheetParams) => {
-        const maxOutline = rows.reduce((prev: number, row: ExcelRow) => {
+        const maxRowOutline = rows.reduce((prev: number, row: ExcelRow) => {
             if (row.outlineLevel && row.outlineLevel > prev) {
                 return row.outlineLevel;
+            }
+            return prev;
+        }, 0);
+
+        const maxColOutline = columns.reduce((prev: number, column: ExcelColumn) => {
+            if (column.outlineLevel && column.outlineLevel > prev) {
+                return column.outlineLevel;
             }
             return prev;
         }, 0);
@@ -507,7 +632,8 @@ const addSheetFormatPr = (rows: ExcelRow[]) => {
                 rawMap: {
                     baseColWidth: 10,
                     defaultRowHeight: 16,
-                    outlineLevelRow: maxOutline ? maxOutline : undefined,
+                    outlineLevelRow: maxRowOutline ? maxRowOutline : undefined,
+                    outlineLevelCol: maxColOutline ? maxColOutline : undefined,
                 },
             },
         });
@@ -531,26 +657,31 @@ const worksheetFactory: ExcelOOXMLTemplate = {
             rightToLeft,
             frozenRowCount,
             frozenColumnCount,
+            protectSheet,
         } = config;
 
         const { table } = worksheet;
         const { rows, columns } = table;
-        const mergedCells =
-            columns && columns.length ? getMergedCellsAndAddColumnGroups(rows, columns, !!suppressColumnOutline) : [];
+        const mergedCells = columns?.length
+            ? getMergedCellsAndAddColumnGroups(rows, columns, !!suppressColumnOutline)
+            : [];
+        registerSheetComments(currentSheet, rows);
 
         const worksheetExcelTables = XLSX_WORKSHEET_DATA_TABLES.get(currentSheet);
 
         const { children } = [
             addSheetPr(),
             addSheetViews(rightToLeft, frozenColumnCount, frozenRowCount),
-            addSheetFormatPr(rows),
+            addSheetFormatPr(rows, columns ?? []),
             addColumns(columns),
             addSheetData(rows, currentSheet + 1),
+            addSheetProtection(protectSheet),
             addMergeCells(mergedCells),
             addPageMargins(margins),
             addPageSetup(pageSetup),
             addHeaderFooter(headerFooterConfig),
             addDrawingRel(currentSheet),
+            addLegacyDrawingRel(currentSheet),
             addVmlDrawingRel(currentSheet),
             addExcelTableRel(worksheetExcelTables),
         ].reduce((composed, f) => f(composed), { children: [], rIdCounter: 0 });

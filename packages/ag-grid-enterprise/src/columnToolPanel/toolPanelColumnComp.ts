@@ -1,68 +1,82 @@
-import type { AgCheckbox, AgColumn, DragItem, DragSource, ITooltipCtrl, TooltipFeature } from 'ag-grid-community';
+import { RefPlaceholder, _setAriaDescribedBy, _setAriaLabel, _setDisplayed } from 'ag-stack';
+
+import type {
+    AgColumn,
+    ColumnEventType,
+    ColumnSelectionPanelSource,
+    DragItem,
+    ElementParams,
+    GridCheckbox,
+    GridDragSource,
+    LongTapEvent,
+    TooltipCallbackParams,
+    TooltipFeature,
+} from 'ag-grid-community';
 import {
     AgCheckboxSelector,
     Component,
     DragSourceType,
     KeyCode,
-    RefPlaceholder,
+    TouchListener,
+    _addGridCommonParams,
     _createIconNoSpan,
-    _escapeString,
+    _getHeaderTooltipComponentDefinition,
     _getShouldDisplayTooltip,
     _getToolPanelClassesFromColDef,
-    _setAriaDescribedBy,
-    _setAriaLabel,
-    _setDisplayed,
-    _warn,
+    _resolveHeaderTooltipValue,
 } from 'ag-grid-community';
 
 import type { ColumnModelItem } from './columnModelItem';
-import { createPivotState, setAllColumns, updateColumns } from './modelItemUtils';
+import {
+    ColumnSelectionLabelRendererFeature,
+    isColumnSelectionLabelRendererEnabled,
+} from './columnSelectionLabelRendererFeature';
+import type { ToolPanelColumnCompParams } from './columnToolPanel';
+import { createPivotStateForToolPanel, setAllColumns, updateColumns } from './modelItemUtils';
 import { ToolPanelContextMenu } from './toolPanelContextMenu';
+import { isDeferredMode } from './toolPanelDeferredUiUtils';
 
+const ToolPanelColumnElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-column-select-column',
+    children: [
+        { tag: 'ag-checkbox', ref: 'cbSelect', cls: 'ag-column-select-checkbox' },
+        { tag: 'span', ref: 'eLabel', cls: 'ag-column-select-column-label' },
+    ],
+};
 export class ToolPanelColumnComp extends Component {
     private readonly eLabel: HTMLElement = RefPlaceholder;
-    private readonly cbSelect: AgCheckbox = RefPlaceholder;
+    private readonly cbSelect: GridCheckbox = RefPlaceholder;
 
     public readonly column: AgColumn;
-    private readonly columnDept: number;
+    public readonly columnDepth: number;
     private eDragHandle: Element;
-    private readonly displayName: string | null;
     private processingColumnStateChange = false;
     private tooltipFeature?: TooltipFeature;
+    private labelRendererFeature?: ColumnSelectionLabelRendererFeature;
 
     constructor(
-        modelItem: ColumnModelItem,
+        public modelItem: ColumnModelItem,
         private readonly allowDragging: boolean,
         private readonly groupsExist: boolean,
-        private readonly focusWrapper: HTMLElement
+        private readonly focusWrapper: HTMLElement,
+        private readonly params: ToolPanelColumnCompParams,
+        private readonly eventType: ColumnEventType,
+        private readonly source: ColumnSelectionPanelSource
     ) {
         super();
-        const { column, depth, displayName } = modelItem;
+        const { column, depth } = modelItem;
         this.column = column;
-        this.columnDept = depth;
-        this.displayName = displayName;
+        this.columnDepth = depth;
+    }
+
+    private get displayName(): string | null {
+        return this.modelItem.displayName;
     }
 
     public postConstruct(): void {
-        this.setTemplate(
-            /* html */
-            `<div class="ag-column-select-column">
-                <ag-checkbox data-ref="cbSelect" class="ag-column-select-checkbox"></ag-checkbox>
-                <span class="ag-column-select-column-label" data-ref="eLabel"></span>
-            </div>`,
-            [AgCheckboxSelector]
-        );
-        const {
-            beans,
-            cbSelect,
-            displayName,
-            eLabel,
-            columnDept: indent,
-            groupsExist,
-            column,
-            gos,
-            focusWrapper,
-        } = this;
+        this.setTemplate(ToolPanelColumnElement, [AgCheckboxSelector]);
+        const { beans, cbSelect, eLabel, columnDepth: indent, groupsExist, column, gos, focusWrapper } = this;
         const eDragHandle = _createIconNoSpan('columnDrag', beans)!;
         this.eDragHandle = eDragHandle;
         eDragHandle.classList.add('ag-drag-handle', 'ag-column-select-column-drag-handle');
@@ -70,26 +84,56 @@ export class ToolPanelColumnComp extends Component {
         const checkboxGui = cbSelect.getGui();
         const checkboxInput = cbSelect.getInputElement();
 
-        checkboxGui.insertAdjacentElement('afterend', eDragHandle);
+        checkboxGui.after(eDragHandle);
         checkboxInput.setAttribute('tabindex', '-1');
 
-        const displayNameSanitised: any = _escapeString(displayName);
-        eLabel.innerHTML = displayNameSanitised;
+        if (isColumnSelectionLabelRendererEnabled(this.params)) {
+            this.labelRendererFeature = this.createManagedBean(
+                new ColumnSelectionLabelRendererFeature(
+                    eLabel,
+                    this.params,
+                    this.source,
+                    this.column,
+                    null,
+                    () => this.displayName
+                )
+            );
+        } else {
+            eLabel.textContent = this.displayName;
+        }
 
         // if grouping, we add an extra level of indent, to cater for expand/contract icons we need to indent for
         if (groupsExist) {
-            this.addCssClass('ag-column-select-add-group-indent');
+            this.addCss('ag-column-select-add-group-indent');
         }
-        this.addCssClass(`ag-column-select-indent-${indent}`);
+        this.addCss(`ag-column-select-indent-${indent}`);
         this.getGui().style.setProperty('--ag-indentation-level', String(indent));
 
         this.tooltipFeature = this.createOptionalManagedBean(
-            beans.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
-                getGui: () => this.getGui(),
+            beans.tooltipSvc?.createTooltip({
+                getGui: () => this.focusWrapper,
+                getTooltipComponentDefinition: () => _getHeaderTooltipComponentDefinition(column.colDef),
                 getLocation: () => 'columnToolPanelColumn',
-                getColDef: () => column.getColDef(),
+                getTooltipValue: () => {
+                    const displayName = this.displayName;
+                    return _resolveHeaderTooltipValue(
+                        column.colDef,
+                        _addGridCommonParams<TooltipCallbackParams>(gos, {
+                            location: 'columnToolPanelColumn',
+                            colDef: column.colDef,
+                            column,
+                            value: displayName,
+                            valueFormatted: displayName,
+                        })
+                    );
+                },
                 shouldDisplayTooltip: _getShouldDisplayTooltip(gos, () => eLabel),
-            } as ITooltipCtrl)
+                getAdditionalParams: () => ({
+                    colDef: column.colDef,
+                    column,
+                    valueFormatted: this.displayName,
+                }),
+            })
         );
 
         this.setupDragging();
@@ -102,11 +146,19 @@ export class ToolPanelColumnComp extends Component {
             columnPivotChanged: onColStateChanged,
             columnRowGroupChanged: onColStateChanged,
             visibleChanged: onColStateChanged,
+            colDefChanged: this.onColDefChanged.bind(this),
+            headerNameChanged: this.onColDefChanged.bind(this),
         });
         this.addManagedListeners(focusWrapper, {
             keydown: this.handleKeyDown.bind(this),
             contextmenu: this.onContextMenu.bind(this),
         });
+
+        const touchListener = new TouchListener(focusWrapper);
+        this.addManagedListeners(touchListener, {
+            longTap: (e: LongTapEvent) => this.onContextMenu(e.touchStart),
+        });
+        this.addDestroyFunc(touchListener.destroy.bind(touchListener));
 
         this.addManagedPropertyListener('functionsReadOnly', this.onColumnStateChanged.bind(this));
 
@@ -118,8 +170,10 @@ export class ToolPanelColumnComp extends Component {
 
         this.setupTooltip();
 
-        const classes = _getToolPanelClassesFromColDef(column.getColDef(), gos, column, null);
-        classes.forEach((c) => this.addOrRemoveCssClass(c, true));
+        const classes = _getToolPanelClassesFromColDef(column.colDef, this.beans, column, null);
+        for (const c of classes) {
+            this.toggleCss(c, true);
+        }
     }
 
     public getColumn(): AgColumn {
@@ -127,20 +181,16 @@ export class ToolPanelColumnComp extends Component {
     }
 
     private setupTooltip(): void {
-        const refresh = () => this.tooltipFeature?.setTooltipAndRefresh(this.column.getColDef().headerTooltip);
+        const refresh = () => this.tooltipFeature?.refreshTooltip();
         refresh();
 
         this.addManagedEventListeners({ newColumnsLoaded: refresh });
     }
 
-    private onContextMenu(e: MouseEvent): void {
-        const { column, gos } = this;
-
-        if (gos.get('functionsReadOnly')) {
-            return;
-        }
-
-        const contextMenu = this.createBean(new ToolPanelContextMenu(column, e, this.focusWrapper));
+    private onContextMenu(e: MouseEvent | Touch): void {
+        const contextMenu = this.createBean(
+            new ToolPanelContextMenu(this.column, e, this.focusWrapper, this.params, this.eventType, this.source)
+        );
         this.addDestroyFunc(() => {
             if (contextMenu.isAlive()) {
                 this.destroyBean(contextMenu);
@@ -184,7 +234,16 @@ export class ToolPanelColumnComp extends Component {
             return;
         }
 
-        setAllColumns(this.beans, [this.column], nextState, 'toolPanelUi');
+        setAllColumns(this.beans, [this.column], nextState, this.eventType, this.params);
+    }
+
+    private onColDefChanged(): void {
+        if (this.labelRendererFeature) {
+            this.labelRendererFeature.refresh();
+        } else {
+            this.eLabel.textContent = this.displayName;
+        }
+        this.refreshAriaLabel();
     }
 
     private refreshAriaLabel(): void {
@@ -209,12 +268,16 @@ export class ToolPanelColumnComp extends Component {
         const beans = this.beans;
         const { gos, eventSvc, dragAndDrop } = beans;
 
+        if (isDeferredMode(this.params)) {
+            eDragHandle.setAttribute('data-column-tool-panel-deferred', '');
+        }
+
         let hideColumnOnExit = !gos.get('suppressDragLeaveHidesColumns');
-        const dragSource: DragSource = {
+        const dragSource: GridDragSource = {
             type: DragSourceType.ToolPanel,
             eElement: eDragHandle,
-            dragItemName: this.displayName,
-            getDefaultIconName: () => (hideColumnOnExit ? 'hide' : 'notAllowed'),
+            dragItemName: () => this.displayName,
+            getDefaultIconName: () => (hideColumnOnExit && !isDeferredMode(this.params) ? 'hide' : 'notAllowed'),
             getDragItem: () => this.createDragItem(),
             onDragStarted: () => {
                 hideColumnOnExit = !gos.get('suppressDragLeaveHidesColumns');
@@ -229,19 +292,20 @@ export class ToolPanelColumnComp extends Component {
                 });
             },
             onGridEnter: (dragItem: DragItem | null) => {
-                if (hideColumnOnExit) {
+                if (hideColumnOnExit && !isDeferredMode(this.params)) {
                     // when dragged into the grid, restore the state that was active pre-drag
                     updateColumns(beans, {
                         columns: [this.column],
                         visibleState: dragItem?.visibleState,
                         pivotState: dragItem?.pivotState,
-                        eventType: 'toolPanelUi',
+                        eventType: this.eventType,
+                        buttons: this.params.buttons,
                     });
                 }
             },
             onGridExit: () => {
-                if (hideColumnOnExit) {
-                    // when dragged outside of the grid, mimic what happens when checkbox is disabled
+                if (hideColumnOnExit && !isDeferredMode(this.params)) {
+                    // when dragged outside of the grid, copy what happens when checkbox is disabled
                     // this handles the behaviour for pivot which is different to just hiding a column.
                     this.onChangeCommon(false);
                 }
@@ -253,9 +317,12 @@ export class ToolPanelColumnComp extends Component {
     }
 
     private createDragItem() {
-        const colId = this.column.getColId();
+        const colId = this.column.colId;
         const visibleState = { [colId]: this.column.isVisible() };
-        const pivotState = { [colId]: createPivotState(this.column) };
+        const updateStrategy = this.beans.columnStateUpdateStrategy;
+        const pivotState = {
+            [colId]: createPivotStateForToolPanel(this.column, updateStrategy, isDeferredMode(this.params)),
+        };
         return {
             columns: [this.column],
             visibleState,
@@ -265,18 +332,22 @@ export class ToolPanelColumnComp extends Component {
 
     private onColumnStateChanged(): void {
         this.processingColumnStateChange = true;
-        const isPivotMode = this.beans.colModel.isPivotMode();
+        const updateStrategy = this.beans.columnStateUpdateStrategy;
+        const isPivotMode = updateStrategy.getPivotMode(isDeferredMode(this.params));
         if (isPivotMode) {
             // if reducing, checkbox means column is one of pivot, value or group
-            const anyFunctionActive = this.column.isAnyFunctionActive();
+            const anyFunctionActive = updateStrategy.isColumnSelectedInPivotModeToolPanel(
+                isDeferredMode(this.params),
+                this.column
+            );
             this.cbSelect.setValue(anyFunctionActive);
         } else {
             // if not reducing, the checkbox tells us if column is visible or not
-            this.cbSelect.setValue(this.column.isVisible());
+            this.cbSelect.setValue(updateStrategy.isColumnVisibleInToolPanel(isDeferredMode(this.params), this.column));
         }
 
-        let canBeToggled = true;
-        let canBeDragged = true;
+        let canBeToggled: boolean;
+        let canBeDragged: boolean;
         if (isPivotMode) {
             // when in pivot mode, the item should be read only if:
             //  a) gui is not allowed make any changes
@@ -286,7 +357,7 @@ export class ToolPanelColumnComp extends Component {
             canBeToggled = !functionsReadOnly && !noFunctionsAllowed;
             canBeDragged = canBeToggled;
         } else {
-            const { enableRowGroup, enableValue, lockPosition, suppressMovable, lockVisible } = this.column.getColDef();
+            const { enableRowGroup, enableValue, lockPosition, suppressMovable, lockVisible } = this.column.colDef;
             const forceDraggable = !!enableRowGroup || !!enableValue;
             const disableDraggable = !!lockPosition || !!suppressMovable;
             canBeToggled = !lockVisible;
@@ -295,7 +366,7 @@ export class ToolPanelColumnComp extends Component {
 
         this.cbSelect.setReadOnly(!canBeToggled);
         this.eDragHandle.classList.toggle('ag-column-select-column-readonly', !canBeDragged);
-        this.addOrRemoveCssClass('ag-column-select-column-readonly', !canBeDragged && !canBeToggled);
+        this.toggleCss('ag-column-select-column-readonly', !canBeDragged && !canBeToggled);
 
         this.cbSelect.setPassive(false);
 
@@ -328,6 +399,6 @@ export class ToolPanelColumnComp extends Component {
     }
 
     public setExpanded(_value: boolean): void {
-        _warn(158);
+        this.beans.log.warn(158);
     }
 }

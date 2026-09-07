@@ -1,155 +1,180 @@
-import type {
-    AgChartInstance,
-    AgChartTheme,
-    AgChartThemeName,
-    AgSparklineOptions,
-    AgTooltipRendererResult,
-} from 'ag-charts-types';
+import type { AgChartInstance, AgSparklineOptions } from 'ag-charts-types';
+import { RefPlaceholder, _batchCall, _setAriaLabel, _setAriaLabelledBy } from 'ag-stack';
 
-import type { ICellRenderer, ISparklineCellRendererParams } from 'ag-grid-community';
-import { Component, RefPlaceholder, _observeResize } from 'ag-grid-community';
+import type { AgColumn, Environment, ICellRenderer, ISparklineCellRendererParams, RowNode } from 'ag-grid-community';
+import { Component, _formatNumberCommas } from 'ag-grid-community';
 
-import { wrapFn } from './sparklinesUtils';
+import {
+    getChartTypeLabel,
+    getSparklineAriaTemplate,
+    getSparklineSummary,
+    interpolateTemplate,
+} from './sparklinesUtils';
 
-export const DEFAULT_THEMES = ['ag-default', 'ag-material', 'ag-sheets', 'ag-polychroma', 'ag-vivid'];
+const COMPONENT_PREFIX = 'ag-sparkline';
 
 export class SparklineCellRenderer extends Component implements ICellRenderer {
     private readonly eSparkline: HTMLElement = RefPlaceholder;
     private sparklineInstance?: AgChartInstance<any>;
     private sparklineOptions: AgSparklineOptions;
-    private params: ISparklineCellRendererParams<any, any> | undefined;
+    private params: ISparklineCellRendererParams<any, any>;
+    private cachedWidth = 0;
+    private cachedHeight = 0;
+    private dataRef: any[] = [];
+    private processedData: any[] = [];
+    private env: Environment;
 
     constructor() {
-        super(/* html */ `<div class="ag-sparkline-wrapper">
-            <span data-ref="eSparkline"></span>
-        </div>`);
+        super({
+            tag: 'div',
+            cls: `${COMPONENT_PREFIX}-wrapper`,
+            children: [{ tag: 'span', ref: 'eSparkline' }],
+        });
     }
 
     postConstruct(): void {
-        this.addManagedPropertyListeners(['chartThemeOverrides', 'chartThemes'], (_event) => this.refresh(this.params));
+        this.env = this.beans.environment;
+        this.addManagedPropertyListeners(['chartThemeOverrides', 'chartThemes', 'styleNonce'], () =>
+            this.refresh(this.params)
+        );
+    }
+
+    private createListener(batch = true) {
+        return () =>
+            this.updateSize(this.params?.column?.getActualWidth() ?? 0, (this.params?.node.rowHeight ?? 0) - 2, batch);
+    }
+
+    private initGridObserver() {
+        // Use grid APIs to listen for column width and row height changes instead
+        // of a ResizeObserver to avoid having to wait for a re-layout before resizing sparklines
+
+        const batchListener = this.createListener();
+        const listener = this.createListener(false);
+
+        const column = this.params?.column as AgColumn;
+        const rowNode = this.params?.node as RowNode;
+
+        column.__addEventListener('columnStateUpdated', batchListener);
+        rowNode.__addEventListener('heightChanged', batchListener);
+
+        this.addDestroyFunc(() => {
+            column.__removeEventListener('columnStateUpdated', batchListener);
+            rowNode.__removeEventListener('heightChanged', batchListener);
+        });
+
+        listener();
+    }
+
+    private updateSize(newWidth: number, newHeight: number, batch = true) {
+        // Reserve space for the maximum number of widgets that can appear in this column, not the actual number that
+        // appear in this cell e.g. if rowDrag is a callback and returns false, so that every sparkline in a column is
+        // the same size and they line up vertically.
+        const colDef = this.params?.colDef;
+        const widgets = (colDef?.rowDrag ? 1 : 0) + (colDef?.checkboxSelection ? 1 : 0) + (colDef?.dndSource ? 1 : 0);
+        const env = this.env;
+
+        // account for the cell's border and padding, and any widgets sharing the cell
+        newWidth -=
+            2 * env.getDefaultCellHorizontalPadding() +
+            widgets * (env.getDefaultIconSize() + env.getDefaultCellWidgetSpacing());
+
+        if (newWidth !== this.cachedWidth || newHeight !== this.cachedHeight) {
+            this.cachedWidth = newWidth;
+            this.cachedHeight = newHeight;
+
+            const refresh = this.refresh.bind(this);
+
+            if (batch) {
+                _batchCall(() => this.isAlive() && refresh());
+            } else {
+                refresh();
+            }
+        }
     }
 
     public init(params: ISparklineCellRendererParams): void {
-        this.refresh(params);
-        const unsubscribeFromResize = _observeResize(this.beans, this.getGui(), () => this.refresh(params));
-        this.addDestroyFunc(() => unsubscribeFromResize());
-    }
-
-    private getThemeName(): string {
-        const availableThemes = this.gos.get('chartThemes');
-        return (availableThemes || DEFAULT_THEMES)[0];
-    }
-
-    public refresh(params?: ISparklineCellRendererParams): boolean {
         this.params = params;
-        const { clientWidth: width, clientHeight: height } = this.getGui();
+        const { eParentOfValue } = params;
+        const id = `${COMPONENT_PREFIX}-cell-renderer-${this.getCompId()}`;
+        this.getGui().setAttribute('id', id);
+        _setAriaLabelledBy(eParentOfValue, id);
+        this.addDestroyFunc(() => _setAriaLabelledBy(eParentOfValue));
+        this.initGridObserver();
+    }
 
-        if (!this.sparklineInstance && params && width > 0 && height) {
+    public refresh(params: ISparklineCellRendererParams = this.params): boolean {
+        this.params = params;
+        const data = this.processData(params?.value);
+        this.refreshAriaLabel(data);
+
+        const width = this.cachedWidth;
+        const height = this.cachedHeight;
+        const styleNonce = this.gos.get('styleNonce');
+
+        if (!this.sparklineInstance && params && width > 0 && height > 0) {
             this.sparklineOptions = {
                 container: this.eSparkline,
                 width,
                 height,
                 ...params.sparklineOptions,
-                data: this.processData(params.value),
+                ...(styleNonce ? { styleNonce } : {}),
+                data,
+                context: this.createContext(),
             } as AgSparklineOptions;
 
-            if (this.sparklineOptions.tooltip?.renderer) {
-                this.wrapTooltipRenderer();
-            } else {
-                this.sparklineOptions.tooltip = {
-                    ...this.sparklineOptions.tooltip,
-                    renderer: (params: any) =>
-                        ({ content: this.createDefaultContent(params) }) as AgTooltipRendererResult,
-                };
-            }
+            this.sparklineOptions.type ??= 'line';
 
-            // Only bar sparklines have itemStyler
-            const theme = this.sparklineOptions?.theme as AgChartTheme;
-            if (this.sparklineOptions.type === 'bar' && this.sparklineOptions.itemStyler) {
-                this.wrapItemStyler(this.sparklineOptions);
-            } else if (theme?.overrides?.bar?.series?.itemStyler) {
-                this.wrapItemStyler(theme.overrides.bar.series);
-            }
-
-            this.updateTheme(this.sparklineOptions);
-
-            // create new sparkline
+            // No default `tooltip.renderer` install — the chart-side sparkline preset
+            // supplies one. A function here would poison the structural-options cache.
             this.sparklineInstance = params.createSparkline!(this.sparklineOptions);
             return true;
         } else if (this.sparklineInstance) {
-            const data = params?.value;
-            this.sparklineOptions.width = width;
-            this.sparklineOptions.height = height;
-            this.sparklineOptions.data = this.processData(data);
-            this.updateTheme(this.sparklineOptions);
-
-            this.sparklineInstance.updateDelta(this.sparklineOptions);
+            this.sparklineInstance.update({
+                ...this.sparklineOptions,
+                data,
+                width,
+                height,
+                context: this.createContext(),
+                ...(styleNonce ? { styleNonce } : {}),
+            });
 
             return true;
         }
         return false;
     }
 
-    private updateTheme(sparklineOptions: AgSparklineOptions) {
-        const themeName = this.getThemeName() as AgChartThemeName;
-        if (typeof sparklineOptions.theme === 'string' || !sparklineOptions.theme) {
-            sparklineOptions.theme = themeName;
-        } else if (sparklineOptions.theme) {
-            sparklineOptions.theme.baseTheme = themeName;
-        }
+    private refreshAriaLabel(data: any[]): void {
+        const translate = this.getLocaleTextFunc();
+        const getLocaleText = this.getLocaleTextFunc.bind(this);
+        const yKey = (this.params?.sparklineOptions as any)?.yKey ?? (this.sparklineOptions as any)?.yKey ?? 'y';
+        const summary = getSparklineSummary(data, yKey);
+        const sparklineOptions = this.params?.sparklineOptions ?? this.sparklineOptions;
+        const { template, values } = getSparklineAriaTemplate({
+            translate,
+            chartType: getChartTypeLabel(translate, sparklineOptions),
+            summary,
+            formatNumber: (value) => _formatNumberCommas(value, getLocaleText),
+        });
+        _setAriaLabel(this.getGui(), interpolateTemplate(template, values));
     }
 
-    private processData(data: any[] = []) {
-        if (data.length === 0) {
-            return data;
+    private processData(data: any[] | null | undefined) {
+        if (!data?.length) {
+            return data ?? []; // same reference if defined
         }
 
-        return data.filter((item) => item != null);
+        if (this.dataRef !== data) {
+            this.dataRef = data;
+            this.processedData = Array.isArray(data[0]) ? data.filter((item) => item != null) : data;
+        }
+
+        return this.processedData;
     }
 
     private createContext() {
         return {
             data: this.params?.data,
             cellData: this.params?.value,
-        };
-    }
-
-    private createDefaultContent(params: any, userRendererResult?: AgTooltipRendererResult): string {
-        const userTitle = userRendererResult?.title;
-        const xKeyProvided = this.sparklineOptions.xKey;
-        const tupleData = Array.isArray(this.sparklineOptions.data?.[0]);
-
-        const showXValue = !userTitle && (xKeyProvided || tupleData);
-
-        return `${showXValue ? `${params.xValue} ` : ''}${params.yValue}`;
-    }
-
-    private wrapItemStyler(container: { itemStyler?: any }) {
-        container!.itemStyler = wrapFn(container.itemStyler, (fn, stylerParams: any): any => {
-            return fn({
-                ...stylerParams,
-                context: this.createContext(),
-            });
-        });
-    }
-
-    private wrapTooltipRenderer() {
-        this.sparklineOptions.tooltip = {
-            ...this.sparklineOptions.tooltip,
-            renderer: wrapFn(this.sparklineOptions.tooltip!.renderer!, (fn, tooltipParams: any): any => {
-                const userRendererResult = fn({
-                    ...tooltipParams,
-                    context: this.createContext(),
-                });
-
-                if (typeof userRendererResult === 'string') {
-                    return userRendererResult;
-                }
-                return {
-                    content: this.createDefaultContent(tooltipParams, userRendererResult),
-                    ...userRendererResult,
-                };
-            }),
         };
     }
 

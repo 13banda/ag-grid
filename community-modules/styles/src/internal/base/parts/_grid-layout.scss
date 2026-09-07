@@ -8,6 +8,9 @@
     .ag-root-wrapper {
         border-radius: var(--ag-wrapper-border-radius);
         border: var(--ag-borders) var(--ag-border-color);
+
+        // a nested grid must not inherit the highlight of the row hosting it
+        --ag-internal-row-highlight-content: initial;
     }
 
     .ag-row > .ag-cell-wrapper.ag-row-group {
@@ -20,6 +23,11 @@
     .ag-cell-wrapper.ag-row-group-leaf-indent,
     .ag-cell-wrapper.ag-pivot-leaf-group {
         padding-left: calc(var(--ag-indentation-level) * var(--ag-row-group-indent-size));
+    }
+
+    .ag-cell-wrapper > .ag-group-checkbox-spacing {
+        width: var(--ag-icon-size);
+        margin-right: var(--ag-cell-widget-spacing);
     }
 
     .ag-row-group-leaf-indent {
@@ -71,64 +79,180 @@
         background-color: var(--ag-range-selection-highlight-color) !important;
     }
 
+    .ag-row,
+    .ag-spanned-row {
+        color: var(--ag-data-color);
+    }
+
     .ag-row {
         height: var(--ag-row-height);
-        background-color: var(--ag-background-color);
-        color: var(--ag-data-color);
+        &.ag-row-editing-invalid {
+            background-color: var(--ag-full-row-invalid-background-color);
+        }
+    }
+
+    .ag-row.ag-full-width-row:not(.ag-embedded-full-width-row) {
         border-bottom: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
     }
 
-    .ag-row-highlight-above::after,
-    .ag-row-highlight-below::after {
-        content: '';
+    .ag-row:not(.ag-header-row, .ag-full-width-row),
+    .ag-row.ag-embedded-full-width-row {
+        > .ag-grid-pinned-left-cells,
+        > .ag-grid-scrolling-cells,
+        > .ag-grid-pinned-right-cells {
+            border-bottom: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
+        }
+    }
+
+    .ag-grid-pinned-bottom-rows-container {
+        .ag-row-last:not(.ag-header-row, .ag-full-width-row),
+        .ag-row-last.ag-embedded-full-width-row {
+            > .ag-grid-pinned-left-cells,
+            > .ag-grid-scrolling-cells,
+            > .ag-grid-pinned-right-cells {
+                border-bottom: none;
+            }
+        }
+    }
+
+    :where(.ag-grid-sticky-bottom-rows-container) {
+        .ag-row:where(:not(.ag-header-row, .ag-full-width-row)),
+        .ag-row:where(.ag-embedded-full-width-row) {
+            > .ag-grid-pinned-left-cells,
+            > .ag-grid-scrolling-cells,
+            > .ag-grid-pinned-right-cells {
+                border-bottom: none;
+                border-top: var(--ag-row-border);
+            }
+        }
+    }
+
+    :where(.ag-row:not(.ag-header-row)) {
+        background-color: var(--ag-data-background-color);
+        --ag-internal-row-overlay-color: transparent;
+        --ag-internal-row-overlay-image: none;
+    }
+
+    .ag-grid-container-wrapper {
+        width: 100%;
+        height: 100%;
+    }
+
+    .ag-row:not(.ag-header-row) {
+        // Pinned rows need an opaque background, but the row background might be semi-transparent (very common
+        // for --ag-odd-row-background-color) so we use inheritance to pass the background down from the row
+        > .ag-grid-pinned-left-cells,
+        > .ag-grid-pinned-right-cells {
+            background-color: inherit;
+
+            // apply an opaque background
+            background-image: linear-gradient(var(--ag-data-background-color), var(--ag-data-background-color));
+        }
+
+        .ag-grid-container-wrapper {
+            // re-apply the transparent row color over the opaque background
+            background-color: inherit;
+        }
+    }
+
+    .ag-spanned-cell-wrapper {
+        background-color: var(--ag-data-background-color);
         position: absolute;
-        width: calc(100% - 1px);
-        height: 1px;
-        background-color: var(--ag-range-selection-border-color);
-        left: 1px;
     }
 
-    .ag-row-highlight-above::after {
-        top: 0px;
+    .ag-spanned-cell-wrapper > .ag-spanned-cell {
+        display: block;
+        position: relative;
     }
 
-    .ag-row-highlight-below::after {
-        bottom: 0px;
+    .ag-grid-pinned-left-cells::after,
+    .ag-grid-scrolling-cells::after,
+    .ag-grid-pinned-right-cells::after,
+    .ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+        content: var(--ag-internal-row-highlight-content, none);
+        position: absolute;
+        inset: var(--ag-internal-row-highlight-inset, auto);
+        height: var(--ag-row-drag-indicator-width);
+        background-color: var(--ag-row-drag-indicator-color);
+        border-radius: calc(var(--ag-row-drag-indicator-width) / 2);
+        pointer-events: none;
+    }
+
+    .ag-row-highlight-above {
+        --ag-internal-row-highlight-content: '';
+        --ag-internal-row-highlight-inset: 0 0 auto;
+    }
+
+    .ag-row-highlight-below {
+        --ag-internal-row-highlight-content: '';
+        --ag-internal-row-highlight-inset: auto 0 0;
+    }
+
+    .ag-row-highlight-indent > .ag-grid-scrolling-cells::after,
+    .ag-row-highlight-indent.ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+        margin-left: calc(
+            2 * (var(--ag-cell-widget-spacing) + var(--ag-icon-size)) + var(--ag-cell-horizontal-padding) +
+                var(--ag-row-highlight-level) * var(--ag-row-group-indent-size)
+        );
+    }
+
+    .ag-row-highlight-inside {
+        > .ag-grid-pinned-left-cells::after,
+        > .ag-grid-scrolling-cells::after,
+        > .ag-grid-pinned-right-cells::after,
+        &.ag-full-width-row:not(.ag-embedded-full-width-row)::after {
+            --ag-internal-row-highlight-content: '';
+
+            inset: 0;
+            height: auto;
+            border-radius: 0;
+            background-color: var(--ag-selected-row-background-color);
+            border: 1px solid var(--ag-range-selection-border-color);
+        }
+    }
+
+    .ag-grid-scrolling-rows,
+    .ag-grid-pinned-bottom-rows-container {
+        background-color: var(--ag-data-background-color);
     }
 
     .ag-row-odd {
         background-color: var(--ag-odd-row-background-color);
     }
 
-    // NOTE: these don't need an RTL version because the "left spacer" is always the one visually on the left
-    .ag-body-horizontal-scroll:not(.ag-scrollbar-invisible) {
-        .ag-horizontal-left-spacer:not(.ag-scroller-corner) {
-            border-right: var(--ag-borders-critical) var(--ag-border-color);
-        }
+    .ag-row-selected {
+        --ag-internal-row-overlay-color: var(--ag-selected-row-background-color);
+    }
 
-        .ag-horizontal-right-spacer:not(.ag-scroller-corner) {
-            border-left: var(--ag-borders-critical) var(--ag-border-color);
+    .ag-row-hover:not(.ag-full-width-row),
+    .ag-row-hover.ag-full-width-row.ag-row-group {
+        --ag-internal-row-overlay-color: var(--ag-row-hover-color);
+    }
+
+    .ag-row-selected,
+    .ag-row-hover:not(.ag-full-width-row) {
+        .ag-grid-pinned-left-cells::before,
+        .ag-grid-pinned-right-cells::before,
+        .ag-grid-scrolling-cells::before {
+            // add a background on hover - use an absolutely positioned rectangle instead of
+            // a `background-color` so that `--ag-row-hover-color: transparent` doesn't remove
+            // an existing background color
+            content: '';
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background-color: var(--ag-internal-row-overlay-color);
+            background-image: var(--ag-internal-row-overlay-image);
         }
     }
 
-    .ag-row-selected::before {
-        content: '';
-        background-color: var(--ag-selected-row-background-color);
-        display: block;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-    }
-
-    .ag-row-hover:not(.ag-full-width-row)::before,
+    .ag-row-selected.ag-full-width-row::before,
     .ag-row-hover.ag-full-width-row.ag-row-group::before {
-        // add a background on hover - use an absolutely positioned rectangle instead of
-        // a `background-color` so that `--ag-row-hover-color: transparent` doesn't remove
-        // an existing background color
         content: '';
-        background-color: var(--ag-row-hover-color);
         display: block;
         position: absolute;
         top: 0;
@@ -136,19 +260,15 @@
         right: 0;
         bottom: 0;
         pointer-events: none;
+        background-color: var(--ag-internal-row-overlay-color);
+        background-image: var(--ag-internal-row-overlay-image);
     }
 
-    // Default the content position to relative so that it doesn't
-    // appear under the background
-    .ag-row-hover.ag-full-width-row.ag-row-group > * {
-        position: relative;
-    }
-
-    .ag-row-hover.ag-row-selected::before {
-        background-color: var(--ag-row-hover-color);
+    .ag-row-hover.ag-row-selected {
+        --ag-internal-row-overlay-color: var(--ag-row-hover-color);
         // overlay the background color on the hover color when hovering over a selected row,
         // if the background color is semi-transparent it will blend properly
-        background-image: linear-gradient(
+        --ag-internal-row-overlay-image: linear-gradient(
             var(--ag-selected-row-background-color),
             var(--ag-selected-row-background-color)
         );
@@ -156,6 +276,10 @@
 
     .ag-column-hover {
         background-color: var(--ag-column-hover-color);
+    }
+
+    .ag-header-range-highlight {
+        background-color: var(--ag-range-header-highlight-color);
     }
 
     .ag-right-aligned-cell {
@@ -191,7 +315,7 @@
             --ag-line-height,
             calc(var(--ag-row-height) - var(--ag-row-border-width))
         );
-        --ag-internal-padded-row-height: calc(var(--ag-row-height) - var(--ag-row-border-width));
+        --ag-internal-padded-row-height: calc(var(--ag-row-height) - var(--ag-row-border-width) - 2px);
         // draw a transparent border so that the cell size doesn't change when we add a range border
         border: 1px solid transparent;
         // adjust for transparent border
@@ -244,23 +368,26 @@
 
     .ag-details-row {
         padding: calc(var(--ag-grid-size) * 5);
-        background-color: var(--ag-background-color);
+        background-color: var(--ag-data-background-color);
     }
 
     .ag-layout-auto-height,
     .ag-layout-print {
-        .ag-center-cols-viewport,
-        .ag-center-cols-container {
-            min-height: 50px;
+        .ag-grid-scrolling-rows {
+            min-height: var(--ag-auto-height-min-body-height);
         }
     }
 
-    .ag-overlay-loading-wrapper {
+    .ag-overlay-loading-wrapper,
+    .ag-overlay-exporting-wrapper,
+    .ag-overlay-modal-wrapper {
         background-color: var(--ag-modal-overlay-background-color);
     }
 
-    .ag-overlay-loading-center {
+    .ag-overlay-loading-center,
+    .ag-overlay-exporting-center {
         @include ag.card();
+        display: flex;
     }
 
     .ag-skeleton-container {
@@ -324,10 +451,62 @@
         }
     }
 
-    .ag-floating-top {
-        border-bottom: var(--ag-borders-critical) var(--ag-border-color);
+    .ag-body-vertical-content-no-gap .ag-has-bottom-pinned-rows {
+        .ag-grid-scrolling-container .ag-row-last,
+        .ag-grid-pinned-bottom-rows .ag-grid-sticky-bottom-rows-container .ag-row-last {
+            > .ag-grid-pinned-left-cells,
+            > .ag-grid-scrolling-cells,
+            > .ag-grid-pinned-right-cells {
+                border-bottom: none;
+            }
+        }
     }
-    .ag-floating-bottom {
+
+    .ag-grid-pinned-bottom-rows {
+        > .ag-grid-pinned-bottom-rows-container {
+            > .ag-row:first-child:not(.ag-row-pinned) {
+                > .ag-grid-pinned-left-cells,
+                > .ag-grid-scrolling-cells,
+                > .ag-grid-pinned-right-cells {
+                    border-top: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
+                }
+
+                > .ag-full-width-anchor {
+                    border-top: var(--ag-row-border-style) var(--ag-row-border-color) var(--ag-row-border-width);
+                }
+            }
+        }
+    }
+
+    .ag-body-horizontal-scroll-viewport,
+    .ag-body-vertical-scroll-viewport {
+        background-color: var(--ag-background-color);
+    }
+
+    .ag-grid-scrollable-area.ag-has-bottom-pinned-rows .ag-grid-pinned-bottom-rows-container::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
         border-top: var(--ag-borders-critical) var(--ag-border-color);
+        pointer-events: none;
+        z-index: 3;
+    }
+
+    .ag-find-cell {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ag-find-match {
+        color: var(--ag-find-match-color);
+        background-color: var(--ag-find-match-background-color);
+    }
+
+    .ag-find-active-match {
+        color: var(--ag-find-active-match-color);
+        background-color: var(--ag-find-active-match-background-color);
     }
 }

@@ -10,11 +10,16 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule]);
 
 interface ICar {
     make: string;

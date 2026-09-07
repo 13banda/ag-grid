@@ -1,8 +1,13 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid, inputStyleUnderlined, themeQuartz } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations, inputStyleUnderlined, themeQuartz } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const myTheme = themeQuartz.withPart(inputStyleUnderlined);
 
@@ -23,7 +28,6 @@ let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
     theme: myTheme,
-    rowData: null,
     columnDefs: columnDefs,
     defaultColDef: {
         editable: true,

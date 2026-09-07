@@ -1,23 +1,29 @@
+import { RefPlaceholder, _clearElement, _removeFromParent } from 'ag-stack';
+
 import type {
     BeanCollection,
     ComponentSelector,
     ComponentType,
+    ElementParams,
+    FocusableContainer,
     IStatusPanelComp,
     IStatusPanelParams,
+    RowModelType,
+    StatusPanelComponentName,
     StatusPanelDef,
     UserCompDetails,
     UserComponentFactory,
-    WithoutGridCommon,
+    _warnWithoutAttribution,
 } from 'ag-grid-community';
-import { AgPromise, Component, RefPlaceholder, _removeFromParent } from 'ag-grid-community';
+import { AgPromise, Component, _addFocusableContainerListener, _addGridCommonParams } from 'ag-grid-community';
 
-import { agStatusBarCSS } from './agStatusBar.css-GENERATED';
+import agStatusBarCSS from './agStatusBar.css';
 import type { StatusBarService } from './statusBarService';
 
 function getStatusPanelCompDetails(
     userCompFactory: UserComponentFactory,
     def: StatusPanelDef,
-    params: WithoutGridCommon<IStatusPanelParams>
+    params: IStatusPanelParams
 ): UserCompDetails<IStatusPanelComp> | undefined {
     return userCompFactory.getCompDetails(def, StatusPanelComponent, undefined, params, true);
 }
@@ -27,7 +33,39 @@ const StatusPanelComponent: ComponentType = {
     optionalMethods: ['refresh'],
 };
 
-export class AgStatusBar extends Component {
+const AgStatusBarValidationMap = {
+    agAggregationComponent: { rowModels: ['clientSide', 'serverSide'], warnArgs: [221] },
+    agFilteredRowCountComponent: { rowModels: ['clientSide'], warnArgs: [222] },
+    agSelectedRowCountComponent: { rowModels: ['clientSide', 'serverSide'], warnArgs: [223] },
+    agTotalAndFilteredRowCountComponent: { rowModels: ['clientSide'], warnArgs: [224] },
+    agTotalRowCountComponent: { rowModels: ['clientSide'], warnArgs: [225] },
+} as Record<StatusPanelComponentName, { rowModels: RowModelType[]; warnArgs: [number, ...any[]] }>;
+
+const AgStatusBarElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-status-bar',
+    children: [
+        {
+            tag: 'div',
+            ref: 'eStatusBarLeft',
+            cls: 'ag-status-bar-left',
+            role: 'status',
+        },
+        {
+            tag: 'div',
+            ref: 'eStatusBarCenter',
+            cls: 'ag-status-bar-center',
+            role: 'status',
+        },
+        {
+            tag: 'div',
+            ref: 'eStatusBarRight',
+            cls: 'ag-status-bar-right',
+            role: 'status',
+        },
+    ],
+};
+class AgStatusBar extends Component implements FocusableContainer {
     private userCompFactory: UserComponentFactory;
     private statusBarSvc: StatusBarService;
     private updateQueued: boolean = false;
@@ -45,21 +83,42 @@ export class AgStatusBar extends Component {
     private compDestroyFunctions: { [key: string]: () => void } = {};
 
     constructor() {
-        super(/* html */ `<div class="ag-status-bar">
-            <div data-ref="eStatusBarLeft" class="ag-status-bar-left" role="status"></div>
-            <div data-ref="eStatusBarCenter" class="ag-status-bar-center" role="status"></div>
-            <div data-ref="eStatusBarRight" class="ag-status-bar-right" role="status"></div>
-        </div>`);
+        super(AgStatusBarElement);
         this.registerCSS(agStatusBarCSS);
     }
 
     public postConstruct(): void {
         this.processStatusPanels(new Map());
         this.addManagedPropertyListeners(['statusBar'], this.handleStatusBarChanged.bind(this));
+        _addFocusableContainerListener(this.beans, this, this.getGui());
+    }
+
+    public getFocusableContainerName(): 'statusBar' {
+        return 'statusBar';
+    }
+
+    private getValidPanels(): StatusPanelDef[] | undefined {
+        const gos = this.gos;
+        const statusPanels = gos.get('statusBar')?.statusPanels;
+        if (!statusPanels) {
+            return statusPanels;
+        }
+        return statusPanels.filter((panel) => {
+            const { rowModels, warnArgs } =
+                AgStatusBarValidationMap[panel.statusPanel as StatusPanelComponentName] ?? {};
+            if (!rowModels) {
+                return true;
+            }
+            if (rowModels.includes(gos.get('rowModelType'))) {
+                return true;
+            }
+            this.beans.log.warn(...(warnArgs as Parameters<typeof _warnWithoutAttribution>));
+            return false;
+        });
     }
 
     private processStatusPanels(existingStatusPanelsToReuse: Map<string, IStatusPanelComp>): void {
-        const statusPanels = this.gos.get('statusBar')?.statusPanels;
+        const statusPanels = this.getValidPanels();
         if (statusPanels) {
             const leftStatusPanelComponents = statusPanels.filter(
                 (componentConfig) => componentConfig.align === 'left'
@@ -104,18 +163,21 @@ export class AgStatusBar extends Component {
     }
 
     private updateStatusBar(): void {
-        const statusPanels = this.gos.get('statusBar')?.statusPanels;
+        const statusPanels = this.getValidPanels();
         const validStatusBarPanelsProvided = Array.isArray(statusPanels) && statusPanels.length > 0;
         this.setDisplayed(validStatusBarPanelsProvided);
 
         const existingStatusPanelsToReuse: Map<string, IStatusPanelComp> = new Map();
 
         if (validStatusBarPanelsProvided) {
-            statusPanels.forEach((statusPanelConfig) => {
+            for (const statusPanelConfig of statusPanels) {
                 const key = statusPanelConfig.key ?? statusPanelConfig.statusPanel;
                 const existingStatusPanel = this.statusBarSvc.getStatusPanel(key);
                 if (existingStatusPanel?.refresh) {
-                    const newParams = this.gos.addGridCommonParams(statusPanelConfig.statusPanelParams ?? {});
+                    const newParams: IStatusPanelParams = _addGridCommonParams(this.gos, {
+                        ...(statusPanelConfig.statusPanelParams ?? {}),
+                        key,
+                    });
                     const hasRefreshed = existingStatusPanel.refresh(newParams);
                     if (hasRefreshed) {
                         existingStatusPanelsToReuse.set(key, existingStatusPanel);
@@ -123,7 +185,7 @@ export class AgStatusBar extends Component {
                         _removeFromParent(existingStatusPanel.getGui());
                     }
                 }
-            });
+            }
         }
 
         this.resetStatusBar();
@@ -133,9 +195,9 @@ export class AgStatusBar extends Component {
     }
 
     resetStatusBar(): void {
-        this.eStatusBarLeft.innerHTML = '';
-        this.eStatusBarCenter.innerHTML = '';
-        this.eStatusBarRight.innerHTML = '';
+        _clearElement(this.eStatusBarLeft);
+        _clearElement(this.eStatusBarCenter);
+        _clearElement(this.eStatusBarRight);
 
         this.destroyComponents();
         this.statusBarSvc.unregisterAllComponents();
@@ -147,7 +209,9 @@ export class AgStatusBar extends Component {
     }
 
     private destroyComponents(): void {
-        Object.values(this.compDestroyFunctions).forEach((func) => func());
+        for (const func of Object.values(this.compDestroyFunctions)) {
+            func();
+        }
         this.compDestroyFunctions = {};
     }
 
@@ -158,7 +222,7 @@ export class AgStatusBar extends Component {
     ): AgPromise<void> {
         const componentDetails: { key: string; promise: AgPromise<IStatusPanelComp> }[] = [];
 
-        statusBarComponents.forEach((componentConfig) => {
+        for (const componentConfig of statusBarComponents) {
             // default to the component name if no key supplied
             const key = componentConfig.key || componentConfig.statusPanel;
             const existingStatusPanel = existingStatusPanelsToReuse.get(key);
@@ -166,12 +230,14 @@ export class AgStatusBar extends Component {
             if (existingStatusPanel) {
                 promise = AgPromise.resolve(existingStatusPanel);
             } else {
-                const params: WithoutGridCommon<IStatusPanelParams> = {};
-
-                const compDetails = getStatusPanelCompDetails(this.userCompFactory, componentConfig, params);
+                const compDetails = getStatusPanelCompDetails(
+                    this.userCompFactory,
+                    componentConfig,
+                    _addGridCommonParams(this.gos, { key })
+                );
 
                 if (compDetails == null) {
-                    return;
+                    continue;
                 }
                 promise = compDetails.newAgStackInstance();
             }
@@ -180,10 +246,10 @@ export class AgStatusBar extends Component {
                 key,
                 promise,
             });
-        });
+        }
 
         return AgPromise.all(componentDetails.map((details) => details.promise)).then(() => {
-            componentDetails.forEach((componentDetail) => {
+            for (const componentDetail of componentDetails) {
                 componentDetail.promise.then((component: IStatusPanelComp) => {
                     const destroyFunc = () => {
                         this.destroyBean(component);
@@ -197,7 +263,7 @@ export class AgStatusBar extends Component {
                         destroyFunc();
                     }
                 });
-            });
+            }
         });
     }
 }

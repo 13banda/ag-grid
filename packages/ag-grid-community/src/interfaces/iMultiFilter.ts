@@ -1,19 +1,27 @@
-import type { IProvidedFilter } from '../filter/provided/iProvidedFilter';
-import type { AgPromise } from '../utils/promise';
+import type { AgPromise } from 'ag-stack';
+
+import type { ValueGetterFunc } from '../entities/colDef';
+import type { IProvidedFilter, ProvidedFilterModel } from '../filter/provided/iProvidedFilter';
 import type {
+    ColumnFilter,
     IFilter,
     IFilterComp,
     IFilterDef,
     IFilterParams,
     IFilterType,
     IFloatingFilterType,
-    ProvidedFilterModel,
 } from './iFilter';
 
 /** Interface contract for the public aspects of the ProvidedFilter implementation(s). */
 export interface IMultiFilter extends IProvidedFilter {
+    readonly filterType: 'multi';
+
     /** @returns the child filter instance at the given index. */
-    getChildFilterInstance(index: number): IFilter | undefined;
+    getChildFilterInstance<TFilter = IFilter>(index: number): TFilter | undefined;
+}
+
+export interface MultiFilterHandler {
+    getHandler<TFilterHandler>(index: number): TFilterHandler | undefined;
 }
 
 export interface IMultiFilterDef extends IFilterDef {
@@ -26,13 +34,19 @@ export interface IMultiFilterDef extends IFilterDef {
     title?: string;
 
     /** Child filter component to use inside the Multi Filter. */
-    filter?: IFilterType;
+    filter?: IFilterType | ColumnFilter;
     /** Custom parameters to be passed to the child filter component. */
     filterParams?: any;
     /** Floating filter component to use for the child filter. */
     floatingFilterComponent?: IFloatingFilterType;
     /** Custom parameters to be passed to the floating filter component. */
     floatingFilterComponentParams?: any;
+    /**
+     * Function or expression. Gets the value for filtering purposes.
+     * Allows for different values to be used for child filters
+     * instead of using `colDef.filterValueGetter`.
+     */
+    filterValueGetter?: string | ValueGetterFunc;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { RowSnapshot } from '../../test-utils';
+import type { RowSnapshot } from 'ag-test-utils';
 
 export function simpleHierarchyRowsSnapshot(): RowSnapshot[] {
     return [
@@ -32,11 +32,11 @@ export function simpleHierarchyRowsSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: null,
-            allLeafChildren: [],
+            allLeafChildren: null,
             childIndex: 0,
-            childrenAfterFilter: [],
-            childrenAfterGroup: [],
-            childrenAfterSort: [],
+            childrenAfterFilter: null,
+            childrenAfterGroup: null,
+            childrenAfterSort: null,
             detail: undefined,
             displayed: true,
             expanded: false,
@@ -88,11 +88,11 @@ export function simpleHierarchyRowsSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: null,
-            allLeafChildren: [],
+            allLeafChildren: null,
             childIndex: 0,
-            childrenAfterFilter: [],
-            childrenAfterGroup: [],
-            childrenAfterSort: [],
+            childrenAfterFilter: null,
+            childrenAfterGroup: null,
+            childrenAfterSort: null,
             detail: undefined,
             displayed: true,
             expanded: false,
@@ -200,11 +200,11 @@ export function simpleHierarchyRowsSnapshot(): RowSnapshot[] {
         },
         {
             allChildrenCount: null,
-            allLeafChildren: [],
+            allLeafChildren: null,
             childIndex: 0,
-            childrenAfterFilter: [],
-            childrenAfterGroup: [],
-            childrenAfterSort: [],
+            childrenAfterFilter: null,
+            childrenAfterGroup: null,
+            childrenAfterSort: null,
             detail: undefined,
             displayed: true,
             expanded: false,

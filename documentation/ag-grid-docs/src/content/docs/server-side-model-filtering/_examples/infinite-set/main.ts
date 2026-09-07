@@ -4,12 +4,13 @@ import type {
     GridOptions,
     IMultiFilter,
     IServerSideDatasource,
-    ISetFilter,
     KeyCreatorParams,
+    SetFilterHandler,
+    SetFilterUi,
     SetFilterValuesFuncParams,
     ValueFormatterParams,
 } from 'ag-grid-community';
-import { ModuleRegistry, TextFilterModule, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, TextFilterModule, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ContextMenuModule,
@@ -20,6 +21,11 @@ import {
 
 import { FakeServer } from './fakeServer';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
@@ -27,7 +33,6 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     MultiFilterModule,
     TextFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -40,6 +45,8 @@ const columnDefs: ColDef[] = [
             keyCreator: countryCodeKeyCreator,
             valueFormatter: countryValueFormatter,
             comparator: countryComparator,
+            suppressClearModelOnRefreshValues: true,
+            buttons: ['apply'],
         },
     },
     {
@@ -57,6 +64,7 @@ const columnDefs: ColDef[] = [
                     filter: 'agSetColumnFilter',
                     filterParams: {
                         values: getSportValuesAsync,
+                        suppressClearModelOnRefreshValues: true,
                     },
                 },
             ],
@@ -121,29 +129,32 @@ function onFilterChanged() {
         textFilterStored = textFilter;
 
         console.log('Refreshing sports filter');
+        // By default, the Multi Filter does not use a filter handler, so retrieve via `getColumnFilterInstance`.
+        // If using `enableFilterHandlers = true`, the Multi Filter handler can be retrieved via `getColumnFilterHandler`.
         gridApi.getColumnFilterInstance<IMultiFilter>('sport').then((filter) => {
-            filter!.getChildFilterInstance(1).refreshFilterValues();
+            filter!.getChildFilterInstance<SetFilterUi>(1)!.getFilterHandler().refreshFilterValues();
         });
-        gridApi.getColumnFilterInstance<ISetFilter>('country').then((filter) => {
-            filter!.refreshFilterValues();
-        });
+        gridApi.getColumnFilterHandler<SetFilterHandler>('country')!.refreshFilterValues();
     }
 }
 
-function areEqual(a: null | string[], b: null | string[]) {
-    if (a == null && b == null) {
-        return true;
+export function areEqual(a: readonly any[] | null | undefined, b: readonly any[] | null | undefined): boolean {
+    if (a === b) {
+        return true; // Same instance, no need to compare
     }
-    if (a != null || b != null) {
+    if (!a || !b) {
+        return a == null && b == null;
+    }
+    const len = a.length;
+    if (len !== b.length) {
         return false;
     }
-
-    return (
-        a!.length === b!.length &&
-        a!.every(function (v, i) {
-            return b![i] === v;
-        })
-    );
+    for (let i = 0; i < len; i++) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function getCountryValuesAsync(params: SetFilterValuesFuncParams) {

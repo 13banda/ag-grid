@@ -3,7 +3,7 @@ import type { AgGridCommon } from './interfaces/iCommon';
 
 type GridOptionKey = keyof GridOptions;
 
-type GetKeys<T, U> = {
+type GetPropKeys<T, U> = {
     [K in keyof T]: U extends T[K] ? K : T[K] extends U | null | undefined ? K : never; //Reverse match for string literal types
 }[keyof T];
 
@@ -20,23 +20,22 @@ export type AnyGridOptions = {
  * Get all the GridOptions properties of the provided type.
  * Will also include `any` properties.
  */
-type KeysLike<U> = Exclude<GetKeys<GridOptions, U>, undefined>;
+type KeysLike<U> = Exclude<GetPropKeys<GridOptions, U>, undefined>;
 /**
  * Get all the GridOption properties that strictly contain the provided type.
  * Does not include `any` properties.
  */
-type KeysOfType<U> = Exclude<GetKeys<GridOptions, U>, AnyGridOptions>;
-type CallbackKeys = KeysOfType<(any: AgGridCommon<any, any>) => any>;
+type KeysWithType<U> = Exclude<GetPropKeys<GridOptions, U>, AnyGridOptions>;
+type CallbackKeys = KeysWithType<(any: AgGridCommon<any, any>) => any>;
 /** All function properties excluding those explicity match the common callback interface. */
-// eslint-disable-next-line @typescript-eslint/ban-types
-type FunctionKeys = Exclude<KeysLike<Function>, CallbackKeys>;
+type FunctionKeys = Exclude<KeysLike<(...args: any[]) => any>, CallbackKeys>;
 
 /**
  * These keys are used for validating properties supplied on a gridOptions object, and for code generation.
  * If you change the properties on the gridOptions interface, you *must* update this file as well to be consistent.
  */
 // only used internally
-const STRING_GRID_OPTIONS: KeysOfType<string>[] = [
+const STRING_GRID_OPTIONS: KeysWithType<string>[] = [
     'overlayLoadingTemplate',
     'overlayNoRowsTemplate',
     'gridId',
@@ -53,13 +52,20 @@ const STRING_GRID_OPTIONS: KeysOfType<string>[] = [
     'fillHandleDirection',
     'groupDisplayType',
     'treeDataDisplayType',
+    'treeDataChildrenField',
+    'treeDataParentIdField',
     'colResizeDefault',
     'tooltipTrigger',
+    'noteTrigger',
     'serverSidePivotResultFieldSeparator',
     'columnMenu',
     'tooltipShowMode',
+    'invalidEditValueMode',
     'grandTotalRow',
-    // 'treeDataChildrenField',
+    'themeCssLayer',
+    'findSearchValue',
+    'styleNonce',
+    'renderingMode',
 ];
 
 // only used internally
@@ -81,13 +87,18 @@ const OBJECT_GRID_OPTIONS: KeysLike<object | HTMLElement>[] = [
     'defaultColDef',
     'defaultCsvExportParams',
     'defaultExcelExportParams',
+    'defaultPdfExportParams',
     'columnTypes',
     'rowClassRules',
     'detailCellRendererParams',
     'loadingCellRendererParams',
+    'overlayComponentParams',
     'loadingOverlayComponentParams',
     'noRowsOverlayComponentParams',
+    'activeOverlayParams',
     'popupParent',
+    'themeStyleContainer',
+    'toolbar',
     'statusBar',
     'chartThemeOverrides',
     'customChartThemes',
@@ -95,13 +106,22 @@ const OBJECT_GRID_OPTIONS: KeysLike<object | HTMLElement>[] = [
     'dataTypeDefinitions',
     'advancedFilterParent',
     'advancedFilterBuilderParams',
+    'advancedFilterParams',
+    'formulaDataSource',
+    'formulaFuncs',
+    'notesDataSource',
+    'calculatedColumns',
+    'columnHeaderEdit',
     'initialState',
     'autoSizeStrategy',
     'selectionColumnDef',
+    'findOptions',
+    'filterHandlers',
+    'groupHierarchyConfig',
 ];
 
 // only used internally
-const ARRAY_GRID_OPTIONS: KeysOfType<any[]>[] = [
+const ARRAY_GRID_OPTIONS: KeysWithType<any[]>[] = [
     'sortingOrder',
     'alignedGrids',
     'rowData',
@@ -112,13 +132,16 @@ const ARRAY_GRID_OPTIONS: KeysOfType<any[]>[] = [
     'chartThemes',
     'rowClass',
     'paginationPageSizeSelector',
+    'paginationPanels',
+    'suppressOverlays',
 ];
 
 // Used in validations to check type of number inputs
-export const _NUMBER_GRID_OPTIONS: KeysOfType<number>[] = [
+export const _NUMBER_GRID_OPTIONS: KeysWithType<number>[] = [
     'rowHeight',
     'detailRowHeight',
     'rowBuffer',
+    'stickyRowsMaxViewportRatio',
     'headerHeight',
     'groupHeaderHeight',
     'groupLockGroupColumns',
@@ -126,6 +149,7 @@ export const _NUMBER_GRID_OPTIONS: KeysOfType<number>[] = [
     'pivotHeaderHeight',
     'pivotGroupHeaderHeight',
     'groupDefaultExpanded',
+    'masterDefaultExpanded',
     'pivotDefaultExpanded',
     'viewportRowModelPageSize',
     'viewportRowModelBufferSize',
@@ -133,7 +157,10 @@ export const _NUMBER_GRID_OPTIONS: KeysOfType<number>[] = [
     'maxBlocksInCache',
     'maxConcurrentDatasourceRequests',
     'tooltipShowDelay',
+    'tooltipSwitchShowDelay',
     'tooltipHideDelay',
+    'noteShowDelay',
+    'noteHideDelay',
     'cacheOverflowSize',
     'paginationPageSize',
     'cacheBlockSize',
@@ -146,8 +173,10 @@ export const _NUMBER_GRID_OPTIONS: KeysOfType<number>[] = [
     'undoRedoCellEditingLimit',
     'cellFlashDuration',
     'cellFadeDuration',
+    'contentVisibilityAutoDelay',
     'tabIndex',
     'pivotMaxGeneratedColumns',
+    'rowDragInsertDelay',
 ];
 
 // If property does not fit above, i.e union that should not be coerced.
@@ -157,18 +186,25 @@ const OTHER_GRID_OPTIONS: GridOptionKey[] = ['theme', 'rowSelection'];
 // Used by Angular to support the user setting these
 // as plain HTML attributes and us correctly mapping that to true
 // These are all of type boolean | something else
-export const _BOOLEAN_MIXED_GRID_OPTIONS: KeysOfType<boolean>[] = [
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const _BOOLEAN_MIXED_GRID_OPTIONS: KeysWithType<boolean>[] = [
+    'autoGenerateColumnDefs',
     'cellSelection',
     'sideBar',
+    'rowNumbers',
+    'loading',
     'suppressGroupChangesColumnVisibility',
     'groupAggFiltering',
     'suppressStickyTotalRow',
     'groupHideParentOfSingleChild',
+    'enableRowPinning',
 ];
 
 // Used in validations to check type of pure boolean inputs
-export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
+export const _BOOLEAN_GRID_OPTIONS: KeysWithType<boolean>[] = [
     'loadThemeGoogleFonts',
+    'suppressInputClearButton',
+    'enableInputAutoComplete',
     'suppressMakeColumnVisibleAfterUnGroup',
     'suppressRowClickSelection',
     'suppressCellFocus',
@@ -221,9 +257,11 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'groupRemoveSingleChildren',
     'groupRemoveLowestSingleChildren',
     'enableRtl',
+    'enableCellSpan',
     'suppressClickEdit',
     'rowDragEntireRow',
     'rowDragManaged',
+    'refreshAfterGroupEdit',
     'suppressRowDrag',
     'suppressMoveWhenRowDragging',
     'rowDragMultiRow',
@@ -231,6 +269,7 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'embedFullWidthRows',
     'suppressPaginationPanel',
     'groupHideOpenParents',
+    'groupHideColumnsUntilExpanded',
     'groupAllowUnbalanced',
     'pagination',
     'paginationAutoPageSize',
@@ -248,6 +287,7 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'suppressAnimationFrame',
     'suppressExcelExport',
     'suppressCsvExport',
+    'suppressPdfExport',
     'includeHiddenColumnsInAdvancedFilter',
     'suppressMultiRangeSelection',
     'enterNavigatesVerticallyAfterEdit',
@@ -256,9 +296,12 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'rowMultiSelectWithClick',
     'suppressRowHoverHighlight',
     'suppressRowTransform',
+    'suppressContentVisibilityAuto',
+    'enableContentVisibilityAuto',
     'suppressClipboardPaste',
     'suppressLastEmptyLineOnPaste',
     'enableCharts',
+    'includeHiddenColumnsInCharts',
     'suppressMaintainUnsortedOrder',
     'enableCellTextSelection',
     'suppressBrowserResizeObserver',
@@ -294,6 +337,7 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'suppressGroupRowsSticky',
     'suppressCutToClipboard',
     'rowGroupPanelSuppressSort',
+    'pivotPanelSuppressSort',
     'allowShowChangeAfterFilter',
     'enableAdvancedFilter',
     'masterDetail',
@@ -302,17 +346,22 @@ export const _BOOLEAN_GRID_OPTIONS: KeysOfType<boolean>[] = [
     'applyQuickFilterBeforePivotOrAgg',
     'suppressServerSideFullWidthLoadingRow',
     'suppressAdvancedFilterEval',
-    'loading',
     'maintainColumnOrder',
     'enableStrictPivotColumnOrder',
     'suppressSetFilterByDefault',
+    'enableFilterHandlers',
+    'suppressStartEditOnTab',
+    'hidePaddedHeaderRows',
+    'ssrmExpandAllAffectsAllRows',
+    'animateColumnResizing',
 ];
 
-// Used in example generation
+/** @knipIgnore Used in example generation */
 export const _FUNCTION_GRID_OPTIONS: (CallbackKeys | FunctionKeys)[] = [
     'doesExternalFilterPass',
     'processPivotResultColDef',
     'processPivotResultColGroupDef',
+    'processFileInput',
     'getBusinessKeyForNode',
     'isRowSelectable',
     'rowDragText',
@@ -320,8 +369,11 @@ export const _FUNCTION_GRID_OPTIONS: (CallbackKeys | FunctionKeys)[] = [
     'dragAndDropImageComponent',
     'fullWidthCellRenderer',
     'loadingCellRenderer',
+    'overlayComponent',
     'loadingOverlayComponent',
     'noRowsOverlayComponent',
+    'overlayComponentSelector',
+    'activeOverlay',
     'detailCellRenderer',
     'quickFilterParser',
     'quickFilterMatcher',
@@ -330,8 +382,10 @@ export const _FUNCTION_GRID_OPTIONS: (CallbackKeys | FunctionKeys)[] = [
     'getRowHeight',
     'getRowClass',
     'getRowStyle',
+    'getFullRowEditValidationErrors',
     'getContextMenuItems',
     'getMainMenuItems',
+    'getColumnMenuItems',
     'processRowPostCreate',
     'processCellForClipboard',
     'getGroupRowAgg',
@@ -342,6 +396,7 @@ export const _FUNCTION_GRID_OPTIONS: (CallbackKeys | FunctionKeys)[] = [
     'tabToNextHeader',
     'navigateToNextCell',
     'tabToNextCell',
+    'tabToNextGridContainer',
     'processCellFromClipboard',
     'getDocument',
     'postProcessPopup',
@@ -363,19 +418,26 @@ export const _FUNCTION_GRID_OPTIONS: (CallbackKeys | FunctionKeys)[] = [
     'getServerSideGroupLevelParams',
     'isServerSideGroupOpenByDefault',
     'isGroupOpenByDefault',
+    'isMasterOpenByDefault',
     'initialGroupOrderComparator',
     'loadingCellRendererSelector',
     'getRowId',
     'chartMenuItems',
     'groupTotalRow',
     'alwaysPassFilter',
+    'isRowPinnable',
+    'isRowPinned',
+    'isRowValidDropPosition',
+    'processAutoGeneratedColumnDefs',
 ];
 
 // angular generation of component
 // validation of properties
 // Vue Runtime prop changes
 // example generation
-export const _ALL_GRID_OPTIONS: GridOptionKey[] = [
+// We define as a callback to help with tree shaking (esbuild)
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const _GET_ALL_GRID_OPTIONS: () => GridOptionKey[] = () => [
     ...ARRAY_GRID_OPTIONS,
     ...OBJECT_GRID_OPTIONS,
     ...STRING_GRID_OPTIONS,
@@ -384,4 +446,14 @@ export const _ALL_GRID_OPTIONS: GridOptionKey[] = [
     ..._BOOLEAN_GRID_OPTIONS,
     ..._BOOLEAN_MIXED_GRID_OPTIONS,
     ...OTHER_GRID_OPTIONS,
+];
+
+// Options that only need shallow (reference) watching (only Vue atm) — primitives and functions
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export const _GET_SHALLOW_GRID_OPTIONS: () => GridOptionKey[] = () => [
+    ...STRING_GRID_OPTIONS,
+    ..._NUMBER_GRID_OPTIONS,
+    ..._FUNCTION_GRID_OPTIONS,
+    ..._BOOLEAN_GRID_OPTIONS,
+    ..._BOOLEAN_MIXED_GRID_OPTIONS,
 ];

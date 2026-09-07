@@ -1,0 +1,51 @@
+import { demoContent } from '@components/demos/demoContent';
+import { describe, expect, it } from 'vitest';
+
+import { buildExampleMarkdown } from './buildExampleMarkdown';
+
+describe('buildExampleMarkdown', () => {
+    const output = buildExampleMarkdown({ siteRoot: 'https://www.ag-grid.com/' });
+    const performance = demoContent('performance');
+
+    it('emits frontmatter and the page H1 from the performance demo the page renders', () => {
+        expect(output.startsWith('---\n')).toBe(true);
+        expect(output).toContain(`title: ${JSON.stringify(performance.seoTitle)}`);
+        expect(output).toContain(`description: ${JSON.stringify(performance.seoDescription)}`);
+        expect(output).toContain(`\n# ${performance.seoH1}`);
+        expect(output).toContain(performance.introSegments[0].text.trim());
+    });
+
+    it("links the intro's frameworks to their own copy of the demo source", () => {
+        const linked = performance.introSegments.filter(({ href }) => href);
+
+        expect(linked).toHaveLength(4);
+        for (const { text, href } of linked) {
+            expect(output).toContain(`[${text}](${href})`);
+        }
+    });
+
+    it('lists the four demos, each with a live-demo and its own GitHub link', () => {
+        expect(output).toContain(
+            '**Performance** — [live demo](https://www.ag-grid.com/example/), [GitHub](https://github.com/ag-grid/ag-grid-demos/tree/main/performance)'
+        );
+        expect(output).toContain(
+            '**Finance** — [live demo](https://www.ag-grid.com/example-finance/), [GitHub](https://github.com/ag-grid/ag-grid-demos/tree/main/finance)'
+        );
+        expect(output).toContain(
+            '**HR** — [live demo](https://www.ag-grid.com/example-hr/), [GitHub](https://github.com/ag-grid/ag-grid-demos/tree/main/hr)'
+        );
+        expect(output).toContain(
+            '**Inventory** — [live demo](https://www.ag-grid.com/example-inventory/), [GitHub](https://github.com/ag-grid/ag-grid-demos/tree/main/inventory)'
+        );
+    });
+
+    it('includes the video and contact resources', () => {
+        expect(output).toContain('[Video Tour](https://youtu.be/bcMvTUVbMvI)');
+        expect(output).toContain('[Contact Us](https://www.ag-grid.com/contact/)');
+    });
+
+    it('ends with a single trailing newline', () => {
+        expect(output.endsWith('\n')).toBe(true);
+        expect(output.endsWith('\n\n')).toBe(false);
+    });
+});

@@ -1,7 +1,8 @@
 import type { InternalFramework } from '@ag-grid-types';
 import type { FileContents } from '@components/example-generator/types';
+import { DEBUG_SCRIPT_FILE_NAME, EXAMPLE_STYLE_FILE_NAME } from '@constants';
 import { isReactInternalFramework } from '@utils/framework';
-import { getParameters } from 'codesandbox/lib/api/define';
+import { getParameters } from 'codesandbox-import-utils/lib/api/define';
 
 type SandboxFiles = Parameters<typeof getParameters>[0]['files'];
 
@@ -24,6 +25,12 @@ const getPathForFile = ({
 
     if (fileName === 'index.html') {
         return `public/index.html`;
+    }
+
+    if (fileName === DEBUG_SCRIPT_FILE_NAME) {
+        return `public/${DEBUG_SCRIPT_FILE_NAME}`;
+    } else if (fileName === EXAMPLE_STYLE_FILE_NAME) {
+        return `public/${EXAMPLE_STYLE_FILE_NAME}`;
     }
 
     if (/(.js|.jsx|.tsx|.ts|.css)$/.test(fileName)) {
@@ -58,18 +65,21 @@ const getCodeSandboxFiles = ({
     internalFramework,
 }: {
     files: FileContents;
-    boilerPlateFiles: FileContents;
+    boilerPlateFiles?: FileContents;
     internalFramework: InternalFramework;
 }) => {
     const sandboxFiles: SandboxFiles = {};
-    const allFiles = isReactInternalFramework(internalFramework)
+    const isUsingSandboxTemplate = getCodeSandboxRuntime(internalFramework) !== 'static';
+    const allFiles = isUsingSandboxTemplate
         ? {
               ...files,
           }
         : { ...boilerPlateFiles, ...files };
 
-    if (allFiles['package.json'] == undefined) {
-        // don't include undefined package.json
+    // Only the sandbox templates (React) take a `package.json`. `boilerPlateFiles` are read as a directory
+    // sweep and are merged in on the `static` runtime only, so this guards against one arriving that way —
+    // on a static example it would only confuse, since the AG Grid version comes from `index.html`.
+    if (allFiles['package.json'] == undefined || !isUsingSandboxTemplate) {
         delete allFiles['package.json'];
     }
 
@@ -95,7 +105,7 @@ const createHiddenInputFactory =
         form.appendChild(input);
     };
 
-const getCodeSandboxFilesToSubmit = ({
+export const getCodeSandboxFilesToSubmit = ({
     title,
     files,
     boilerPlateFiles,
@@ -103,7 +113,7 @@ const getCodeSandboxFilesToSubmit = ({
 }: {
     title: string;
     files: FileContents;
-    boilerPlateFiles: FileContents;
+    boilerPlateFiles?: FileContents;
     internalFramework: InternalFramework;
 }) => {
     const runtime = getCodeSandboxRuntime(internalFramework);
@@ -139,7 +149,7 @@ export const openCodeSandbox = ({
 }: {
     title: string;
     files: FileContents;
-    boilerPlateFiles: FileContents;
+    boilerPlateFiles?: FileContents;
     internalFramework: InternalFramework;
 }) => {
     const form = document.createElement('form');

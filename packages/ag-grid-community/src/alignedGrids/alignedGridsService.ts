@@ -1,11 +1,13 @@
+import type { AgEvent } from 'ag-stack';
+
 import type { GridApi } from '../api/gridApi';
+import { _setColGroupOpen } from '../columns/columnGroups/columnGroupState';
 import { _applyColumnState } from '../columns/columnStateUtils';
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { AgProvidedColumnGroup } from '../entities/agProvidedColumnGroup';
 import type {
-    AgEvent,
     AlignedGridColumnEvent,
     AlignedGridScrollEvent,
     BodyScrollEvent,
@@ -15,7 +17,6 @@ import type {
 } from '../events';
 import type { AlignedGrid } from '../interfaces/iAlignedGrid';
 import type { WithoutGridCommon } from '../interfaces/iCommon';
-import { _error, _warn } from '../validation/logging';
 
 export class AlignedGridsService extends BeanStub implements NamedBean {
     beanName = 'alignedGridsSvc' as const;
@@ -34,9 +35,9 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
         const apis = alignedGrids
             .map((alignedGrid) => {
                 if (!alignedGrid) {
-                    _error(18);
+                    this.error(18);
                     if (!isCallbackConfig) {
-                        _error(20);
+                        this.error(20);
                     }
                     return;
                 }
@@ -50,7 +51,7 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
                 }
 
                 if (!refOrComp.api) {
-                    _error(19);
+                    this.error(19);
                 }
                 return refOrComp.api;
             })
@@ -85,12 +86,12 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
             return;
         }
 
-        this.getAlignedGridApis().forEach((api) => {
+        for (const api of this.getAlignedGridApis()) {
             if (api.isDestroyed()) {
-                return;
+                continue;
             }
             api.dispatchEvent(event);
-        });
+        }
     }
 
     // common logic across all consume methods. very little common logic, however extracting
@@ -141,7 +142,7 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
     }
 
     public getColumnIds(event: ColumnEvent): string[] {
-        return this.extractDataFromEvent(event, (col) => col.getColId());
+        return this.extractDataFromEvent(event, (col) => col.colId);
     }
 
     public onColumnEvent(event: AgEvent): void {
@@ -161,43 +162,41 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
                 case 'columnPivotChanged':
                     // we cannot support pivoting with aligned grids as the columns will be out of sync as the
                     // grids will have columns created based on the row data of the grid.
-                    _warn(21);
+                    this.warn(21);
                     break;
             }
         });
     }
 
     private processGroupOpenedEvent(groupOpenedEvent: ColumnGroupOpenedEvent): void {
-        const { colGroupSvc } = this.beans;
-        if (!colGroupSvc) {
-            return;
-        }
-        groupOpenedEvent.columnGroups.forEach((masterGroup) => {
+        const beans = this.beans;
+        const colsGroupsById = beans.colModel.colsGroupsById;
+        for (const masterGroup of groupOpenedEvent.columnGroups) {
             // likewise for column group
-            let otherColumnGroup: AgProvidedColumnGroup | null = null;
+            let otherColumnGroup: AgProvidedColumnGroup | undefined;
 
             if (masterGroup) {
-                otherColumnGroup = colGroupSvc.getProvidedColGroup(masterGroup.getGroupId());
+                otherColumnGroup = colsGroupsById.get(masterGroup.getGroupId());
             }
 
             if (masterGroup && !otherColumnGroup) {
-                return;
+                continue;
             }
 
-            colGroupSvc.setColumnGroupOpened(otherColumnGroup, masterGroup.isExpanded(), 'alignedGridChanged');
-        });
+            _setColGroupOpen(beans, otherColumnGroup, masterGroup.isExpanded(), 'alignedGridChanged');
+        }
     }
 
     private processColumnEvent(colEvent: ColumnEvent): void {
         // the column in the event is from the master grid. need to
         // look up the equivalent from this (other) grid
         const masterColumn = colEvent.column;
-        let otherColumn: AgColumn | null = null;
+        let otherColumn: AgColumn | undefined;
 
         const beans = this.beans;
-        const { colResize, ctrlsSvc, colModel } = beans;
+        const { colResize, colModel, scrollVisibleSvc } = beans;
         if (masterColumn) {
-            otherColumn = colModel.getColDefCol(masterColumn.getColId());
+            otherColumn = colModel.getNonPivotCol(masterColumn.getColId());
         }
         // if event was with respect to a master column, that is not present in this
         // grid, then we ignore the event
@@ -239,34 +238,38 @@ export class AlignedGridsService extends BeanStub implements NamedBean {
             case 'columnResized': {
                 const resizedEvent = colEvent as ColumnResizedEvent;
 
-                const columnWidths: {
-                    [key: string]: {
-                        key: string | AgColumn;
-                        newWidth: number;
-                    };
-                } = {};
-                masterColumns.forEach((column) => {
-                    columnWidths[column.getId()] = { key: column.getColId(), newWidth: column.getActualWidth() };
-                });
                 // don't set flex columns width
-                resizedEvent.flexColumns?.forEach((col) => {
-                    if (columnWidths[col.getId()]) {
-                        delete columnWidths[col.getId()];
+                const flexColIds = new Set((resizedEvent.flexColumns ?? []).map((col) => col.getColId()));
+                const columnWidths: { key: string; newWidth: number; userSized: boolean }[] = [];
+                for (const column of masterColumns) {
+                    const colId = column.getColId();
+                    if (!flexColIds.has(colId)) {
+                        columnWidths.push({
+                            key: colId,
+                            newWidth: column.getActualWidth(),
+                            userSized: column.isUserSized(),
+                        });
                     }
-                });
-                colResize?.setColumnWidths(
-                    Object.values(columnWidths),
-                    false,
-                    resizedEvent.finished,
-                    'alignedGridChanged'
-                );
+                }
+                colResize?.setColumnWidths(columnWidths, false, resizedEvent.finished, 'alignedGridChanged');
+
+                // aligned grids are one logical column set, so width ownership travels with the width:
+                // without it, continuous auto-sizing here would undo a user resize made in the master and,
+                // through the resize this grid fires back, undo it there as well. Only for the widths that
+                // landed — this grid's own min/max can reject them, and an unsynchronised column has to stay
+                // eligible for auto-sizing.
+                for (const { key, newWidth, userSized } of columnWidths) {
+                    const col = colModel.getNonPivotCol(key);
+                    if (col?.getActualWidth() === newWidth) {
+                        col.setUserSized(userSized);
+                    }
+                }
                 break;
             }
         }
-        const gridBodyCon = ctrlsSvc.getGridBodyCtrl();
-        const isVerticalScrollShowing = gridBodyCon.isVerticalScrollShowing();
-        this.getAlignedGridApis().forEach((api) => {
+        const isVerticalScrollShowing = scrollVisibleSvc.isVerticalScrollShowing();
+        for (const api of this.getAlignedGridApis()) {
             api.setGridOption('alwaysShowVerticalScroll', isVerticalScrollShowing);
-        });
+        }
     }
 }

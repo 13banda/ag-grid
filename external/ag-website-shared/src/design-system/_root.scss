@@ -1,7 +1,7 @@
 @use './core' as *;
 
 :root,
-[data-is-homepage] .site-header:not(.header-scrolled) {
+[data-is-homepage='true'] .site-header:not(.header-scrolled) {
     // Layout
     --layout-gap: 32px;
     --layout-max-width: 1800px;
@@ -49,19 +49,27 @@
     --radius-full: 100%;
 
     // Typography
-    --text-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
-        'Liberation Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --text-font-family:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Liberation Sans',
+        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
-    --text-monospace-font-family: 'JetBrains Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', 'Segoe UI Mono',
-        'Roboto Mono', 'Oxygen Mono', 'Ubuntu Monospace', 'Source Code Pro', 'Fira Mono', 'Droid Sans Mono',
-        'Courier New', monospace;
+    --text-monospace-font-family:
+        'JetBrains Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', 'Oxygen Mono',
+        'Ubuntu Monospace', 'Source Code Pro', 'Fira Mono', 'Droid Sans Mono', 'Courier New', monospace;
 
     --text-regular: 400;
     --text-semibold: 600;
     --text-bold: 700;
 
-    --text-lh-tight: 1.2;
-    --text-lh-ultra-tight: 1;
+    // Ratios: a length is inherited as-is, so use these wherever the font-size is inherited, fluid or
+    // unknown. --text-lh-<step> is paired, and valid only alongside its own --text-fs-<step>.
+    --text-lh-ratio-base: 1.4;
+    --text-lh-ratio-tight: 1.2;
+    --text-lh-ratio-ultra-tight: 1;
+
+    // Deprecated: ag-charts and ag-studio still use these names. Remove once both have migrated.
+    --text-lh-tight: var(--text-lh-ratio-tight);
+    --text-lh-ultra-tight: var(--text-lh-ratio-ultra-tight);
 
     --text-fs-2xs: 10px;
     --text-lh-2xs: 1.2;
@@ -134,6 +142,19 @@
     --color-warning-900: #7a2e0e;
     --color-warning-950: #4e1d09;
 
+    --color-green-25: #f6fef9;
+    --color-green-50: #edfcf2;
+    --color-green-100: #d3f8df;
+    --color-green-200: #aaf0c4;
+    --color-green-300: #73e2a3;
+    --color-green-400: #3ccb7f;
+    --color-green-500: #16b364;
+    --color-green-600: #099250;
+    --color-green-700: #087443;
+    --color-green-800: #095c37;
+    --color-green-900: #084c2e;
+    --color-green-950: #052e1c;
+
     --color-success: #28a745;
 
     --color-logo-text: #003264;
@@ -163,7 +184,7 @@
     --color-fg-tertiary: var(--color-gray-600);
     --color-fg-quinary: var(--color-gray-400);
     --color-fg-disabled: var(--color-gray-400);
-    --color-fg-placeholder: var(--color-gray-500);
+    --color-fg-placeholder: var(--color-gray-400);
     --color-fg-white: var(--color-white);
     --color-fg-code: #f91274;
 
@@ -171,6 +192,21 @@
     --color-text-primary: var(--color-gray-600);
     --color-text-secondary: var(--color-gray-700);
     --color-text-tertiary: var(--color-gray-600);
+
+    // Code colors
+    --color-code-comment: #5d6376;
+    --color-code-tag: #984f4e;
+    --color-code-string: #c33c3a;
+    --color-code-punctuation: #393a34;
+    --color-code-keyword: #b31ea7;
+    --color-code-symbol: #0e4491;
+    --color-code-function: #393a34;
+    --color-code-deleted: #f54946;
+    --color-code-selector: #0e4491;
+    // Consumed only by the blog-only Prism theme in `components/_code-prism.scss`
+    --color-code-important: #e90;
+    --color-code-class-name: #0e4491;
+    --color-code-property: #2ea248;
 
     // Border colors
     --color-border-primary: var(--color-gray-300);
@@ -254,15 +290,32 @@
     --color-util-gray-800: var(--color-gray-800);
     --color-util-gray-900: var(--color-gray-900);
 
+    // Dev tools colors
+    --color-dev-50: oklch(0.969 0.016 293.756);
+    --color-dev-100: oklch(0.943 0.029 294.588);
+    --color-dev-200: oklch(0.894 0.057 293.283);
+    --color-dev-300: oklch(0.811 0.111 293.571);
+    --color-dev-400: oklch(0.702 0.183 293.541);
+    --color-dev-500: oklch(0.606 0.25 292.717);
+    --color-dev-600: oklch(0.541 0.281 293.009);
+    --color-dev-700: oklch(0.491 0.27 292.581);
+    --color-dev-800: oklch(0.432 0.232 292.759);
+    --color-dev-900: oklch(0.38 0.189 293.745);
+    --color-dev-950: oklch(0.283 0.141 291.089);
+
     // Shadows
     --shadow-xs: 0 1px 2px 0 color-mix(in srgb, var(--color-gray-950) 05%, transparent);
-    --shadow-sm: 0 1px 3px 0 color-mix(in srgb, var(--color-gray-950) 10%, transparent),
+    --shadow-sm:
+        0 1px 3px 0 color-mix(in srgb, var(--color-gray-950) 10%, transparent),
         0 1px 2px -1px color-mix(in srgb, var(--color-gray-950) 10%, transparent);
-    --shadow-md: 0 4px 6px -1px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
+    --shadow-md:
+        0 4px 6px -1px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
         0 2px 4px -2px color-mix(in srgb, var(--color-gray-950) 10%, transparent);
-    --shadow-lg: 0 10px 15px -3px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
+    --shadow-lg:
+        0 10px 15px -3px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
         0 4px 6px -4px color-mix(in srgb, var(--color-gray-950) 10%, transparent);
-    --shadow-xl: 0 20px 25px -5px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
+    --shadow-xl:
+        0 20px 25px -5px color-mix(in srgb, var(--color-gray-950) 10%, transparent),
         0 8px 10px -6px color-mix(in srgb, var(--color-gray-950) 10%, transparent);
     --shadow-2xl: 0 25px 50px -12px color-mix(in srgb, var(--color-gray-950) 25%, transparent);
 
@@ -298,7 +351,7 @@ html[data-dark-mode='true'] {
     --color-fg-tertiary: var(--color-gray-400);
     --color-fg-quinary: var(--color-gray-500);
     --color-fg-disabled: var(--color-gray-500);
-    --color-fg-placeholder: var(--color-gray-400);
+    --color-fg-placeholder: var(--color-gray-500);
     --color-fg-white: var(--color-white);
     --color-fg-code: #ff537b;
 
@@ -306,6 +359,20 @@ html[data-dark-mode='true'] {
     --color-text-primary: color-mix(in srgb, var(--color-gray-400), var(--color-fg-primary) 20%);
     --color-text-secondary: var(--color-gray-300);
     --color-text-tertiary: var(--color-gray-400);
+
+    // Code colors
+    --color-code-comment: #7e8a9e;
+    --color-code-tag: #bf9fea;
+    --color-code-string: #bfda7f;
+    --color-code-punctuation: var(--color-fg-primary);
+    --color-code-keyword: #7ac1d1;
+    --color-code-symbol: #36d8d6;
+    --color-code-function: var(--color-fg-primary);
+    --color-code-deleted: #9a050f;
+    --color-code-selector: #36d8d6;
+    --color-code-important: #e90;
+    --color-code-class-name: #2b91af;
+    --color-code-property: #7ac1d1;
 
     // Border colors
     --color-border-primary: var(--color-gray-700);

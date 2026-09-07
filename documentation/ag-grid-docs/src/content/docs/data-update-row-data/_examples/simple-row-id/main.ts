@@ -1,13 +1,19 @@
 import type { ColDef, GetRowIdParams, GridApi, GridOptions } from 'ag-grid-community';
 import {
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule, ClientSideRowModelApiModule]);
 
 interface ICar {
     id: string;
@@ -49,6 +55,10 @@ function onRowDataA() {
 
 function onRowDataB() {
     gridApi!.setGridOption('rowData', rowDataB);
+}
+
+function onClearRowData() {
+    gridApi!.setGridOption('rowData', []);
 }
 
 // setup the grid after the page has finished loading

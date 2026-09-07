@@ -9,7 +9,7 @@ import type {
     ServerSideGroupLevelParams,
     WithoutGridCommon,
 } from 'ag-grid-community';
-import { BeanStub, _warn } from 'ag-grid-community';
+import { BeanStub } from 'ag-grid-community';
 
 import type { SSRMParams } from '../serverSideRowModel';
 import { LazyStore } from './lazy/lazyStore';
@@ -55,7 +55,7 @@ export class StoreFactory extends BeanStub implements NamedBean {
         userStoreParams?: ServerSideGroupLevelParams
     ): number | undefined {
         const maxBlocksInCache =
-            userStoreParams && userStoreParams.maxBlocksInCache != null
+            userStoreParams?.maxBlocksInCache != null
                 ? userStoreParams.maxBlocksInCache
                 : this.gos.get('maxBlocksInCache');
 
@@ -66,12 +66,12 @@ export class StoreFactory extends BeanStub implements NamedBean {
         }
 
         if (ssrmParams.dynamicRowHeight) {
-            _warn(203);
+            this.warn(203);
             return;
         }
 
         if (this.rowAutoHeight?.active) {
-            _warn(204);
+            this.warn(204);
             return undefined;
         }
 
@@ -80,9 +80,7 @@ export class StoreFactory extends BeanStub implements NamedBean {
 
     private getBlockSize(userStoreParams?: ServerSideGroupLevelParams): number | undefined {
         const blockSize =
-            userStoreParams && userStoreParams.cacheBlockSize != null
-                ? userStoreParams.cacheBlockSize
-                : this.gos.get('cacheBlockSize');
+            userStoreParams?.cacheBlockSize != null ? userStoreParams.cacheBlockSize : this.gos.get('cacheBlockSize');
 
         if (blockSize != null && blockSize > 0) {
             return blockSize;
@@ -102,7 +100,7 @@ export class StoreFactory extends BeanStub implements NamedBean {
             parentRowNode: parentNode.level >= 0 ? parentNode : undefined,
             rowGroupColumns: this.rowGroupColsSvc?.columns ?? [],
             pivotColumns: this.pivotColsSvc?.columns ?? [],
-            pivotMode: this.colModel.isPivotMode(),
+            pivotMode: this.colModel.pivotMode,
         };
 
         const res = callback(params);

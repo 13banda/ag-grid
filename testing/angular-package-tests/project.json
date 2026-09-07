@@ -1,0 +1,86 @@
+{
+  "name": "angular-package-tests",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "testing/angular-package-tests",
+  "projectType": "",
+  "targets": {
+    "test:package": {
+      "executor": "nx:noop",
+      "inputs": [],
+      "outputs": [],
+      "dependsOn": [
+        "test:package:local-21",
+        "test:package:local-22",
+        "test:package:local-latest",
+        "test:package:production-20",
+        "test:package:production-21",
+        "test:package:production-22"
+      ],
+      "configurations": {
+        "update": {}
+      }
+    },
+    "test:package:local-21": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh 21",
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -u 21"
+        }
+      }
+    },
+    "test:package:production-20": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh -p 20",
+      "cache": false,
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -p -u 20"
+        }
+      }
+    },
+    "test:package:production-21": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh -p 21",
+      "cache": false,
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -p -u 21"
+        }
+      }
+    },
+    "test:package:local-22": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh 22",
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -u 22"
+        }
+      }
+    },
+    "test:package:production-22": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh -p 22",
+      "cache": false,
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -p -u 22"
+        }
+      }
+    },
+    "test:package:local-latest": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh latest",
+      "configurations": {
+        "update": {
+          "command": "{projectRoot}/run.sh -u latest"
+        }
+      }
+    },
+    "test:package:editor": {
+      "dependsOn": ["^pack"],
+      "command": "{projectRoot}/run.sh -n -e latest"
+    }
+  },
+  "implicitDependencies": ["ag-stack", "ag-grid-community", "ag-grid-enterprise", "ag-grid-angular"]
+}

@@ -2,6 +2,7 @@ import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { ColumnEventType } from '../events';
+import type { ColumnDelayRenderService } from '../rendering/columnDelayRenderService';
 import { dispatchColumnResizedEvent } from './columnEventUtils';
 
 type FlexItem = {
@@ -20,6 +21,7 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
     beanName = 'colFlex' as const;
 
     private flexViewportWidth: number;
+    public columnsHidden = false;
 
     public refreshFlexedColumns(
         params: {
@@ -31,7 +33,7 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
             updateBodyWidths?: boolean;
         } = {}
     ): AgColumn[] {
-        const source = params.source ? params.source : 'flex';
+        const source = params.source ?? 'flex';
 
         if (params.viewportWidth != null) {
             this.flexViewportWidth = params.viewportWidth;
@@ -39,11 +41,7 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
 
         const totalSpace = this.flexViewportWidth;
 
-        if (!totalSpace) {
-            return [];
-        }
-
-        const { visibleCols } = this.beans;
+        const { visibleCols, colDelayRenderSvc } = this.beans;
 
         const visibleCenterCols = visibleCols.centerCols;
         let flexAfterDisplayIndex = -1;
@@ -79,8 +77,22 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
                 targetSize: 0,
             };
         });
+        // Only hide on a pass that goes on to flex, and so reaches the reveal below. Hiding on a pass
+        // that returns early leaves the request outstanding with nothing to clear it, and the grid stays
+        // hidden for the lifetime of the page.
+        const hideForFlex = hasFlexItems && !!totalSpace;
 
-        if (!hasFlexItems) {
+        // hide all columns and cells because we are going to flex them after they are displayed
+        if (hideForFlex) {
+            colDelayRenderSvc?.hideColumns('colFlex');
+            this.columnsHidden = true;
+        } else if (this.columnsHidden) {
+            // If columns were previously hidden, but now there are no flex columns, we need to remove the colFlex hide request
+            // This can happen if columns are auto sized before the grid has rendered the flex columns. i.e autoSizeStrategy in React
+            this.revealColumns(colDelayRenderSvc);
+        }
+
+        if (!totalSpace || !hasFlexItems) {
             return [];
         }
 
@@ -151,6 +163,7 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
                 }
 
                 const unclampedSize = item.targetSize;
+                // max applied last to match setActualWidth: when min > max, max wins, else the frozen size leaks space
                 const clampedSize = Math.min(Math.max(unclampedSize, item.min), item.max);
 
                 totalViolation += clampedSize - unclampedSize;
@@ -179,12 +192,9 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
             }
         }
 
-        if (!params.skipSetLeft) {
-            visibleCols.setLeftValues(source);
-        }
-
+        const widths = params.skipSetLeft ? undefined : visibleCols.setLeftValues(source);
         if (params.updateBodyWidths) {
-            visibleCols.updateBodyWidths();
+            visibleCols.updateBodyWidths(widths);
         }
 
         const unconstrainedFlexColumns = items
@@ -198,7 +208,16 @@ export class ColumnFlexService extends BeanStub implements NamedBean {
             dispatchColumnResizedEvent(this.eventSvc, changedColumns, true, source, flexingColumns);
         }
 
+        this.revealColumns(colDelayRenderSvc);
+
         return unconstrainedFlexColumns;
+    }
+
+    private revealColumns(colDelayRenderSvc: ColumnDelayRenderService | undefined) {
+        if (this.columnsHidden) {
+            colDelayRenderSvc?.revealColumns('colFlex');
+            this.columnsHidden = false;
+        }
     }
 
     public initCol(column: AgColumn): void {

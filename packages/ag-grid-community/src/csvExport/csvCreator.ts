@@ -1,14 +1,9 @@
-import type { ColumnModel } from '../columns/columnModel';
-import type { ColumnNameService } from '../columns/columnNameService';
+import { _downloadFile } from 'ag-stack';
+
 import type { NamedBean } from '../context/bean';
-import type { BeanCollection } from '../context/context';
 import { BaseCreator } from '../export/baseCreator';
-import { _downloadFile } from '../export/downloader';
 import type { CsvCustomContent, CsvExportParams } from '../interfaces/exportParams';
-import type { IColsService } from '../interfaces/iColsService';
 import type { ICsvCreator } from '../interfaces/iCsvCreator';
-import { _warn } from '../validation/logging';
-import type { ValueService } from '../valueService/valueService';
 import { CsvSerializingSession } from './csvSerializingSession';
 
 export class CsvCreator
@@ -16,18 +11,6 @@ export class CsvCreator
     implements NamedBean, ICsvCreator
 {
     beanName = 'csvCreator' as const;
-
-    private colModel: ColumnModel;
-    private colNames: ColumnNameService;
-    private rowGroupColsSvc?: IColsService;
-    private valueSvc: ValueService;
-
-    public wireBeans(beans: BeanCollection): void {
-        this.colModel = beans.colModel;
-        this.colNames = beans.colNames;
-        this.rowGroupColsSvc = beans.rowGroupColsSvc;
-        this.valueSvc = beans.valueSvc;
-    }
 
     protected getMergedParams(params?: CsvExportParams): CsvExportParams {
         const baseParams = this.gos.get('defaultCsvExportParams');
@@ -37,21 +20,18 @@ export class CsvCreator
     protected export(userParams?: CsvExportParams): void {
         if (this.isExportSuppressed()) {
             // Export cancelled.
-            _warn(51);
+            this.warn(51);
             return;
         }
 
-        const mergedParams = this.getMergedParams(userParams);
-        const data = this.getData(mergedParams);
+        this.runExport(() => {
+            const mergedParams = this.getMergedParams(userParams);
+            const data = this.getData(mergedParams);
 
-        const packagedFile = new Blob(['\ufeff', data], { type: 'text/plain' });
+            const packagedFile = new Blob(['\ufeff', data], { type: 'text/plain' });
 
-        const fileName =
-            typeof mergedParams.fileName === 'function'
-                ? mergedParams.fileName(this.gos.getGridCommonParams())
-                : mergedParams.fileName;
-
-        _downloadFile(this.getFileName(fileName), packagedFile);
+            _downloadFile(this.resolveFileName(mergedParams), packagedFile);
+        });
     }
 
     public exportDataAsCsv(params?: CsvExportParams): void {
@@ -69,7 +49,7 @@ export class CsvCreator
     }
 
     public createSerializingSession(params?: CsvExportParams): CsvSerializingSession {
-        const { colModel, colNames, rowGroupColsSvc, valueSvc, gos } = this;
+        const { colModel, colNames, rowGroupColsSvc, valueSvc, gos, log } = this.beans;
         const {
             processCellCallback,
             processHeaderCallback,
@@ -77,6 +57,8 @@ export class CsvCreator
             processRowGroupCallback,
             suppressQuotes,
             columnSeparator,
+            valueFrom,
+            transformValues,
         } = params!;
 
         return new CsvSerializingSession({
@@ -84,6 +66,7 @@ export class CsvCreator
             colNames,
             valueSvc,
             gos,
+            log,
             processCellCallback: processCellCallback || undefined,
             processHeaderCallback: processHeaderCallback || undefined,
             processGroupHeaderCallback: processGroupHeaderCallback || undefined,
@@ -91,6 +74,8 @@ export class CsvCreator
             suppressQuotes: suppressQuotes || false,
             columnSeparator: columnSeparator || ',',
             rowGroupColsSvc,
+            valueFrom,
+            transformValues,
         });
     }
 

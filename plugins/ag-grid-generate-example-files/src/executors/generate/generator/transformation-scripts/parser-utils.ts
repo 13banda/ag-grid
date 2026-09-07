@@ -15,7 +15,7 @@ export function readAsJsFile(srcFile, internalFramework: InternalFramework) {
         tsFile = tsFile.replace(/import {((.|\n)*?)} from(?!(\s['"]\.\/)).*\n/g, '');
     } else {
         tsFile = tsFile.replace(/import ((.|\n)*?)from.*\n/g, '');
-        tsFile = tsFile.replace(/export /g, '');
+        tsFile = tsFile.replace(/^export /gm, '');
     }
 
     const jsFile = transform(tsFile, { transforms: ['typescript'], disableESTransforms: true }).code;
@@ -59,16 +59,18 @@ export function getFunctionName(code: string): string {
 }
 
 export const convertFunctionToProperty = (code: string) =>
-    code.replace(/function\s+([^(\s]+)\s*\(([^)]*)\)/, '$1 = ($2) =>');
+    code.replace(/function\s+([^(\s]+)\s*\(([^)]*)\)(:[^{]+)?/, '$1 = ($2)$3 =>');
 
-export const convertFunctionToConstProperty = (code: string) =>
-    code.replace(/function\s+([^(\s]+)\s*\(([^)]*)\)/, 'const $1 = ($2) =>');
 export const convertFunctionToConstPropertyTs = (code: string) => {
-    return code.replace(/function\s+([^(\s]+)\s*\(([^)]*)\):(\s+[^{]*)/, 'const $1: ($2) => $3 = ($2) =>');
+    return code.replace(/(async\s+)?function\s+([^(\s]+)\s*\(([^)]*)\):(\s+[^{]*)/, 'const $2: ($3) => $4 = $1($3) =>');
 };
 
 export function isInstanceMethod(methods: string[], property: any): boolean {
     return methods.map(getFunctionName).filter((name) => name === property.name).length > 0;
+}
+
+export function removeCreateGridImport(imports: string[]): string[] {
+    return imports.map((i) => i.replace(`, createGrid`, ''));
 }
 
 export const enum NodeType {
@@ -81,13 +83,11 @@ export function tsCollect(tsTree, tsBindings: ParsedBindings, collectors, recurs
     ts.forEachChild(tsTree, (node: ts.Node) => {
         collectors
             .filter((c) => {
-                let res = false;
                 try {
-                    res = c.matches(node);
-                } catch (error) {
+                    return c.matches(node);
+                } catch {
                     return false;
                 }
-                return res;
             })
             .forEach((c) => {
                 try {
@@ -247,23 +247,21 @@ export function addLicenseManager(imports: any[], exampleConfig: ExampleConfig) 
     }
 }
 
-export function addEnterprisePackage(imports: any[], bindings: ParsedBindings) {
-    const isEnterprise = bindings.imports.some((i) => i.module.includes('-enterprise'));
-    if (isEnterprise) {
-        imports.push(`import 'ag-grid-enterprise';`);
-    }
-}
-
 export function extractModuleRegistration(srcFile: ts.SourceFile): string {
+    let devValidationsGuard: string | undefined;
     for (const statement of srcFile.statements) {
+        if (ts.isIfStatement(statement) && statement.getText().includes('enableDevValidations')) {
+            devValidationsGuard = statement.getText();
+        }
         if (
             ts.isExpressionStatement(statement) &&
             statement.expression?.getText().includes('ModuleRegistry.registerModules')
         ) {
-            return statement.getText();
+            const registration = statement.getText();
+            return devValidationsGuard ? `${devValidationsGuard}\n\n${registration}` : registration;
         }
     }
-    return undefined;
+    return devValidationsGuard;
 }
 
 export function extractTypeDeclarations(srcFile: ts.SourceFile) {
@@ -307,6 +305,23 @@ export function tsNodeIsTopLevelFunction(node: any): boolean {
 }
 
 /**
+ * The names a declaration's binding name introduces into scope: the identifier itself, or every
+ * element of an object/array destructuring pattern.
+ */
+function boundNames(name: ts.BindingName): string[] {
+    if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
+        const names: string[] = [];
+        name.elements.forEach((element) => {
+            if (ts.isBindingElement(element)) {
+                names.push(...boundNames(element.name));
+            }
+        });
+        return names;
+    }
+    return [name.getText()];
+}
+
+/**
  * Find all the variables defined in this node tree recursively
  */
 export function findAllVariables(node) {
@@ -315,12 +330,8 @@ export function findAllVariables(node) {
         allVariables.push(node.name.getText());
     }
     if (ts.isVariableDeclaration(node)) {
-        if (ts.isObjectBindingPattern(node.name)) {
-            // Code like this:  const { pageSetup, margins } = getSheetConfig();
-            node.name.elements.forEach((n) => allVariables.push(n.getText()));
-        } else {
-            allVariables.push(node.name.getText());
-        }
+        // Code like this:  const { pageSetup, margins } = getSheetConfig();
+        allVariables.push(...boundNames(node.name));
     }
     if (ts.isFunctionDeclaration(node)) {
         // catch locally defined functions within the main function body
@@ -331,8 +342,9 @@ export function findAllVariables(node) {
         // catch locally defined arrow functions with their params
         //  const colToNameFunc = (col: Column, index: number) => index + ' = ' + col.getId()
         //  const colNames = cols.map(colToNameFunc).join(', ')
-
-        allVariables.push(node.name.getText());
+        // Destructured params bind each element, not the pattern text: without unpacking them,
+        // `({ column }) => column.getColId()` reports `column` as an external dependency.
+        allVariables.push(...boundNames(node.name));
     }
     ts.forEachChild(node, (n) => {
         const variables = findAllVariables(n);
@@ -416,6 +428,8 @@ export function findAllAccessedProperties(node) {
         // Do nothing for Class declarations as this is likely a cell renderer setup
     } else if (ts.isTypeReferenceNode(node)) {
         // Do nothing for Type references
+    } else if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+        // Do nothing for literals — they are values, not property accesses
     } else if (node instanceof Array) {
         node.forEach((element) => {
             properties = [...properties, ...findAllAccessedProperties(element)];
@@ -443,14 +457,19 @@ export function getImport(filename: string) {
     return `import { ${componentName} } from './${componentFileName}';`;
 }
 
-export function getPropertyInterfaces(properties) {
-    let propTypesUsed = [];
+export function getPropertyInterfaces(properties, fullFile?: string): string[] {
+    let propTypesUsed: string[] = [];
     properties.forEach((prop) => {
         if (prop.typings?.typesToInclude?.length > 0) {
             propTypesUsed = [...propTypesUsed, ...prop.typings.typesToInclude];
         }
     });
-    return [...new Set(propTypesUsed)];
+    // Rough way of organising imports by not adding interfaces that are not present in the code file
+    let imports = [...new Set(propTypesUsed)];
+    if (fullFile) {
+        imports = imports.filter((i) => new RegExp(`\\b${i}\\b`).test(fullFile));
+    }
+    return imports;
 }
 
 /**
@@ -533,7 +552,13 @@ export function addRelativeImports(bindings: ParsedBindings, imports: string[], 
 }
 
 export function removeModuleRegistration(code: string) {
-    return code.replace(/\b(agGrid\.)?ModuleRegistry\.registerModules(.|\n)*?]\)(;?)/g, '');
+    // Strip the dev-only validations guard (the vanilla/UMD generator re-injects a plain
+    // agGrid.enableDevValidations() call — process.env is not defined in the browser bundle).
+    code = code.replace(
+        /(\/\/[^\n]*\n)?if \(process\.env\.NODE_ENV !== 'production'\) \{\s*(\/\/[^\n]*\n\s*)?(agGrid\.)?enableDevValidations\(\);\s*\}\n?/g,
+        ''
+    );
+    return code.replace(/\b(agGrid\.)?ModuleRegistry\.registerModules(.|\n)*?]\)(;)/g, '');
 }
 
 export function handleRowGenericInterface(fileTxt: string, tData: string): string {
@@ -550,9 +575,27 @@ export function handleRowGenericInterface(fileTxt: string, tData: string): strin
     return fileTxt;
 }
 
+const GENERIC_INTERFACE_NAMES: Record<string, string[]> = {
+    IOlympicData: ['IOlympicData'],
+    IOlympicDataWithId: ['IOlympicDataWithId', 'IOlympicData'],
+    IAccount: ['IAccount', 'ICallRecord'],
+};
+
 export function addGenericInterfaceImport(imports: string[], tData: string, bindings) {
-    if (tData && !bindings.interfaces.some((i) => i.includes(tData)) && !imports.some((i) => i.includes(tData))) {
-        imports.push(`import { ${tData} } from './interfaces'`);
+    if (!tData) {
+        return;
+    }
+
+    const source = JSON.stringify(bindings);
+    const names = (GENERIC_INTERFACE_NAMES[tData] ?? [tData]).filter(
+        (name) =>
+            (name === tData || new RegExp(`\\b${name}\\b`).test(source)) &&
+            !bindings.interfaces.some((i) => i.includes(name)) &&
+            !imports.some((i) => i.includes(name))
+    );
+
+    if (names.length > 0) {
+        imports.push(`import { ${names.join(', ')} } from './interfaces';`);
     }
 }
 
@@ -653,18 +696,23 @@ const chartsExamplePathSubstrings = [
     '/modules/examples/individual-registration',
     '/localisation/examples/callback',
     '/localisation/examples/localisation',
+    '/key-features',
 ];
 
-export function getIntegratedDarkModeCode(exampleName: string, typescript?: boolean, apiName = 'params.api'): string {
+export function getIntegratedDarkModeCode(
+    exampleName: string,
+    typescript?: boolean,
+    apiName = 'params.api'
+): string | undefined {
     if (!chartsExamplePathSubstrings.find((s) => exampleName.includes(s))) {
-        return '';
+        return undefined;
     }
     return `${DARK_INTEGRATED_START}${(typescript ? darkModeTs : darkModeJS).replace(/params\.api/g, apiName)}${DARK_INTEGRATED_END}`;
 }
 
 const darkModeTs = `
-        const isInitialModeDark = document.documentElement.dataset.agThemeMode?.includes("dark");
-                  
+        const readThemeMode = (): string | undefined => document.documentElement.dataset.agThemeMode;
+
         // update chart themes based on dark mode status
         const updateChartThemes = (isDark: boolean): void => {
             const themes: string[] = ['ag-default', 'ag-material', 'ag-sheets', 'ag-polychroma', 'ag-vivid'];            
@@ -675,27 +723,14 @@ const darkModeTs = `
                 ? (isDark ? ['my-custom-theme-dark', 'my-custom-theme-light'] : ['my-custom-theme-light', 'my-custom-theme-dark'])
                 : Array.from(new Set(themes.map((theme) => theme + (isDark ? '-dark' : ''))));                      
 
+            if (currentThemes && currentThemes.length === modifiedThemes.length && currentThemes.every((theme, i) => theme === modifiedThemes[i])) {
+                return;
+            }
+
             // updating the 'chartThemes' grid option will cause the chart to reactively update!
             params.api.setGridOption('chartThemes', modifiedThemes);
         };
         
-        // update chart themes when example first loads
-        let initialSet = false;
-        const maxTries = 5;
-        let tries = 0;
-        const trySetInitial = (delay) => {
-            if(params.api){
-                initialSet = true;
-                updateChartThemes(isInitialModeDark);
-            }else{
-                if(tries < maxTries){
-                    setTimeout(() => trySetInitial(), 250);
-                    tries++;
-                }   
-            }
-        }
-        trySetInitial(0);
-                      
         interface ColorSchemeChangeEventDetail {
             darkMode: boolean;
         }
@@ -707,12 +742,26 @@ const darkModeTs = `
         }
         
         // listen for user-triggered dark mode changes (not removing listener is fine here!)
-        document.addEventListener('color-scheme-change', handleColorSchemeChange as EventListener);                
+        document.addEventListener('color-scheme-change', handleColorSchemeChange as EventListener);
+
+        const maxTries = 5;
+        let tries = 0;
+        const trySetInitial = (): void => {
+            const themeMode = readThemeMode();
+            const lastTry = tries >= maxTries;
+            if (params.api && (themeMode !== undefined || lastTry)) {
+                updateChartThemes(themeMode !== undefined && themeMode.includes('dark'));
+            } else if (!lastTry) {
+                tries++;
+                setTimeout(trySetInitial, 250);
+            }
+        };
+        trySetInitial();
     `;
 
 const darkModeJS = `
-        const isInitialModeDark = document.documentElement.dataset.agThemeMode?.includes("dark");
-      
+        const readThemeMode = () => document.documentElement.dataset.agThemeMode;
+
         const updateChartThemes = (isDark) => { 
             const themes = ['ag-default', 'ag-material', 'ag-sheets', 'ag-polychroma', 'ag-vivid'];            
             const currentThemes = params.api.getGridOption('chartThemes');                    
@@ -722,26 +771,13 @@ const darkModeJS = `
                 ? (isDark ? ['my-custom-theme-dark', 'my-custom-theme-light'] : ['my-custom-theme-light', 'my-custom-theme-dark'])
                 : Array.from(new Set(themes.map((theme) => theme + (isDark ? '-dark' : ''))));                      
 
+            if (currentThemes && currentThemes.length === modifiedThemes.length && currentThemes.every((theme, i) => theme === modifiedThemes[i])) {
+                return;
+            }
+
             // updating the 'chartThemes' grid option will cause the chart to reactively update!
             params.api.setGridOption('chartThemes', modifiedThemes);
         };
-
-        // update chart themes when example first loads
-        let initialSet = false;
-        const maxTries = 5;
-        let tries = 0;
-        const trySetInitial = (delay) => {
-            if(params.api){
-                initialSet = true;
-                updateChartThemes(isInitialModeDark);
-            }else{
-                if(tries < maxTries){
-                    setTimeout(() => trySetInitial(), 250);
-                    tries++;
-                }   
-            }
-        }
-        trySetInitial(0);
 
         const handleColorSchemeChange = (event) => {
             const { darkMode } = event.detail;
@@ -750,4 +786,64 @@ const darkModeJS = `
 
         // listen for user-triggered dark mode changes (not removing listener is fine here!)
         document.addEventListener('color-scheme-change', handleColorSchemeChange);
+
+        const maxTries = 5;
+        let tries = 0;
+        const trySetInitial = () => {
+            const themeMode = readThemeMode();
+            const lastTry = tries >= maxTries;
+            if (params.api && (themeMode !== undefined || lastTry)) {
+                updateChartThemes(themeMode !== undefined && themeMode.includes('dark'));
+            } else if (!lastTry) {
+                tries++;
+                setTimeout(trySetInitial, 250);
+            }
+        };
+        trySetInitial();
     `;
+
+export function wrapTearDownExample(method: string) {
+    const tearDownStart = '/** TEAR DOWN START **/';
+    const tearDownEnd = '/** TEAR DOWN END **/';
+
+    return `${tearDownStart}${method}${tearDownEnd}`;
+}
+
+export function getEnableAGTestIdLogic(isUmd: boolean = false): string {
+    const enableStart = '/** ENABLE AG-TEST-ID START **/';
+    const enableEnd = '/** ENABLE AG-TEST-ID END **/';
+    const community = 'agGridCommunity';
+    const enterprise = 'agGridEnterprise';
+
+    // Support dynamically adding modules during integration testing
+    const agGridCommunityImport = isUmd ? '' : `import * as ${community} from 'ag-grid-community';`;
+
+    const extraModules = isUmd
+        ? ''
+        : `
+    const modulesCSV = url.get('modules');
+    if (modulesCSV) {
+        const ${enterprise} = await import('ag-grid-enterprise');
+        ${community}.ModuleRegistry.registerModules(
+            modulesCSV.split(',').map(name => ${community}[name] || ${enterprise}[name])
+        );
+    }
+`;
+
+    const setupCode = isUmd ? 'agGrid.setupAgTestIds();' : `${community}.setupAgTestIds();`;
+    const exposeGridApi = isUmd
+        ? 'window.getGridApi = agGrid.getGridApi;'
+        : `window.getGridApi = ${community}.getGridApi;`;
+
+    const method = `
+${agGridCommunityImport}
+const url = new URLSearchParams(window.location.search);
+const enableTestIds = url.get('enableTestIds');
+if (enableTestIds) {
+    ${extraModules}
+    ${setupCode}
+    ${exposeGridApi}
+}
+    `;
+    return `${enableStart}${method}${enableEnd}`;
+}

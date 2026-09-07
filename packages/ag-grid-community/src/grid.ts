@@ -1,12 +1,19 @@
+import type { AgContextParams } from 'ag-stack';
+import { AgContext, _createStyledRootElements, _missing } from 'ag-stack';
+
 import { createGridApi } from './api/apiUtils';
 import type { GridApi } from './api/gridApi';
 import type { ApiFunctionName } from './api/iApiFunction';
-import type { ContextParams, SingletonBean } from './context/context';
-import { Context } from './context/context';
+import type { BeanCollection, Context, SingletonBean } from './context/context';
 import { gridBeanDestroyComparator, gridBeanInitComparator } from './context/gridBeanComparator';
 import type { GridOptions } from './entities/gridOptions';
+import type { AgEventTypeParams } from './events';
+import { GlobalGridOptions } from './globalGridOptions';
 import { GridComp } from './gridComp/gridComp';
 import { CommunityCoreModule } from './gridCoreModule';
+import type { GridOptionsWithDefaults } from './gridOptionsDefault';
+import type { GridOptionsService } from './gridOptionsService';
+import type { AgGridCommon } from './interfaces/iCommon';
 import type { IFrameworkOverrides } from './interfaces/iFrameworkOverrides';
 import type {
     CommunityModuleName,
@@ -20,13 +27,14 @@ import {
     _areModulesGridScoped,
     _getRegisteredModules,
     _isModuleRegistered,
+    _isUmd,
     _registerModule,
+    _unRegisterGridModules,
 } from './modules/moduleRegistry';
-import { _missing } from './utils/generic';
-import { _mergeDeep } from './utils/object';
-import { _error, _logPreInitErr, baseDocLink } from './validation/logging';
+import { _errorWithoutAttribution, _logPreInitErr, _renderBootstrapPanel } from './validation/logging';
 import { VanillaFrameworkOverrides } from './vanillaFrameworkOverrides';
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface GridParams {
     // INTERNAL - used by Web Components
     globalListener?: (...args: any[]) => any;
@@ -36,8 +44,9 @@ export interface GridParams {
     frameworkOverrides?: IFrameworkOverrides;
     // INTERNAL - bean instances to add to the context
     providedBeanInstances?: { [key: string]: any };
-    // INTERNAL - set by frameworks if the provided grid div is safe to set a theme class on
-    setThemeOnGridDiv?: boolean;
+    // INTERNAL - set when this grid is nested inside another grid's styled root (e.g. a
+    // master/detail detail grid), so its own styled root should not re-apply theme classes
+    hasAncestorStyledRoot?: boolean;
 
     /**
      * Modules to be registered directly with this grid instance.
@@ -52,71 +61,8 @@ export interface Params {
     modules?: Module[];
 }
 
-class GlobalGridOptions {
-    static gridOptions: GridOptions | undefined = undefined;
-    static mergeStrategy: GlobalGridOptionsMergeStrategy = 'shallow';
-
-    /**
-     * @param providedOptions
-     * @returns Shallow copy of the provided options with global options merged in.
-     */
-    static applyGlobalGridOptions(providedOptions: GridOptions): GridOptions {
-        if (!GlobalGridOptions.gridOptions) {
-            // No global options provided, return a shallow copy of the provided options
-            return { ...providedOptions };
-        }
-
-        let mergedGridOps: GridOptions = {};
-        // Merge deep to avoid leaking changes to the global options
-        _mergeDeep(mergedGridOps, GlobalGridOptions.gridOptions, true, true);
-        if (GlobalGridOptions.mergeStrategy === 'deep') {
-            _mergeDeep(mergedGridOps, providedOptions, true, true);
-        } else {
-            // Shallow copy so that provided object properties completely override global options
-            mergedGridOps = { ...mergedGridOps, ...providedOptions };
-        }
-
-        if (GlobalGridOptions.gridOptions.context) {
-            // Ensure context reference is maintained if it was provided
-            mergedGridOps.context = GlobalGridOptions.gridOptions.context;
-        }
-        if (providedOptions.context) {
-            if (GlobalGridOptions.mergeStrategy === 'deep' && mergedGridOps.context) {
-                // Merge global context properties into the provided context whilst maintaining provided context reference
-                _mergeDeep(providedOptions.context, mergedGridOps.context, true, true);
-            }
-            mergedGridOps.context = providedOptions.context;
-        }
-
-        return mergedGridOps;
-    }
-}
-
-/**
- * When providing global grid options, specify how they should be merged with the grid options provided to individual grids.
- * - `deep` will merge the global options into the provided options deeply, with provided options taking precedence.
- * - `shallow` will merge the global options with the provided options shallowly, with provided options taking precedence.
- * @default 'shallow'
- * @param gridOptions - global grid options
- */
-export type GlobalGridOptionsMergeStrategy = 'deep' | 'shallow';
-
-/**
- * Provide gridOptions that will be shared by all grid instances.
- * Individually defined GridOptions will take precedence over global options.
- * @param gridOptions - global grid options
- */
-export function provideGlobalGridOptions(
-    gridOptions: GridOptions,
-    mergeStrategy: GlobalGridOptionsMergeStrategy = 'shallow'
-): void {
-    GlobalGridOptions.gridOptions = gridOptions;
-    GlobalGridOptions.mergeStrategy = mergeStrategy;
-}
-
-export function _getGlobalGridOption<K extends keyof GridOptions>(gridOption: K): GridOptions[K] {
-    return GlobalGridOptions.gridOptions?.[gridOption];
-}
+const _gridApiCache = new WeakMap<Element, GridApi>();
+const _gridElementCache = new WeakMap<GridApi, Element>();
 
 // **NOTE** If updating this JsDoc please also update the re-exported createGrid in main-umd-shared.ts
 /**
@@ -133,32 +79,22 @@ export function createGrid<TData>(
 ): GridApi<TData> {
     if (!gridOptions) {
         // No gridOptions provided, abort creating the grid
-        _error(11);
+        _errorWithoutAttribution(11);
         return {} as GridApi;
     }
-    const gridParams: GridParams | undefined = params;
-    let destroyCallback: (() => void) | undefined;
-    if (!gridParams?.setThemeOnGridDiv) {
-        // frameworks already create an element owned by our code, so we can set
-        // the theme class on it. JS users calling createGrid directly are
-        // passing an element owned by their application, so we can't set a
-        // class name on it and must create a wrapper.
-        const newGridDiv = document.createElement('div');
-        newGridDiv.style.height = '100%';
-        eGridDiv.appendChild(newGridDiv);
-        eGridDiv = newGridDiv;
-        destroyCallback = () => eGridDiv.remove();
-    }
+    const [outer, inner] = _createStyledRootElements();
+    eGridDiv.appendChild(outer);
     const api = new GridCoreCreator().create(
-        eGridDiv,
+        outer,
+        inner,
         gridOptions,
         (context) => {
-            const gridComp = new GridComp(eGridDiv);
+            const gridComp = new GridComp(inner);
             context.createBean(gridComp);
         },
         undefined,
         params,
-        destroyCallback
+        () => outer.remove()
     );
 
     return api;
@@ -168,63 +104,95 @@ let nextGridId = 1;
 
 // creates services of grid only, no UI, so frameworks can use this if providing
 // their own UI
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class GridCoreCreator {
+    /**
+     * @param eOutermostGridOwned the outermost element owned by grid code, the parent of which is application-owned
+     * @param eGridDiv the element into which the grid UI should be appended - the inner element of the styled root
+     */
     public create(
+        eOutermostGridOwned: HTMLElement,
         eGridDiv: HTMLElement,
         providedOptions: GridOptions,
         createUi: (context: Context) => void,
         acceptChanges?: (context: Context) => void,
         params?: GridParams,
-        destroyCallback?: () => void
+        _destroyCallback?: () => void
     ): GridApi {
         // Returns a shallow copy of the provided options, with global options merged in
         const gridOptions = GlobalGridOptions.applyGlobalGridOptions(providedOptions);
 
         const gridId = gridOptions.gridId ?? String(nextGridId++);
 
-        const rowModelType = gridOptions.rowModelType ?? 'clientSide';
+        const registeredModules = this.getRegisteredModules(params, gridId, gridOptions.rowModelType);
 
-        const registeredModules = this.getRegisteredModules(params, gridId, rowModelType);
-
-        const beanClasses = this.createBeansList(rowModelType, registeredModules, gridId);
+        const beanClasses = this.createBeansList(gridOptions.rowModelType, registeredModules, gridId);
         const providedBeanInstances = this.createProvidedBeans(eGridDiv, gridOptions, params);
 
         if (!beanClasses) {
-            // Detailed error message will have been printed by createBeansList
+            // Detailed error message will have been printed by createBeansList. The grid root is already
+            // in the DOM but no beans (and so no overlay) exist, so render the dev bootstrap panel here.
+            _renderBootstrapPanel(eOutermostGridOwned);
             // Break typing so that the normal return type does not have to handle undefined.
             return undefined as any;
         }
 
-        const contextParams: ContextParams = {
+        const destroyCallback = () => {
+            _gridElementCache.delete(api);
+            _gridApiCache.delete(eOutermostGridOwned);
+            _unRegisterGridModules(gridId);
+            _destroyCallback?.();
+        };
+
+        const contextParams: AgContextParams<
+            BeanCollection,
+            GridOptionsWithDefaults,
+            AgEventTypeParams,
+            AgGridCommon<any, any>,
+            GridOptionsService
+        > = {
             providedBeanInstances,
             beanClasses,
-            gridId,
+            id: gridId,
             beanInitComparator: gridBeanInitComparator,
             beanDestroyComparator: gridBeanDestroyComparator,
             derivedBeans: [createGridApi],
             destroyCallback,
         };
 
-        const context = new Context(contextParams);
+        const context = new AgContext<
+            BeanCollection,
+            GridOptionsWithDefaults,
+            AgEventTypeParams,
+            AgGridCommon<any, any>,
+            GridOptionsService
+        >(contextParams);
         this.registerModuleFeatures(context, registeredModules);
 
         createUi(context);
 
         context.getBean('syncSvc').start();
 
-        if (acceptChanges) {
-            acceptChanges(context);
-        }
+        acceptChanges?.(context);
 
-        return context.getBean('gridApi');
+        const api = context.getBean('gridApi');
+
+        _gridApiCache.set(eOutermostGridOwned, api);
+        _gridElementCache.set(api, eOutermostGridOwned);
+
+        return api;
     }
 
-    private getRegisteredModules(params: GridParams | undefined, gridId: string, rowModelType: RowModelType): Module[] {
+    private getRegisteredModules(
+        params: GridParams | undefined,
+        gridId: string,
+        rowModelType: RowModelType | undefined
+    ): Module[] {
         _registerModule(CommunityCoreModule, undefined);
 
         params?.modules?.forEach((m) => _registerModule(m, gridId));
 
-        return _getRegisteredModules(gridId, rowModelType);
+        return _getRegisteredModules(gridId, getDefaultRowModelType(rowModelType));
     }
 
     private registerModuleFeatures(
@@ -234,17 +202,17 @@ export class GridCoreCreator {
         const registry = context.getBean('registry');
         const apiFunctionSvc = context.getBean('apiFunctionSvc');
 
-        registeredModules.forEach((module) => {
+        for (const module of registeredModules) {
             registry.registerModule(module);
 
             const apiFunctions = module.apiFunctions;
             if (apiFunctions) {
                 const names = Object.keys(apiFunctions) as ApiFunctionName[];
-                names.forEach((name) => {
-                    apiFunctionSvc?.addFunction(name, apiFunctions[name]!);
-                });
+                for (const name of names) {
+                    apiFunctionSvc?.addFunction(name, apiFunctions[name]);
+                }
             }
-        });
+        }
     }
 
     private createProvidedBeans(eGridDiv: HTMLElement, gridOptions: GridOptions, params?: GridParams): any {
@@ -256,11 +224,13 @@ export class GridCoreCreator {
         const seed = {
             gridOptions: gridOptions,
             eGridDiv: eGridDiv,
+            eRootDiv: eGridDiv,
             globalListener: params ? params.globalListener : null,
             globalSyncListener: params ? params.globalSyncListener : null,
             frameworkOverrides: frameworkOverrides,
+            hasAncestorStyledRoot: params?.hasAncestorStyledRoot,
         };
-        if (params && params.providedBeanInstances) {
+        if (params?.providedBeanInstances) {
             Object.assign(seed, params.providedBeanInstances);
         }
 
@@ -268,7 +238,7 @@ export class GridCoreCreator {
     }
 
     private createBeansList(
-        rowModelType: RowModelType,
+        userProvidedRowModelType: RowModelType | undefined,
         registeredModules: Module[],
         gridId: string
     ): SingletonBean[] | undefined {
@@ -279,7 +249,7 @@ export class GridCoreCreator {
             serverSide: 'ServerSideRowModel',
             viewport: 'ViewportRowModel',
         };
-
+        const rowModelType = getDefaultRowModelType(userProvidedRowModelType);
         const rowModuleModelName = rowModelModuleNames[rowModelType];
 
         if (!rowModuleModelName) {
@@ -289,24 +259,76 @@ export class GridCoreCreator {
         }
 
         if (!_isModuleRegistered(rowModuleModelName, gridId, rowModelType)) {
+            const isUmd = _isUmd();
+            const reasonOrId = `rowModelType = '${rowModelType}'`;
+
+            const message = isUmd
+                ? `Unable to use ${reasonOrId} as that requires the ag-grid-enterprise script to be included.\n`
+                : `Missing module ${rowModuleModelName}Module for rowModelType ${rowModelType}.`;
             _logPreInitErr(
                 200,
                 {
-                    reasonOrId: `rowModelType = '${rowModelType}'`,
+                    reasonOrId,
                     moduleName: rowModuleModelName,
                     gridScoped: _areModulesGridScoped(),
                     gridId,
                     rowModelType,
+                    isUmd,
                 },
-                `Missing module ${rowModuleModelName}Module for rowModelType ${rowModelType}. \nIf upgrading from before v33, see ${baseDocLink}/upgrading-to-ag-grid-33/#changes-to-modules/`
+                message
             );
             return;
         }
 
         const beans: Set<SingletonBean> = new Set();
 
-        registeredModules.forEach((module) => module.beans?.forEach((bean) => beans.add(bean)));
+        for (const module of registeredModules) {
+            for (const bean of module.beans ?? []) {
+                beans.add(bean);
+            }
+        }
 
         return Array.from(beans);
     }
+}
+
+function getDefaultRowModelType(passedRowModelType?: RowModelType): RowModelType {
+    return passedRowModelType ?? 'clientSide';
+}
+
+/**
+ * Returns the `GridApi` associated with a grid
+ *
+ * The `gridElement` argument can be:
+ * - the grid ID as determined by the `gridId` grid option
+ * - a DOM node or a CSS selector string identifying a DOM node. This can point
+ *   to any element within a grid, or to the parent element of the grid if the
+ *   grid is the first child.
+ */
+export function getGridApi(gridElement: Element | string | null | undefined): GridApi | undefined {
+    if (typeof gridElement === 'string') {
+        try {
+            gridElement =
+                document.querySelector(`[grid-id="${gridElement}"]`) ??
+                document.querySelector(gridElement) ??
+                document.getElementById(gridElement);
+        } catch {
+            gridElement = null;
+        }
+    }
+    gridElement = gridElement?.firstElementChild ?? gridElement;
+    while (gridElement) {
+        const api = _gridApiCache.get(gridElement);
+        if (api) {
+            return api;
+        }
+        gridElement = gridElement.parentElement;
+    }
+}
+
+/**
+ * Returns the `Element` instance associated with the grid instance referred to by `GridApi`
+ */
+export function getGridElement(api: GridApi): Element | undefined {
+    return _gridElementCache.get(api);
 }

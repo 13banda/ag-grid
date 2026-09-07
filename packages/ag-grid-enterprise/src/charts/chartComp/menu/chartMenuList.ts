@@ -1,5 +1,8 @@
+import { RefPlaceholder, _focusInto, _isNothingFocused } from 'ag-stack';
+
 import type {
     BeanCollection,
+    ContainerType,
     DefaultChartMenuItem,
     IAfterGuiAttachedParams,
     IconName,
@@ -7,16 +10,9 @@ import type {
     NamedBean,
     PopupService,
 } from 'ag-grid-community';
-import {
-    BeanStub,
-    Component,
-    RefPlaceholder,
-    _createIconNoSpan,
-    _focusInto,
-    _isNothingFocused,
-} from 'ag-grid-community';
+import { BeanStub, Component, _addGridCommonParams, _createIconNoSpan } from 'ag-grid-community';
 
-import { AgMenuList } from '../../../widgets/agMenuList';
+import { MenuList } from '../../../widgets/menuList';
 import type { ChartController } from '../chartController';
 import type { ChartMenuService } from '../services/chartMenuService';
 import type { ChartTranslationService } from '../services/chartTranslationService';
@@ -67,10 +63,11 @@ export class ChartMenuListFactory extends BeanStub implements NamedBean {
 
         const eGui = chartMenuList.getGui();
 
-        this.popupSvc.addPopup({
+        this.popupSvc.addPopup<ContainerType>({
             modal: true,
             eChild: eGui,
             closeOnEsc: true,
+            alwaysOnTop: true,
             closedCallback: () => {
                 this.destroyBean(chartMenuList);
                 this.activeChartMenuList = undefined;
@@ -114,8 +111,9 @@ export class ChartMenuListFactory extends BeanStub implements NamedBean {
             return chartMenuItems;
         } else {
             return chartMenuItems(
-                this.gos.addGridCommonParams({
+                _addGridCommonParams(this.gos, {
                     defaultItems,
+                    chartId: chartController.getChartId(),
                 })
             );
         }
@@ -133,7 +131,7 @@ export class ChartMenuListFactory extends BeanStub implements NamedBean {
         }
         const resultList: MenuItemDef[] = [];
 
-        originalList.forEach((menuItemOrString) => {
+        for (const menuItemOrString of originalList) {
             let result: MenuItemDef | null;
             if (typeof menuItemOrString === 'string') {
                 result = this.getStockMenuItem(
@@ -147,7 +145,7 @@ export class ChartMenuListFactory extends BeanStub implements NamedBean {
                 result = { ...menuItemOrString };
             }
             if (!result) {
-                return;
+                continue;
             }
 
             const { subMenu } = result;
@@ -162,7 +160,7 @@ export class ChartMenuListFactory extends BeanStub implements NamedBean {
             }
 
             resultList.push(result);
-        });
+        }
 
         return resultList;
     }
@@ -223,7 +221,7 @@ class ChartMenuList extends Component {
     private readonly eChartsMenu: HTMLElement = RefPlaceholder;
 
     private hidePopupFunc: () => void;
-    private mainMenuList: AgMenuList;
+    private mainMenuList: MenuList;
 
     constructor(private readonly menuItems: MenuItemDef[]) {
         super(/* html */ `
@@ -232,7 +230,7 @@ class ChartMenuList extends Component {
     }
 
     public postConstruct(): void {
-        this.mainMenuList = this.createManagedBean(new AgMenuList(0));
+        this.mainMenuList = this.createManagedBean(new MenuList(0));
         this.mainMenuList.addMenuItems(this.menuItems);
         this.mainMenuList.addEventListener('closeMenu', this.onHidePopup.bind(this));
         this.eChartsMenu.appendChild(this.mainMenuList.getGui());

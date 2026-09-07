@@ -1,8 +1,19 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import {
+    ClientSideRowModelModule,
+    ModuleRegistry,
+    PinnedRowModule,
+    createGrid,
+    enableDevValidations,
+} from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, PinnedRowModule]);
 
 let gridApi: GridApi;
 
@@ -25,7 +36,12 @@ const gridOptions: GridOptions<IOlympicData> = {
 
 function onChange() {
     const grandTotalRow = document.querySelector<HTMLInputElement>('#input-property-value')!.value;
-    if (grandTotalRow === 'bottom' || grandTotalRow === 'top') {
+    if (
+        grandTotalRow === 'bottom' ||
+        grandTotalRow === 'top' ||
+        grandTotalRow === 'pinnedTop' ||
+        grandTotalRow === 'pinnedBottom'
+    ) {
         gridApi.setGridOption('grandTotalRow', grandTotalRow);
     } else {
         gridApi.setGridOption('grandTotalRow', undefined);

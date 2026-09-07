@@ -17,8 +17,9 @@ tsNode.register();
 
 const targetConfig = process.env.NX_TASK_TARGET_CONFIGURATION || 'development';
 
+console.log(targetConfig, process.env.BUILD_GRID_VERSION);
 const expectedGridVersion =
-    targetConfig === 'production' || targetConfig === 'archive'
+    (targetConfig === 'production' || targetConfig === 'archive') && process.env.ENV !== 'local'
         ? process.env.BUILD_GRID_VERSION
         : JSON.parse(fs.readFileSync('./package.json').toString()).version;
 
@@ -36,7 +37,7 @@ if (!packageJsonFile) {
     process.exit(1);
 }
 
-const packageContents = glob.sync('**/*', { cwd: dir, nodir: true });
+const packageContents = glob.sync('**/*', { cwd: dir, nodir: true, dot: true });
 const packageJson = JSON.parse(packageJsonFile.toString());
 
 let exitStatus = 0;

@@ -7,7 +7,7 @@
             {
                 "label": {
                     "name": "AG Grid Enterprise ",
-                    "link": "https://www.ag-grid.com/react-data-grid/licensing/"
+                    "link": "grid:./community-vs-enterprise/"
                 },
                 "community": false,
                 "enterprise": false,
@@ -16,7 +16,7 @@
             {
                 "label": {
                     "name": "Integrated Charts",
-                    "link": "https://www.ag-grid.com/react-data-grid/integrated-charts/"
+                    "link": "grid:./integrated-charts/"
                 },
                 "community": false,
                 "enterprise": false,
@@ -33,7 +33,7 @@
                 "label": {
                     "name": "Bar",
                     "icon": "chartsBar",
-                    "link": "https://www.ag-grid.com/charts/react/bar-series/"
+                    "link": "charts:./bar-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -43,7 +43,7 @@
                 "label": {
                     "name": "Line",
                     "icon": "chartsLine",
-                    "link": "https://www.ag-grid.com/charts/react/line-series/"
+                    "link": "charts:./line-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -53,7 +53,7 @@
                 "label": {
                     "name": "Area",
                     "icon": "chartsArea",
-                    "link": "https://www.ag-grid.com/charts/react/area-series/"
+                    "link": "charts:./area-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -63,7 +63,7 @@
                 "label": {
                     "name": "Scatter",
                     "icon": "chartsScatter",
-                    "link": "https://www.ag-grid.com/charts/react/scatter-series/"
+                    "link": "charts:./scatter-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -73,7 +73,7 @@
                 "label": {
                     "name": "Bubble",
                     "icon": "chartsBubble",
-                    "link": "https://www.ag-grid.com/charts/react/bubble-series/"
+                    "link": "charts:./bubble-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -83,7 +83,7 @@
                 "label": {
                     "name": "Pie",
                     "icon": "chartsPie",
-                    "link": "https://www.ag-grid.com/charts/react/pie-series/"
+                    "link": "charts:./pie-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -93,7 +93,7 @@
                 "label": {
                     "name": "Doughnut",
                     "icon": "chartsDonut",
-                    "link": "https://www.ag-grid.com/charts/react/donut-series/"
+                    "link": "charts:./donut-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -103,7 +103,7 @@
                 "label": {
                     "name": "Combination",
                     "icon": "chartsCombination",
-                    "link": "https://www.ag-grid.com/charts/react/combination-series/"
+                    "link": "charts:./combination-series/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -113,7 +113,7 @@
                 "label": {
                     "name": "Box Plot",
                     "icon": "chartsBoxPlot",
-                    "link": "https://www.ag-grid.com/charts/react/box-plot-series/"
+                    "link": "charts:./box-plot-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -123,7 +123,7 @@
                 "label": {
                     "name": "Candlestick",
                     "icon": "chartsCandlestick",
-                    "link": "https://www.ag-grid.com/charts/react/candlestick-series/"
+                    "link": "charts:./candlestick-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -133,7 +133,7 @@
                 "label": {
                     "name": "OHLC",
                     "icon": "chartsOHLC",
-                    "link": "https://www.ag-grid.com/charts/react/ohlc-series/"
+                    "link": "charts:./ohlc-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -143,7 +143,7 @@
                 "label": {
                     "name": "Heatmap",
                     "icon": "chartsHeatmap",
-                    "link": "https://www.ag-grid.com/charts/react/heatmap-series/"
+                    "link": "charts:./heatmap-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -153,7 +153,7 @@
                 "label": {
                     "name": "Histogram",
                     "icon": "chartsHistogram",
-                    "link": "https://www.ag-grid.com/charts/react/histogram-series/"
+                    "link": "charts:./histogram-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -163,7 +163,7 @@
                 "label": {
                     "name": "Nightingale",
                     "icon": "chartsNightingale",
-                    "link": "https://www.ag-grid.com/charts/react/nightingale-series/"
+                    "link": "charts:./nightingale-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -173,7 +173,7 @@
                 "label": {
                     "name": "Radar Area",
                     "icon": "chartsRadar",
-                    "link": "https://www.ag-grid.com/charts/react/radar-area-series/"
+                    "link": "charts:./radar-area-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -183,7 +183,7 @@
                 "label": {
                     "name": "Radar Line",
                     "icon": "chartsRadar",
-                    "link": "https://www.ag-grid.com/charts/react/radar-line-series/"
+                    "link": "charts:./radar-line-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -193,7 +193,7 @@
                 "label": {
                     "name": "Radial Bar",
                     "icon": "chartsRadialBar",
-                    "link": "https://www.ag-grid.com/charts/react/radial-bar-series/"
+                    "link": "charts:./radial-bar-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -203,7 +203,7 @@
                 "label": {
                     "name": "Radial Column",
                     "icon": "chartsRadialColumn",
-                    "link": "https://www.ag-grid.com/charts/react/radial-column-series/"
+                    "link": "charts:./radial-column-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -213,7 +213,7 @@
                 "label": {
                     "name": "Range Area",
                     "icon": "chartsRangeArea",
-                    "link": "https://www.ag-grid.com/charts/react/range-area-series/"
+                    "link": "charts:./range-area-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -223,7 +223,7 @@
                 "label": {
                     "name": "Range Bar",
                     "icon": "chartsRangeBar",
-                    "link": "https://www.ag-grid.com/charts/react/range-bar-series/"
+                    "link": "charts:./range-bar-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -233,7 +233,7 @@
                 "label": {
                     "name": "Sunburst",
                     "icon": "chartsSunburst",
-                    "link": "https://www.ag-grid.com/charts/react/sunburst-series/"
+                    "link": "charts:./sunburst-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -243,7 +243,7 @@
                 "label": {
                     "name": "Treemap",
                     "icon": "chartsTreemap",
-                    "link": "https://www.ag-grid.com/charts/react/treemap-series/"
+                    "link": "charts:./treemap-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -253,7 +253,7 @@
                 "label": {
                     "name": "Waterfall",
                     "icon": "chartsWaterfall",
-                    "link": "https://www.ag-grid.com/charts/react/waterfall-series/"
+                    "link": "charts:./waterfall-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -263,7 +263,7 @@
                 "label": {
                     "name": "Sankey",
                     "icon": "chartsSankey",
-                    "link": "https://www.ag-grid.com/charts/react/sankey-series/"
+                    "link": "charts:./sankey-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -273,7 +273,7 @@
                 "label": {
                     "name": "Chord",
                     "icon": "chartsChord",
-                    "link": "https://www.ag-grid.com/charts/react/chord-series/"
+                    "link": "charts:./chord-series/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -283,7 +283,7 @@
                 "label": {
                     "name": "Radial Gauge",
                     "icon": "chartsRadialGauge",
-                    "link": "https://www.ag-grid.com/charts/react/radial-gauge/"
+                    "link": "charts:./radial-gauge/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -293,7 +293,17 @@
                 "label": {
                     "name": "Linear Gauge",
                     "icon": "chartsLinearGauge",
-                    "link": "https://www.ag-grid.com/charts/react/linear-gauge/"
+                    "link": "charts:./linear-gauge/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Org Chart",
+                    "icon": "chartsOrg",
+                    "link": "charts:./org-chart/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -309,7 +319,7 @@
             {
                 "label": {
                     "name": "Financial Charts",
-                    "link": "https://www.ag-grid.com/charts/react/financial-charts/"
+                    "link": "charts:./financial-charts/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -318,7 +328,7 @@
             {
                 "label": {
                     "name": "Toolbar",
-                    "link": "https://www.ag-grid.com/charts/react/financial-charts-toolbar/"
+                    "link": "charts:./financial-charts-toolbar/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -327,7 +337,7 @@
             {
                 "label": {
                     "name": "Range Buttons",
-                    "link": "https://www.ag-grid.com/charts/react/range-buttons/"
+                    "link": "charts:./range-buttons/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -343,7 +353,7 @@
             {
                 "label": {
                     "name": "Geographic Areas",
-                    "link": "https://www.ag-grid.com/charts/react/map-shapes/"
+                    "link": "charts:./map-shapes/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -352,7 +362,7 @@
             {
                 "label": {
                     "name": "Routes and Connections",
-                    "link": "https://www.ag-grid.com/charts/react/map-lines/"
+                    "link": "charts:./map-lines/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -361,7 +371,136 @@
             {
                 "label": {
                     "name": "Markers and Points of Interest",
-                    "link": "https://www.ag-grid.com/charts/react/map-markers/"
+                    "link": "charts:./map-markers/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            }
+        ]
+    },
+    {
+        "group": {
+            "name": "Server-Side Rendering"
+        },
+        "items": [
+            {
+                "label": {
+                    "name": "Server-Side Rendering",
+                    "link": "charts:./server-side-rendering/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            }
+        ]
+    },
+    {
+        "group": {
+            "name": "Data"
+        },
+        "items": [
+            {
+                "label": {
+                    "name": "Large Datasets Interactivity",
+                    "link": "charts:./large-dataset-interactivity"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "High-Frequency Update",
+                    "link": "charts:./high-frequency-data"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Transactions",
+                    "link": "charts:./transactions"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            }
+        ]
+    },
+    {
+        "group": {
+            "name": "Data Elements"
+        },
+        "items": [
+            {
+                "label": {
+                    "name": "Cross Lines",
+                    "link": "charts:./axes-cross-lines/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Legend",
+                    "link": "charts:./legend/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Stylers",
+                    "link": "charts:./stylers/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Series Bars",
+                    "link": "charts:./bars/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Series Markers",
+                    "link": "charts:./markers/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Annotations",
+                    "link": "charts:./annotations/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Colour Scale",
+                    "link": "charts:./colour-scale/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Error Bars",
+                    "link": "charts:./error-bars/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -377,7 +516,7 @@
             {
                 "label": {
                     "name": "Accessibility",
-                    "link": "https://www.ag-grid.com/charts/react/accessibility/"
+                    "link": "charts:./accessibility/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -386,7 +525,7 @@
             {
                 "label": {
                     "name": "Localisation",
-                    "link": "https://www.ag-grid.com/charts/react/localisation/"
+                    "link": "charts:./localisation/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -395,7 +534,7 @@
             {
                 "label": {
                     "name": "Series Highlighting",
-                    "link": "https://www.ag-grid.com/charts/react/series-highlighting/"
+                    "link": "charts:./series-highlighting/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -404,7 +543,16 @@
             {
                 "label": {
                     "name": "Tooltips",
-                    "link": "https://www.ag-grid.com/charts/react/tooltips/"
+                    "link": "charts:./tooltips/"
+                },
+                "community": true,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Touch",
+                    "link": "charts:./touch/"
                 },
                 "community": true,
                 "enterprise": true,
@@ -413,7 +561,7 @@
             {
                 "label": {
                     "name": "Animations",
-                    "link": "https://www.ag-grid.com/charts/react/animation/"
+                    "link": "charts:./animation/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -422,7 +570,7 @@
             {
                 "label": {
                     "name": "Context Menu",
-                    "link": "https://www.ag-grid.com/charts/react/context-menu/"
+                    "link": "charts:./context-menu/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -430,8 +578,26 @@
             },
             {
                 "label": {
-                    "name": "Crosshairs",
-                    "link": "https://www.ag-grid.com/charts/react/axes-crosshairs/"
+                    "name": "Crosshairs & Band Highlight",
+                    "link": "charts:./axes-crosshairs/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Data Selection",
+                    "link": "charts:./selection/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Flash On Update",
+                    "link": "charts:./flash-on-update/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -440,7 +606,7 @@
             {
                 "label": {
                     "name": "Navigator",
-                    "link": "https://www.ag-grid.com/charts/react/navigator/"
+                    "link": "charts:./navigator/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -448,8 +614,26 @@
             },
             {
                 "label": {
-                    "name": "Synchronization",
-                    "link": "https://www.ag-grid.com/charts/react/sync/"
+                    "name": "Range Buttons",
+                    "link": "charts:./range-controls/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Scrollbar",
+                    "link": "charts:./scrollbar/"
+                },
+                "community": false,
+                "enterprise": true,
+                "chartsGrid": true
+            },
+            {
+                "label": {
+                    "name": "Synchronisation",
+                    "link": "charts:./sync/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -458,7 +642,7 @@
             {
                 "label": {
                     "name": "Zoom",
-                    "link": "https://www.ag-grid.com/charts/react/zoom/"
+                    "link": "charts:./zoom/"
                 },
                 "community": false,
                 "enterprise": true,
@@ -474,11 +658,11 @@
             {
                 "label": {
                     "name": "Enterprise Support",
-                    "link": "https://www.ag-grid.com/react-data-grid/licensing/"
+                    "link": "charts:./community-vs-enterprise/"
                 },
                 "community": {
                     "value": false,
-                    "detail": "Community support via Github"
+                    "detail": "Community support via GitHub"
                 },
                 "enterprise": {
                     "value": true,
@@ -492,7 +676,7 @@
             {
                 "label": {
                     "name": "Perpetual License",
-                    "link": "https://www.ag-grid.com/react-data-grid/licensing/"
+                    "link": "charts:./community-vs-enterprise/"
                 },
                 "community": {
                     "value": false,

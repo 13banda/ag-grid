@@ -1,11 +1,12 @@
+import { _debounce, _removeFromArray } from 'ag-stack';
+
 import type { NamedBean } from '../context/bean';
 import { BeanStub } from '../context/beanStub';
 import { _getMaxConcurrentDatasourceRequests } from '../gridOptionsUtils';
-import { _removeFromArray } from '../utils/array';
-import { _debounce, _logIfDebug } from '../utils/function';
+import { _logIfDebug } from '../utils/log';
 import type { InfiniteBlock } from './infiniteBlock';
 
-export type RowNodeBlockLoaderEvent = 'blockLoaded';
+type RowNodeBlockLoaderEvent = 'blockLoaded';
 export class RowNodeBlockLoader extends BeanStub<RowNodeBlockLoaderEvent> implements NamedBean {
     beanName = 'rowNodeBlockLoader' as const;
 
@@ -13,7 +14,7 @@ export class RowNodeBlockLoader extends BeanStub<RowNodeBlockLoaderEvent> implem
     private checkBlockToLoadDebounce: () => void;
 
     private activeBlockLoadsCount = 0;
-    private blocks: InfiniteBlock[] = [];
+    private readonly blocks: InfiniteBlock[] = [];
     private active = true;
 
     public postConstruct(): void {
@@ -80,7 +81,9 @@ export class RowNodeBlockLoader extends BeanStub<RowNodeBlockLoaderEvent> implem
             .filter((block) => block.state === 'needsLoading')
             .slice(0, loadAvailability);
         this.activeBlockLoadsCount += blocksToLoad.length;
-        blocksToLoad.forEach((block) => block.load());
+        for (const block of blocksToLoad) {
+            block.load();
+        }
         this.printCacheStatus();
     }
 

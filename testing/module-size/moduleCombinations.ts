@@ -1,74 +1,185 @@
-import { moduleCombinations } from './moduleDefinitions';
+import react from '@vitejs/plugin-react';
+import fs from 'fs';
+import { globSync } from 'glob';
+import path from 'path';
+import { build } from 'vite';
+import zlib from 'zlib';
 
-const fs = require('fs');
-const { exec } = require('child_process');
-const path = require('path');
+import { AllEnterpriseModules, AllGridCommunityModules, baseModule, moduleCombinations } from './moduleDefinitions';
 
-const results: { modules: string[]; expectedSize: number; selfSize: number; fileSize: number; gzipSize: number }[] = [];
-const updateModulesScript = path.join(__dirname, 'moduleUpdater.ts');
-let baseSize = 0;
-
-function runCombination(index) {
-    if (index >= moduleCombinations.length) {
-        // Save results to a JSON file
-        fs.writeFileSync('module-size-results.json', JSON.stringify(results, null, 2));
-        console.log(`Results (${results.length}) saved to module-size-results.json`);
-
-        // Run the command with no modules to clear the app.tsx file
-        const clearCommand = `ts-node ${updateModulesScript} ${[].join(' ')}`;
-        exec(clearCommand, (err, stdout, stderr) => {
-            if (err) {
-                console.error(`Error clearing App.tsx}:`, err);
-                return;
-            }
-            console.log(stdout);
-            console.error(stderr);
-        });
-
-        return;
-    }
-
-    const { modules, expectedSize } = moduleCombinations[index];
-    const command = `ts-node ${updateModulesScript} ${modules.join(' ')}`;
-
-    exec(command, (err, stdout, stderr) => {
-        if (err) {
-            console.error(`Error running combination ${modules.join(', ')}:`, err);
-            return;
-        }
-
-        console.log(stdout);
-        console.error(stderr);
-
-        // Extract file size and gzip size from the output
-        const fileSizeMatch = stdout.match(/File size: (\d+\.\d+) kB/);
-        const gzipSizeMatch = stdout.match(/gzip size: (\d+\.\d+) kB/);
-
-        if (fileSizeMatch && gzipSizeMatch) {
-            const fileSize = parseFloat(fileSizeMatch[1]);
-            const gzipSize = parseFloat(gzipSizeMatch[1]);
-
-            let selfSize = 0;
-            if (modules.length === 0) {
-                baseSize = fileSize;
-                selfSize = fileSize;
-            } else {
-                selfSize = parseFloat((fileSize - baseSize).toFixed(2));
-            }
-
-            results.push({
-                modules,
-                selfSize,
-                fileSize,
-                gzipSize,
-                expectedSize,
-            });
-        }
-
-        // Run the next combination
-        runCombination(index + 1);
-    });
+interface ModuleSizeResult {
+    modules: string[];
+    selfSize: number;
+    gzipSelfSize: number;
+    fileSize: number;
+    gzipSize: number;
 }
 
-// Start running combinations
-runCombination(0);
+const distFilePattern = path.join(__dirname, 'dist/assets/agGridCommunityEnterprise*.js');
+const srcFilePath = path.join(__dirname, 'src/App_Src.tsx');
+const outFilePath = path.join(__dirname, 'src/App_AUTO.tsx');
+
+const placeholderStartRgx = '/\\*\\* __PLACEHOLDER__START__ \\*/';
+const placeholderEndRgx = '/\\*\\* __PLACEHOLDER__END__ \\*/';
+const placeholderStart = '/** __PLACEHOLDER__START__ */';
+const placeholderEnd = '/** __PLACEHOLDER__END__ */';
+
+const entPlaceholderStartRgx = '/\\*\\* __ENTERPRISE_PLACEHOLDER__START__ \\*/';
+const entPlaceholderEndRgx = '/\\*\\* __ENTERPRISE_PLACEHOLDER__END__ \\*/';
+const entPlaceholderStart = '/** __ENTERPRISE_PLACEHOLDER__START__ */';
+const entPlaceholderEnd = '/** __ENTERPRISE_PLACEHOLDER__END__ */';
+
+const chartsPlaceholderStartRgx = '/\\*\\* __CHARTS_PLACEHOLDER__START__ \\*/';
+const chartsPlaceholderEndRgx = '/\\*\\* __CHARTS_PLACEHOLDER__END__ \\*/';
+const chartsPlaceholderStart = '/** __CHARTS_PLACEHOLDER__START__ */';
+const chartsPlaceholderEnd = '/** __CHARTS_PLACEHOLDER__END__ */';
+
+function reverseWords(str: string): string {
+    return str.split(' ').reverse().join(' ');
+}
+
+// Rewrite src/App_AUTO.tsx so it registers/imports exactly the given modules.
+// Mirrors the previous moduleUpdater.ts transform, kept in-process to avoid a spawn per combination.
+function updateAppSource(source: string, modules: string[]): string {
+    const communityModules = modules.filter((module) => Object.hasOwn(AllGridCommunityModules, module));
+    const enterpriseModules = modules.filter((module) => Object.hasOwn(AllEnterpriseModules, module));
+
+    const replacement = communityModules.join(', ');
+    const regex = new RegExp(`${placeholderStartRgx}[\\s\\S]*?${placeholderEndRgx}`, 'g');
+    let result = source.replace(regex, `${placeholderStart} ${replacement} ${placeholderEnd}`);
+
+    const entReplacement = enterpriseModules.join(', ');
+    const entRegex = new RegExp(`${entPlaceholderStartRgx}[\\s\\S]*?${entPlaceholderEndRgx}`, 'g');
+    result = result.replace(entRegex, `${entPlaceholderStart} ${entReplacement} ${entPlaceholderEnd}`);
+
+    if (modules[0] === 'AgChartsCommunityModule' || modules[0] === 'AgChartsEnterpriseModule') {
+        const chartsModule = modules[0];
+        const chartsReplacement = `import {${chartsModule}} from 'ag-charts-${chartsModule.includes('Enterprise') ? 'enterprise' : 'community'}';`;
+        const chartsRegex = new RegExp(`${chartsPlaceholderStartRgx}[\\s\\S]*?${chartsPlaceholderEndRgx}`, 'g');
+        result = result.replace(chartsRegex, `${chartsPlaceholderStart} ${chartsReplacement} ${chartsPlaceholderEnd}`);
+        result = reverseWords(
+            reverseWords(result).replace('IntegratedChartsModule', `IntegratedChartsModule.with(${chartsModule})`)
+        );
+        result = reverseWords(
+            reverseWords(result).replace('SparklinesModule', `SparklinesModule.with(${chartsModule})`)
+        );
+    } else {
+        const chartsRegex = new RegExp(`${chartsPlaceholderStartRgx}[\\s\\S]*?${chartsPlaceholderEndRgx}`, 'g');
+        result = result.replace(chartsRegex, `${chartsPlaceholderStart}  ${chartsPlaceholderEnd}`);
+    }
+
+    return result;
+}
+
+// Inline mirror of vite.config.mts so build() runs from this warm process without re-reading the config file each time.
+function createBuildConfig() {
+    return {
+        root: __dirname,
+        configFile: false as const,
+        logLevel: 'warn' as const,
+        plugins: [react()],
+        build: {
+            rollupOptions: {
+                output: {
+                    manualChunks: {
+                        react: ['react', 'react-dom'],
+                        agGridCommunityEnterprise: [
+                            'ag-grid-community',
+                            'ag-grid-enterprise',
+                            'ag-charts-enterprise',
+                            'ag-charts-community',
+                        ],
+                        agGridReact: ['ag-grid-react'],
+                    },
+                },
+            },
+        },
+    };
+}
+
+async function measureCombination(
+    appSource: string,
+    modules: string[]
+): Promise<{ fileSize: number; gzipSize: number }> {
+    fs.writeFileSync(outFilePath, updateAppSource(appSource, modules), 'utf8');
+
+    await build(createBuildConfig());
+
+    const files = globSync(distFilePattern);
+    if (files.length === 0) {
+        throw new Error(`No dist file matched pattern for modules: ${modules.join(', ')}`);
+    }
+
+    const distFilePath = files[0];
+    const contents = fs.readFileSync(distFilePath);
+    const fileSizeInBytes = contents.length;
+    const gzipSizeInBytes = zlib.gzipSync(contents).length;
+
+    const toKb = (bytes: number) => parseFloat((bytes / 1024).toFixed(2));
+    return { fileSize: toKb(fileSizeInBytes), gzipSize: toKb(gzipSizeInBytes) };
+}
+
+async function run() {
+    let moduleCombinationsToProcess = moduleCombinations;
+
+    const shardArg = process.argv.find((arg) => arg.startsWith('--shard'));
+    if (shardArg) {
+        const [currentShard, shards] = shardArg
+            .replace('--shard=', '')
+            .split('/')
+            .map((arg) => parseInt(arg));
+
+        console.log('*************************');
+        console.log('* Running in shard mode *');
+        console.log(`* Shard ${currentShard} / ${shards}           *`);
+        console.log('*************************');
+
+        const segmentSize = Math.ceil(moduleCombinations.length / shards);
+        const startIndex = (currentShard - 1) * segmentSize;
+        const endIndex = startIndex + segmentSize;
+        moduleCombinationsToProcess = moduleCombinations.slice(startIndex, endIndex);
+    }
+
+    // The base module (no modules) determines the size of the app with nothing registered, so that each
+    // module's self-size can be measured against it. It must be built first in every run.
+    const combinations = [baseModule, ...moduleCombinationsToProcess];
+
+    const appSource = fs.readFileSync(srcFilePath, 'utf8');
+
+    const results: ModuleSizeResult[] = [];
+    let baseSize = 0;
+    let baseGzipSize = 0;
+
+    for (let i = 0, len = combinations.length; i < len; ++i) {
+        const { modules } = combinations[i];
+        const { fileSize, gzipSize } = await measureCombination(appSource, modules);
+
+        let selfSize: number;
+        let gzipSelfSize: number;
+        if (modules.length === 0) {
+            baseSize = fileSize;
+            baseGzipSize = gzipSize;
+            selfSize = fileSize;
+            gzipSelfSize = gzipSize;
+        } else {
+            selfSize = parseFloat((fileSize - baseSize).toFixed(2));
+            gzipSelfSize = parseFloat((gzipSize - baseGzipSize).toFixed(2));
+        }
+
+        console.log(`Modules: ${modules.join(', ')}`);
+        console.log(`File size: ${fileSize} kB | gzip size: ${gzipSize} kB`);
+
+        results.push({ modules, selfSize, gzipSelfSize, fileSize, gzipSize });
+    }
+
+    fs.writeFileSync('module-size-results.json', JSON.stringify(results, null, 2));
+    console.log(`Results (${results.length}) saved to module-size-results.json`);
+
+    // Clear the generated App so the working tree is left in a clean state.
+    fs.writeFileSync(outFilePath, updateAppSource(appSource, []), 'utf8');
+}
+
+run().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

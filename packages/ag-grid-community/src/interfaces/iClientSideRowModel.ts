@@ -1,8 +1,8 @@
+import type { ChangedRowNodes } from '../clientSideRowModel/changedRowNodes';
 import type { GridOptions } from '../entities/gridOptions';
-import type { RowHighlightPosition, RowNode } from '../entities/rowNode';
+import type { RowNode } from '../entities/rowNode';
 import type { ChangedPath } from '../utils/changedPath';
-import type { IRowModel } from './iRowModel';
-import type { IRowNode } from './iRowNode';
+import type { ForEachNodeCallback, IRowModel } from './iRowModel';
 import type { RowDataTransaction } from './rowDataTransaction';
 import type { RowNodeTransaction } from './rowNodeTransaction';
 
@@ -32,56 +32,36 @@ export type ClientSideRowModelStage =
 export interface IClientSideRowModel<TData = any> extends IRowModel {
     /** The root row containing all the rows */
     readonly rootNode: RowNode | null;
+    readonly rowCountReady: boolean;
+    hierarchical: boolean;
 
-    onRowGroupOpened(): void;
     updateRowData(rowDataTran: RowDataTransaction<TData>): RowNodeTransaction<TData> | null;
+
     refreshModel(params: RefreshModelParams): void;
-    forEachLeafNode(callback: (node: RowNode, index: number) => void): void;
-    forEachNodeAfterFilter(callback: (node: RowNode, index: number) => void, includeFooterNodes?: boolean): void;
-    forEachNodeAfterFilterAndSort(callback: (node: RowNode, index: number) => void, includeFooterNodes?: boolean): void;
-    forEachPivotNode(
-        callback: (node: RowNode, index: number) => void,
-        includeFooterNodes?: boolean,
-        afterSort?: boolean
-    ): void;
-    resetRowHeights(): void;
-    onRowHeightChanged(): void;
-    onRowHeightChangedDebounced(): void;
+
+    /**
+     * Executes the 'map' only if we are not already in the middle of a refresh or data update.
+     * Forces also that keepRenderedRows is set to false when 'map' is executed when refresh completes
+     */
+    reMapRows(): void;
+
+    forEachLeafNode(callback: ForEachNodeCallback<TData>): void;
+    forEachNodeAfterFilter(callback: ForEachNodeCallback<TData>, includeFooterNodes?: boolean): void;
+    forEachNodeAfterFilterAndSort(callback: ForEachNodeCallback<TData>, includeFooterNodes?: boolean): void;
+    forEachPivotNode(callback: ForEachNodeCallback<TData>, includeFooterNodes?: boolean, afterSort?: boolean): void;
     batchUpdateRowData(
         rowDataTransaction: RowDataTransaction<TData>,
         callback?: (res: RowNodeTransaction<TData>) => void
     ): void;
     flushAsyncTransactions(): void;
-    doAggregate(changedPath?: ChangedPath): void;
+    doAggregate(changedPath: ChangedPath | undefined): void;
     getTopLevelNodes(): RowNode[] | null;
-    ensureRowsAtPixel(rowNode: RowNode[], pixel: number, increment: number): boolean;
-    highlightRowAtPixel(rowNode: RowNode | null, pixel?: number): void;
-    getHighlightPosition(pixel: number, rowNode?: RowNode): RowHighlightPosition;
-    getLastHighlightedRowNode(): RowNode | null;
-    isRowDataLoaded(): boolean;
-}
-
-export interface IChangedRowNodes<TData = any> {
-    /**
-     * The set of removed nodes.
-     * Mutually exclusive, if a node is here, it cannot be in the updates map.
-     */
-    readonly removals: ReadonlySet<RowNode<TData>>;
+    getFormulaRow(index: number): RowNode;
 
     /**
-     * Map of row nodes that have been updated.
-     * The value is true if the row node is a new node. is false if it was just updated.
+     * @deprecated v33.1.0 - use `gridApi.onRowHeightChanged()` instead
      */
-    readonly updates: ReadonlyMap<RowNode<TData>, boolean>;
-
-    /** Marks a row as removed. Order of operations is: remove, update, add */
-    remove(node: IRowNode<TData>): void;
-
-    /** Marks a row as updated. Order of operations is: remove, update, add */
-    update(node: IRowNode<TData>): void;
-
-    /** Marks a row as added. Order of operation is: remove, update, add */
-    add(node: IRowNode<TData>): void;
+    onRowHeightChangedDebounced(): void;
 }
 
 export interface RefreshModelParams<TData = any> {
@@ -103,24 +83,12 @@ export interface RefreshModelParams<TData = any> {
     newData?: boolean;
 
     /**
-     * true if the order of root.allLeafChildren has changed.
-     * This can happen if order of root.allLeafChildren is updated or rows are inserted (and not just appended at the end)
-     */
-    rowNodesOrderChanged?: boolean;
-
-    /**
      * A data structure that holds the affected row nodes, if this was an update and not a full reload.
      */
-    changedRowNodes?: IChangedRowNodes<TData>;
+    changedRowNodes?: ChangedRowNodes<TData>;
 
     /** The changedPath, if any */
     changedPath?: ChangedPath;
-
-    /**
-     * List of transactions being executed for a delta update.
-     * To see the affected nodes for a delta update, use `changedRowNodes` instead.
-     */
-    rowNodeTransactions?: RowNodeTransaction<TData>[];
 
     /**
      * if NOT new data, then this flag tells grid to check if rows already

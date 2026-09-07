@@ -1,0 +1,28 @@
+name: 'PR preview — cleanup gh-pages'
+description: Remove a PR's pr-<N>/ preview from the publish branch on PR close. Operates via a token-auth clone, so the caller checks out its own default branch (not gh-pages). Concurrent writers are resolved by a push-retry loop rather than a lock.
+
+inputs:
+    pr_number:
+        description: 'PR number — the pr-<pr_number>/ directory is removed.'
+        required: true
+    github_token:
+        description: 'Token with contents:write for the publish branch.'
+        required: false
+        default: ${{ github.token }}
+    publish_branch:
+        description: 'Branch the preview was published to.'
+        required: false
+        default: gh-pages
+
+runs:
+    using: composite
+    steps:
+        - name: Remove PR preview subtree
+          shell: bash
+          env:
+              GH_TOKEN: ${{ inputs.github_token }}
+              MODE: remove
+              TARGET_PREFIX: pr-${{ inputs.pr_number }}
+              COMMIT_MESSAGE: 'pr-preview: cleanup pr-${{ inputs.pr_number }}'
+              PUBLISH_BRANCH: ${{ inputs.publish_branch }}
+          run: bash "${{ github.action_path }}/../pr-preview-lib/gh-pages-commit.sh"

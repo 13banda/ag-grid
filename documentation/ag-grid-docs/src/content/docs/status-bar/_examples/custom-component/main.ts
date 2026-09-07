@@ -7,13 +7,18 @@ import {
     RowSelectionModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { CellSelectionModule, StatusBarModule } from 'ag-grid-enterprise';
 
 import { ClickableStatusBarComponent } from './clickableStatusBarComponent_typescript';
 import { CountStatusBarComponent } from './countStatusBarComponent_typescript';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextEditorModule,
@@ -24,7 +29,6 @@ ModuleRegistry.registerModules([
     StatusBarModule,
     RowApiModule,
     EventApiModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [

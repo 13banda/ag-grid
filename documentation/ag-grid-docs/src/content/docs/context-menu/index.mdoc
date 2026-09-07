@@ -3,17 +3,9 @@ title: "Context Menu"
 enterprise: true
 ---
 
-The user can bring up the context menu by right clicking on a cell. By default, the context menu provides 'copy', 'paste' and 'export'. Copy will copy the selected cells or rows to the clipboard. Paste will always, forever, be disabled.
+The user can bring up the context menu by right clicking on a cell. By default, the context menu shows [Clipboard](./clipboard/), [CSV Export](./csv-export/), [Excel Export](./excel-export/), [PDF Export](./pdf-export/) and [Integrated Charts](./integrated-charts/) menu items (if the relevant [Modules](./modules/) are loaded).
 
-{% note %}
-The 'paste' operation in the context menu is not possible and hence always disabled.
-It is not possible because of a browser security restriction that JavaScript cannot
-take data from the clipboard without the user explicitly doing a paste command from the browser
-(e.g. {% kbd "^ Ctrl" /%}+{% kbd "V" /%} or from the browser menu). If JavaScript could do this, then websites could steal
-data from the client by accessing the clipboard maliciously. The reason why the grid keeps
-the disabled paste option in the menu is to indicate to the user that paste is possible and it provides
-the keyboard shortcut as a hint to the user.
-{% /note %}
+{% gridExampleRunner title="Default Context Menu" name="default-context-menu" /%}
 
 ## Configuring the Context Menu
 
@@ -30,6 +22,8 @@ The menu item list should be a list with each item either a) a string or b) a `M
 
 {% apiDocumentation source="grid-options/properties.json" section="accessories" names=["getContextMenuItems"] /%}
 
+You can also provide your own [Custom Menu Item Components](./component-menu-item/).
+
 If you want to access your underlying data item, you can access that through the rowNode as `node.data`.
 
 Note: if you set `checked=true`, then the icon will be ignored - these options are mutually exclusive.
@@ -40,20 +34,39 @@ If you want to turn off the context menu completely, set the grid property `supp
 
 The following is a list of all the default built in menu items with the rules about when they are shown.
 
-* `autoSizeAll`: Auto-size all columns. Not shown by default.
-* `expandAll`: When set, it's only shown if grouping by at least one column. Not shown by default.
-* `contractAll`: Collapse all groups. When set, it's only shown if grouping by at least one column. Not shown by default.
-* `copy`: Copy selected value to clipboard. Shown by default.
-* `copyWithHeaders`: Copy selected value to clipboard with headers. Shown by default.
-* `copyWithGroupHeaders`: Copy selected value to clipboard with headers and header groups. Shown by default.
-* `cut`: Cut the selected value to clipboard. Not shown by default.
-* `paste`: Always disabled (see note in clipboard section). Always disabled. Shown by default.
-* `resetColumns`: Reset all columns. Not shown by default.
-* `export`: Export sub menu (containing csvExport and excelExport). Shown by default.
-* `csvExport`: Export to CSV using all default export values. Shown by default.
-* `excelExport`: Export to Excel (.xlsx) using all default export values. Shown by default.
-* `chartRange`: Chart a range of selected cells. Only shown if charting is enabled. Configured via [chartToolPanelsDef](./integrated-charts-chart-tool-panels).
-* `pivotChart`: Chart all grouped and pivoted data from the grid. Only shown if charting is enabled and in [Pivot Mode](./integrated-charts-pivot-chart/). Configured via [chartToolPanelsDef](./integrated-charts-chart-tool-panels).
+Menu items also require the relevant [Module](./modules/) to be loaded in order to be displayed.
+
+- `autoSizeAll`: Auto-size all columns. Not shown by default.
+- `expandAll`: When set, it's only shown if grouping by at least one column. Not shown by default.
+- `contractAll`: Collapse all groups. When set, it's only shown if grouping by at least one column. Not shown by default.
+- `copy`: Copy selected value to clipboard. Shown by default.
+- `copyWithHeaders`: Copy selected value to clipboard with headers. Shown by default.
+- `copyWithGroupHeaders`: Copy selected value to clipboard with headers and header groups. Shown by default.
+- `cut`: Cut the selected value to clipboard. Not shown by default.
+- `paste`: Paste the clipboard value into the selected cell (see note below). Shown by default.
+- `note`: Notes actions for the current cell. Expands to `Add Note`, `Edit Note`, `View Note` and `Remove Note` depending on the current cell state. Shown when [Notes](./notes/) is enabled.
+- `resetColumns`: Reset all columns. Not shown by default.
+- `export`: Export sub menu (containing `csvExport`, `excelExport` and `pdfExport`). Shown by default.
+- `csvExport`: Export to CSV using all default export values. Shown by default unless `suppressCsvExport` is set.
+- `excelExport`: Export to Excel (.xlsx) using all default export values. Shown by default unless `suppressExcelExport` is set.
+- `pdfExport`: Export to PDF using all default export values. Shown by default unless `suppressPdfExport` is set.
+- `chartRange`: Chart a range of selected cells. Only shown if charting is enabled. Configured via [chartToolPanelsDef](./integrated-charts-chart-tool-panels).
+- `pivotChart`: Chart all grouped and pivoted data from the grid. Only shown if charting is enabled and in [Pivot Mode](./integrated-charts-pivot-chart/). Configured via [chartToolPanelsDef](./integrated-charts-chart-tool-panels).
+- `pinRowSubMenu`: Row pinning sub menu (containing `pinTop`, `pinBottom` and `unpinRow`). Shown when [Row Pinning](./row-pinning) is enabled.
+- `pinTop`: Pin a row to the top of the grid. Shown when [Row Pinning](./row-pinning) is enabled.
+- `pinBottom`: Pin a row to the botom of the grid. Shown when [Row Pinning](./row-pinning) is enabled.
+- `unpinRow`: Unpin a row from the top or bottom of the grid. Shown for pinned rows when [Row Pinning](./row-pinning) is enabled.
+
+{% note %}
+The 'paste' operation in the context menu uses the [Clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API). This means
+that if your app is running inside an iframe, or if the Clipboard API is blocked, only **blank data** will be pasted into the cell.
+
+When the Clipboard API is not available, browser security restrictions prevent JavaScript from reading clipboard data without the user explicitly performing
+a paste action (e.g. {% kbd "^ Ctrl" /%}+{% kbd "V" /%} or selecting Paste from the browser menu).
+These restrictions exist to prevent malicious websites from stealing clipboard data.
+
+This paste option will be disabled if suppressClipboardApi={true} or if the target cell is not editable.
+{% /note %}
 
 ## Default Context Menu
 
@@ -67,12 +80,12 @@ Hide the context menu with the grid API `hidePopupMenu()`, which will hide eithe
 
 Below shows a configured context menu in action demonstrating a customised menu with a mix of custom items. You should notice the following:
 
-* A mix of built in items and custom items are used.
-* The first item uses the contents of the cell to display its value.
-* The **Country** column uses a Promise to return the menu items asynchronously.
-* Country and Person are sub menus. The country sub menu contains icons.
-* The top menu item has CSS classes applied to it.
-* The 'Always Disabled' menu item has a tooltip.
+- A mix of built in items and custom items are used.
+- The first item uses the contents of the cell to display its value. Clicking on it logs the cell data to the developer console.
+- The **Country** column uses a Promise to return the menu items asynchronously.
+- Country and Person are sub menus. The country sub menu contains icons.
+- The top menu item has CSS classes applied to it.
+- The 'Always Disabled' menu item has a tooltip.
 
 {% gridExampleRunner title="Context Menu Example" name="context-menu" /%}
 
@@ -82,8 +95,8 @@ Under most scenarios, the menu will fit inside the grid. However if the grid is 
 
 This will lead to a bad user experience which is demonstrated in the following example:
 
-* Open the context menu or the column menu in the grid
-* Notice the menu will not be fully visible (i.e. clipped)
+- Open the context menu or the column menu in the grid
+- Notice the menu will not be fully visible (i.e. clipped)
 
 {% gridExampleRunner title="Small Grid Problem" name="popup-parent-problem"  exampleHeight=400 /%}
 

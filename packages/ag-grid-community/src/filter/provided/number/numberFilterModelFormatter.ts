@@ -1,14 +1,42 @@
-import type { IFilterOptionDef } from '../../../interfaces/iFilter';
-import { SimpleFilterModelFormatter } from '../simpleFilterModelFormatter';
-import type { NumberFilterModel } from './iNumberFilter';
+import { SCALAR_FILTER_TYPE_KEYS, SimpleFilterModelFormatter } from '../simpleFilterModelFormatter';
+import { _bindFilterCallback } from '../simpleFilterUtils';
+import type { INumberFilterParams, NumberFilterModel } from './iNumberFilter';
 
-export class NumberFilterModelFormatter extends SimpleFilterModelFormatter<number> {
-    protected conditionToString(condition: NumberFilterModel, options?: IFilterOptionDef): string {
-        const { numberOfInputs } = options || {};
+export class NumberFilterModelFormatter extends SimpleFilterModelFormatter<
+    INumberFilterParams,
+    typeof SCALAR_FILTER_TYPE_KEYS,
+    number
+> {
+    protected readonly filterTypeKeys = SCALAR_FILTER_TYPE_KEYS;
+
+    protected override getValueFormatter(): ((value: number | null) => string | null) | undefined {
+        return _bindFilterCallback(this.filterParams.numberFormatter, this.gos, this.column);
+    }
+
+    protected conditionToString(
+        condition: NumberFilterModel,
+        forToolPanel: boolean,
+        isRange: boolean,
+        customDisplayKey: string | undefined,
+        customDisplayName: string | undefined
+    ): string {
         const { filter, filterTo, type } = condition;
 
-        const isRange = type == 'inRange' || numberOfInputs === 2;
         const formatValue = this.formatValue.bind(this);
+
+        if (forToolPanel) {
+            const valueForToolPanel = this.conditionForToolPanel(
+                type,
+                isRange,
+                () => formatValue(filter),
+                () => formatValue(filterTo),
+                customDisplayKey,
+                customDisplayName
+            );
+            if (valueForToolPanel != null) {
+                return valueForToolPanel;
+            }
+        }
 
         if (isRange) {
             return `${formatValue(filter)}-${formatValue(filterTo)}`;

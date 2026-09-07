@@ -7,13 +7,16 @@ import {
     addRelativeImports,
     convertFunctionToConstPropertyTs,
     findLocaleImport,
+    getEnableAGTestIdLogic,
     getFunctionName,
     getIntegratedDarkModeCode,
     getPropertyInterfaces,
     handleRowGenericInterface,
     isInstanceMethod,
     preferParamsApi,
+    removeCreateGridImport,
     replaceGridReadyRowData,
+    wrapTearDownExample,
 } from './parser-utils';
 import { getComponentName, getImport, toConst, toInput, toMemberWithType, toOutput } from './vue-utils';
 
@@ -45,7 +48,7 @@ function getOnGridReadyCode(bindings: ParsedBindings): string {
         additionalLines.length > 0 ? `\n\n        ${additionalLines.join('\n        ')}` : ''
     );
     return `const onGridReady = (params: GridReadyEvent) => {
-        ${getIntegratedDarkModeCode(bindings.exampleName)}
+        ${getIntegratedDarkModeCode(bindings.exampleName) ?? ''}
         gridApi.value = params.api;
         ${additional}
     }`;
@@ -80,12 +83,14 @@ function getPropertyBindings(
     bindings: ParsedBindings,
     rowDataType: string,
     componentFileNames: string[],
-    vueComponents
+    vueComponents,
+    vue3VModel: boolean = false
 ): [string[], string[], string[], string[]] {
     const propertyAssignments = [];
     const propertyAttributes = [];
     const propertyNames = [];
 
+    const rowBindAttribute = vue3VModel ? 'v-model' : ':rowData';
     bindings.properties
         .filter((property) => property.name !== 'onGridReady')
         .forEach((property) => {
@@ -108,17 +113,17 @@ function getPropertyBindings(
         });
 
     if (!propertyAttributes.find((item) => item.indexOf(':rowData') >= 0)) {
-        propertyAttributes.push(':rowData="rowData"');
+        propertyAttributes.push(`${rowBindAttribute}="rowData"`);
         propertyNames.push('rowData');
     }
 
-    if (!propertyAssignments.find((item) => item.indexOf('rowData') >= 0)) {
+    if (!propertyAssignments.find((item) => item.replace(/setGridOption\('rowData'/g, '').indexOf('rowData') >= 0)) {
         propertyAssignments.push(`const rowData = ref<${rowDataType}[]>(null);`);
     }
 
     if (bindings.data && bindings.data.callback.indexOf("gridApi.setGridOption('rowData',") >= 0) {
-        if (propertyAttributes.filter((item) => item.indexOf(':rowData') >= 0).length === 0) {
-            propertyAttributes.push(':rowData="rowData"');
+        if (propertyAttributes.filter((item) => item.indexOf(rowBindAttribute) >= 0).length === 0) {
+            propertyAttributes.push(`${rowBindAttribute}="rowData"`);
             propertyNames.push('rowData');
         }
     }
@@ -176,18 +181,21 @@ function getImports(
 
     const localeImport = findLocaleImport(bindings.imports);
     if (localeImport) {
-        imports.push(`import { ${localeImport.imports[0]} } from '@ag-grid-community/locale';`);
+        imports.push(`import { ${localeImport.imports.join(', ')} } from '@ag-grid-community/locale';`);
     }
 
     imports.push(...getModuleImports(bindings, exampleConfig, componentFileNames, allStylesheets));
 
     addGenericInterfaceImport(imports, bindings.tData, bindings);
 
+    imports.push(getEnableAGTestIdLogic());
+
     if (bindings.moduleRegistration) {
+        imports.push('\n');
         imports.push(bindings.moduleRegistration);
     }
 
-    return imports;
+    return removeCreateGridImport(imports);
 }
 
 export function vanillaToVue3(
@@ -217,7 +225,8 @@ export function vanillaToVue3(
             bindings,
             rowDataType,
             componentFileNames,
-            vueComponents
+            vueComponents,
+            exampleConfig.vue3VModel
         );
         const template = getTemplate(bindings, exampleConfig, propertyAttributes.concat(eventAttributes));
 
@@ -260,8 +269,9 @@ const VueExample = defineComponent({
     }
 })
 
-createApp(VueExample)
-    .mount("#app")
+const app = createApp(VueExample);
+app.mount("#app");
+${wrapTearDownExample('(window as any).tearDownExample = () => app.unmount();')}
 `,
             bindings.tData
         );

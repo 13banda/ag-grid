@@ -1,73 +1,74 @@
+import type { BaseCssChangeKeys, CssVariable, ParamType, Theme, ThemeImpl } from 'ag-stack';
+import { BaseEnvironment } from 'ag-stack';
+
 import type { NamedBean } from './context/bean';
-import { BeanStub } from './context/beanStub';
 import type { BeanCollection } from './context/context';
-import { ThemeImpl } from './theming/Theme';
-import {
-    IS_SSR,
-    _injectCoreAndModuleCSS,
-    _injectGlobalCSS,
-    _registerGridUsingThemingAPI,
-    _unregisterGridUsingThemingAPI,
-} from './theming/inject';
+import type { AgEventTypeParams } from './events';
+import type { GridOptionsWithDefaults } from './gridOptionsDefault';
+import type { GridOptionsService } from './gridOptionsService';
+import type { AgGridCommon } from './interfaces/iCommon';
+import type { Module } from './interfaces/iModule';
+import { _getAllRegisteredModules } from './modules/moduleRegistry';
+import coreCSS from './theming/core/core.css';
 import { themeQuartz } from './theming/parts/theme/themes';
-import { _observeResize } from './utils/dom';
-import { _error, _warn } from './validation/logging';
 
-const ROW_HEIGHT: Variable = {
-    cssName: '--ag-row-height',
-    changeKey: 'rowHeightChanged',
-    defaultValue: 42,
-};
-const HEADER_HEIGHT: Variable = {
-    cssName: '--ag-header-height',
-    changeKey: 'headerHeightChanged',
-    defaultValue: 48,
-};
-const LIST_ITEM_HEIGHT: Variable = {
-    cssName: '--ag-list-item-height',
-    changeKey: 'listItemHeightChanged',
-    defaultValue: 24,
-};
-const ROW_BORDER_WIDTH: Variable = {
-    cssName: '--ag-row-border',
-    changeKey: 'rowBorderWidthChanged',
-    defaultValue: 1,
-    border: true,
-};
+const cssVariable = <K extends keyof CssChangeKeys>(
+    changeKey: K,
+    type: ParamType,
+    defaultValue: number
+): CssVariable<CssChangeKeys> => ({ changeKey, type, defaultValue });
 
-let paramsId = 0;
+const CELL_HORIZONTAL_PADDING = cssVariable('cellHorizontalPadding', 'length', 16);
+const CELL_WIDGET_SPACING = cssVariable('cellWidgetSpacing', 'length', 12);
+const ICON_SIZE = cssVariable('iconSize', 'length', 16);
+const ROW_HEIGHT = cssVariable('rowHeight', 'length', 42);
+const HEADER_HEIGHT = cssVariable('headerHeight', 'length', 48);
+const ROW_BORDER_WIDTH = cssVariable('rowBorderWidth', 'border', 1);
+const PINNED_BORDER_WIDTH = cssVariable('pinnedRowBorderWidth', 'border', 1);
+const HEADER_ROW_BORDER_WIDTH = cssVariable('headerRowBorderWidth', 'border', 1);
 
-export class Environment extends BeanStub implements NamedBean {
-    beanName = 'environment' as const;
-
-    private eGridDiv: HTMLElement;
-
-    public wireBeans(beans: BeanCollection): void {
-        this.eGridDiv = beans.eGridDiv;
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export function _addAdditionalCss(cssMap: Map<string, string[]>, modules: Module[]): void {
+    for (const module of modules.sort((a, b) => a.moduleName.localeCompare(b.moduleName))) {
+        const moduleCss = module.css;
+        if (moduleCss) {
+            cssMap.set(`module-${module.moduleName}`, moduleCss);
+        }
     }
+}
 
-    private sizeEls = new Map<Variable, HTMLElement>();
-    private lastKnownValues = new Map<Variable, number>();
-    private eMeasurementContainer: HTMLElement | undefined;
-    public sizesMeasured = false;
-
-    private paramsClass = `ag-theme-params-${++paramsId}`;
-    private gridTheme: ThemeImpl | undefined;
-    private eParamsStyle: HTMLStyleElement | undefined;
-    private globalCSS: [string, string][] = [];
-
-    public postConstruct(): void {
-        this.addManagedPropertyListener('theme', () => this.handleThemeGridOptionChange());
-        this.handleThemeGridOptionChange();
-
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export class Environment
+    extends BaseEnvironment<
+        BeanCollection,
+        GridOptionsWithDefaults,
+        AgEventTypeParams,
+        AgGridCommon<any, any>,
+        GridOptionsService,
+        CssChangeKeys
+    >
+    implements NamedBean
+{
+    protected override initVariables(): void {
         this.addManagedPropertyListener('rowHeight', () => this.refreshRowHeightVariable());
         this.getSizeEl(ROW_HEIGHT);
         this.getSizeEl(HEADER_HEIGHT);
-        this.getSizeEl(LIST_ITEM_HEIGHT);
-        this.getSizeEl(ROW_BORDER_WIDTH);
-        this.refreshRowBorderWidthVariable();
 
-        this.addDestroyFunc(() => _unregisterGridUsingThemingAPI(this));
+        this.getSizeEl(ROW_BORDER_WIDTH);
+        this.getSizeEl(PINNED_BORDER_WIDTH);
+        this.refreshRowBorderWidthVariable();
+    }
+
+    public getPinnedRowBorderWidth(): number {
+        return this.getCSSVariablePixelValue(PINNED_BORDER_WIDTH);
+    }
+
+    public getRowBorderWidth(): number {
+        return this.getCSSVariablePixelValue(ROW_BORDER_WIDTH);
+    }
+
+    public getHeaderRowBorderWidth(): number {
+        return this.getCSSVariablePixelValue(HEADER_ROW_BORDER_WIDTH);
     }
 
     public getDefaultRowHeight(): number {
@@ -76,6 +77,18 @@ export class Environment extends BeanStub implements NamedBean {
 
     public getDefaultHeaderHeight(): number {
         return this.getCSSVariablePixelValue(HEADER_HEIGHT);
+    }
+
+    public getDefaultCellHorizontalPadding(): number {
+        return this.getCSSVariablePixelValue(CELL_HORIZONTAL_PADDING);
+    }
+
+    public getDefaultCellWidgetSpacing(): number {
+        return this.getCSSVariablePixelValue(CELL_WIDGET_SPACING);
+    }
+
+    public getDefaultIconSize(): number {
+        return this.getCSSVariablePixelValue(ICON_SIZE);
     }
 
     public getDefaultColumnMinWidth(): number {
@@ -87,52 +100,14 @@ export class Environment extends BeanStub implements NamedBean {
         return Math.min(36, this.getDefaultRowHeight());
     }
 
-    public getDefaultListItemHeight(): number {
-        return this.getCSSVariablePixelValue(LIST_ITEM_HEIGHT);
-    }
-
-    public getRowBorderWidth(): number {
-        return this.getCSSVariablePixelValue(ROW_BORDER_WIDTH);
-    }
-
-    public applyThemeClasses(el: HTMLElement) {
-        const { gridTheme } = this;
-        let themeClass = '';
-        if (gridTheme) {
-            // theming API mode
-            themeClass = `${this.paramsClass} ${gridTheme._getCssClass()}`;
-        } else {
-            // legacy mode
-            let node: HTMLElement | null = this.eGridDiv;
-            while (node) {
-                for (const className of Array.from(node.classList)) {
-                    if (className.startsWith('ag-theme-')) {
-                        themeClass = themeClass ? `${themeClass} ${className}` : className;
-                    }
-                }
-                node = node.parentElement;
-            }
-        }
-
-        for (const className of Array.from(el.classList)) {
-            if (className.startsWith('ag-theme-')) {
-                el.classList.remove(className);
-            }
-        }
-        if (themeClass) {
-            const oldClass = el.className;
-            el.className = oldClass + (oldClass ? ' ' : '') + themeClass;
-        }
-    }
-
     public refreshRowHeightVariable(): number {
-        const { eGridDiv } = this;
-        const oldRowHeight = eGridDiv.style.getPropertyValue('--ag-line-height').trim();
+        const { eRootDiv } = this;
+        const oldRowHeight = eRootDiv.style.getPropertyValue('--ag-line-height').trim();
         const height = this.gos.get('rowHeight');
 
         if (height == null || isNaN(height) || !isFinite(height)) {
             if (oldRowHeight !== null) {
-                eGridDiv.style.setProperty('--ag-line-height', null);
+                eRootDiv.style.setProperty('--ag-line-height', null);
             }
             return -1;
         }
@@ -140,154 +115,34 @@ export class Environment extends BeanStub implements NamedBean {
         const newRowHeight = `${height}px`;
 
         if (oldRowHeight != newRowHeight) {
-            eGridDiv.style.setProperty('--ag-line-height', newRowHeight);
+            eRootDiv.style.setProperty('--ag-line-height', newRowHeight);
             return height;
         }
 
-        return oldRowHeight != '' ? parseFloat(oldRowHeight) : -1;
+        return oldRowHeight != '' ? Number.parseFloat(oldRowHeight) : -1;
     }
 
-    public addGlobalCSS(css: string, debugId: string): void {
-        if (this.gridTheme) {
-            _injectGlobalCSS(css, this.eGridDiv, debugId);
-        } else {
-            this.globalCSS.push([css, debugId]);
-        }
-    }
-
-    private getCSSVariablePixelValue(variable: Variable): number {
-        const cached = this.lastKnownValues.get(variable);
-        if (cached != null) {
-            return cached;
-        }
-        const measurement = this.measureSizeEl(variable);
-        if (measurement === 'detached' || measurement === 'no-styles') {
-            return variable.defaultValue;
-        }
-        this.lastKnownValues.set(variable, measurement);
-        return measurement;
-    }
-
-    private measureSizeEl(variable: Variable): number | 'detached' | 'no-styles' {
-        const sizeEl = this.getSizeEl(variable)!;
-        if (sizeEl.offsetParent == null) {
-            return 'detached';
-        }
-        const newSize = sizeEl.offsetWidth;
-        if (newSize === NO_VALUE_SENTINEL) return 'no-styles';
-        this.sizesMeasured = true;
-        return newSize;
-    }
-
-    private getMeasurementContainer(): HTMLElement {
-        let container = this.eMeasurementContainer;
-        if (!container) {
-            container = this.eMeasurementContainer = document.createElement('div');
-            container.className = 'ag-measurement-container';
-            this.eGridDiv.appendChild(container);
-        }
-        return container;
-    }
-
-    private getSizeEl(variable: Variable): HTMLElement {
-        let sizeEl = this.sizeEls.get(variable);
-        if (sizeEl) {
-            return sizeEl;
-        }
-        const container = this.getMeasurementContainer();
-
-        sizeEl = document.createElement('div');
-        const { border } = variable;
-        if (border) {
-            sizeEl.className = 'ag-measurement-element-border';
-            sizeEl.style.setProperty(
-                '--ag-internal-measurement-border',
-                `var(${variable.cssName}, solid ${NO_VALUE_SENTINEL}px`
-            );
-        } else {
-            sizeEl.style.width = `var(${variable.cssName}, ${NO_VALUE_SENTINEL}px)`;
-        }
-        container.appendChild(sizeEl);
-        this.sizeEls.set(variable, sizeEl);
-
-        let lastMeasurement = this.measureSizeEl(variable);
-
-        if (lastMeasurement === 'no-styles') {
-            // No value for the variable
-            _warn(9, { variable });
-        }
-
-        const unsubscribe = _observeResize(this.beans, sizeEl, () => {
-            const newMeasurement = this.measureSizeEl(variable);
-            if (newMeasurement === 'detached' || newMeasurement === 'no-styles') {
-                return;
-            }
-            this.lastKnownValues.set(variable, newMeasurement);
-            if (newMeasurement !== lastMeasurement) {
-                lastMeasurement = newMeasurement;
-                this.fireGridStylesChangedEvent(variable.changeKey);
-            }
-        });
-        this.addDestroyFunc(() => unsubscribe());
-
-        return sizeEl;
-    }
-
-    private fireGridStylesChangedEvent(change: ChangeKey): void {
-        if (change === 'rowBorderWidthChanged') {
+    protected override fireStylesChangedEvent(change: keyof CssChangeKeys): void {
+        if (change === 'rowBorderWidth') {
             this.refreshRowBorderWidthVariable();
         }
-        this.eventSvc.dispatchEvent({
-            type: 'gridStylesChanged',
-            [change]: true,
-        });
+        // catches variables a class swap introduces after grid creation; 'theme' is covered by
+        // postProcessThemeChange, which runs after the new theme is in place
+        if (change !== 'theme') {
+            this.checkLegacyThemeVariables();
+        }
+        super.fireStylesChangedEvent(change);
     }
 
     private refreshRowBorderWidthVariable(): void {
         const width = this.getCSSVariablePixelValue(ROW_BORDER_WIDTH);
-        this.eGridDiv.style.setProperty('--ag-internal-row-border-width', `${width}px`);
+        this.eRootDiv.style.setProperty('--ag-internal-row-border-width', `${width}px`);
     }
 
-    private handleThemeGridOptionChange(): void {
-        const { gos, eGridDiv, globalCSS, gridTheme: oldGridTheme } = this;
-        const themeGridOption = gos.get('theme');
-        let newGridTheme: ThemeImpl | undefined;
-        if (themeGridOption === 'legacy') {
-            newGridTheme = undefined;
-        } else {
-            const themeOrDefault = themeGridOption ?? themeQuartz;
-            if (themeOrDefault instanceof ThemeImpl) {
-                newGridTheme = themeOrDefault;
-            } else {
-                _error(240, { theme: themeOrDefault });
-            }
-        }
-        if (newGridTheme !== oldGridTheme) {
-            if (newGridTheme) {
-                _registerGridUsingThemingAPI(this);
-                _injectCoreAndModuleCSS(eGridDiv);
-                for (const [css, debugId] of globalCSS) {
-                    _injectGlobalCSS(css, eGridDiv, debugId);
-                }
-                globalCSS.length = 0;
-            }
-            this.gridTheme = newGridTheme;
-            newGridTheme?._startUse({
-                loadThemeGoogleFonts: gos.get('loadThemeGoogleFonts'),
-                container: eGridDiv,
-            });
-            let eParamsStyle = this.eParamsStyle;
-            if (!eParamsStyle) {
-                eParamsStyle = this.eParamsStyle = document.createElement('style');
-                eGridDiv.appendChild(eParamsStyle);
-            }
-            if (!IS_SSR) {
-                eParamsStyle.textContent = newGridTheme?._getPerGridCss(this.paramsClass) || '';
-            }
-
-            this.applyThemeClasses(eGridDiv);
-            this.fireGridStylesChangedEvent('themeChanged');
-        }
+    protected override postProcessThemeChange(
+        newGridTheme: ThemeImpl | undefined,
+        themeGridOption?: Theme | 'legacy'
+    ): void {
         // --ag-legacy-styles-loaded is defined on .ag-measurement-container by the
         // legacy themes which shouldn't be used at the same time as Theming API
         if (
@@ -295,26 +150,51 @@ export class Environment extends BeanStub implements NamedBean {
             getComputedStyle(this.getMeasurementContainer()).getPropertyValue('--ag-legacy-styles-loaded')
         ) {
             if (themeGridOption) {
-                _error(106);
+                this.beans.log.error(106);
             } else {
-                _error(239);
+                this.beans.log.error(239);
             }
+        } else if (newGridTheme) {
+            this.checkLegacyThemeVariables();
         }
+    }
+
+    /** The reporting lives in the ValidationModule; without it registered, nothing is checked. */
+    private checkLegacyThemeVariables(): void {
+        this.beans.validation?.checkLegacyThemeVariables(this.eRootDiv);
+    }
+
+    protected override getAdditionalCss(): Map<string, string[]> {
+        const additionalCss: Map<string, string[]> = new Map();
+        additionalCss.set('core', [coreCSS]);
+        _addAdditionalCss(additionalCss, Array.from(_getAllRegisteredModules()));
+        return additionalCss;
+    }
+
+    protected override getDefaultTheme(): Theme {
+        return themeQuartz;
+    }
+
+    protected override varError(cssName: string, defaultValue: number): void {
+        this.beans.log.warn(9, { variable: { cssName, defaultValue } });
+    }
+
+    protected override themeError(theme: Theme | 'legacy'): void {
+        this.beans.log.error(240, { theme });
+    }
+
+    protected override shadowRootError(): void {
+        this.beans.log.error(293);
     }
 }
 
-type Variable = {
-    cssName: string;
-    changeKey: ChangeKey;
-    defaultValue: number;
-    border?: boolean;
-};
-
-type ChangeKey =
-    | 'themeChanged'
-    | 'headerHeightChanged'
-    | 'rowHeightChanged'
-    | 'listItemHeightChanged'
-    | 'rowBorderWidthChanged';
-
-const NO_VALUE_SENTINEL = 15538;
+interface CssChangeKeys extends BaseCssChangeKeys {
+    cellWidgetSpacing: true;
+    iconSize: true;
+    headerHeight: true;
+    headerRowBorderWidth: true;
+    rowHeight: true;
+    rowBorderWidth: true;
+    pinnedRowBorderWidth: true;
+    cellHorizontalPadding: true;
+}

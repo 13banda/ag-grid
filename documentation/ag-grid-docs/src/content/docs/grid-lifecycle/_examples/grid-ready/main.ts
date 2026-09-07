@@ -3,14 +3,19 @@ import {
     ClientSideRowModelModule,
     ColumnApiModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import type { TAthlete } from './data';
 import { getData } from './data';
 
-ModuleRegistry.registerModules([ColumnApiModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnApiModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi;
 

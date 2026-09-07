@@ -4,12 +4,17 @@ import {
     GridOptions,
     ModuleRegistry,
     RowGroupingDisplayType,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule]);
 
 let gridApi: GridApi<IOlympicData>;
 

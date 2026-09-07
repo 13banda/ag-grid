@@ -5,18 +5,24 @@ import {
     ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { SparklinesModule } from 'ag-grid-enterprise';
+import { ClipboardModule, ContextMenuModule, SparklinesModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     SparklinesModule.with(AgChartsCommunityModule),
-    ValidationModule /* Development Only */,
+    ClipboardModule,
+    ContextMenuModule,
 ]);
 
 let gridApi: GridApi;

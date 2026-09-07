@@ -1,11 +1,15 @@
 {
   "extends": "./tsconfig.json",
+  "references": [
+    {
+      "path": "../ag-grid-community/tsconfig.lib.json"
+    }
+  ],
   "compilerOptions": {
-    "types": [],
-    "baseUrl": "src",
-    "module": "node16",
-    "moduleResolution": "node16"
+    "types": ["vite/client"],
+    "module": "preserve",
+    "moduleResolution": "bundler"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts", "src/**/test/**", "src/**/test-utils/**"]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts", "src/**/test/**", "src/**/test-utils/**"]
 }

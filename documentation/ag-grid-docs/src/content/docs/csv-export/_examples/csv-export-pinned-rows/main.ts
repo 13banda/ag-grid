@@ -6,10 +6,15 @@ import {
     NumberEditorModule,
     PinnedRowModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -19,7 +24,6 @@ ModuleRegistry.registerModules([
     PinnedRowModule,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

@@ -1,0 +1,385 @@
+name: Documentation Tests
+description: Run tests for the documentation examples
+
+env:
+  # Disable git's post-fetch background gc/maintenance for every git invocation in this
+  # workflow (via git's GIT_CONFIG_* protocol); otherwise it rewrites .git/shallow
+  # concurrently with the next chained `git fetch --depth 1`, intermittently failing job
+  # setup with "fatal: shallow file has changed since we read it". Fixed in git >= 2.55.
+  GIT_CONFIG_COUNT: 2
+  GIT_CONFIG_KEY_0: gc.auto
+  GIT_CONFIG_VALUE_0: '0'
+  GIT_CONFIG_KEY_1: maintenance.auto
+  GIT_CONFIG_VALUE_1: 'false'
+  NX_NO_CLOUD: true
+  CI: true
+  DEFAULT_RETENTION_DAYS: 30
+  PREV_COMMIT_SHA_FILE: ./commit-sha.txt
+  CTRF_FILE: ./ctrf-report.json
+  SLACK_CHANNEL: '#ci-grid-gate'
+  AG_LIBRARY: grid
+on:
+  schedule:
+      - cron: '30 2 * * *' # Run daily at 2:30am UTC. Temporarily enabled until full build is tested
+  workflow_dispatch:
+    inputs:
+      skip_vanilla:
+        description: 'Skip Vanilla tests'
+        type: boolean
+        required: true
+        default: true
+      skip_typescript:
+        description: 'Skip Typescript tests'
+        type: boolean
+        required: true
+        default: true
+      skip_reactFunctionalTs:
+        description: 'Skip React Functional TS tests'
+        type: boolean
+        required: true
+        default: true
+      skip_angular:
+        description: 'Skip Angular tests'
+        type: boolean
+        required: true
+        default: true
+      skip_vue3:
+        description: 'Skip Vue3 tests'
+        type: boolean
+        required: true
+        default: true
+      skip_recipes:
+        description: 'Skip Recipe tests'
+        type: boolean
+        required: true
+        default: true
+      test_pattern:
+        description: 'Run only tests matching this pattern'
+        type: string
+        required: false
+        default: ''
+      base_url:
+        description: 'Override base URL'
+        type: string
+        required: false
+        default: 'https://grid-staging.ag-grid.com/'
+      notify:
+        description: 'Notify Slack channel'
+        type: boolean
+        default: true
+        required: true
+      force_jira_ticket:
+        description: 'Force create a Jira ticket even if the run is not scheduled'
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+
+  # Warms the node_modules cache once (rw) so the framework test jobs below can consume it
+  # read-only in parallel — avoids 7 concurrent full installs and cache-write races on a cold
+  # cache. Runs whenever at least one framework is not skipped (always true on schedule).
+  initialise:
+    if: >-
+      ${{ github.event.inputs.skip_vanilla != 'true'
+        || github.event.inputs.skip_typescript != 'true'
+        || github.event.inputs.skip_reactFunctionalTs != 'true'
+        || github.event.inputs.skip_angular != 'true'
+        || github.event.inputs.skip_vue3 != 'true' }}
+    name: Initialise dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - name: Warm node_modules and Nx caches
+        uses: ./.github/actions/setup-nx
+        with:
+          cache_mode: rw
+          yarn_postinstall: 'false'
+          nx_restore: 'true'
+          tidy_nx_cache: 'false'
+      # Pre-build the package the test harness imports at runtime, so the seven test jobs
+      # restore it from the Nx cache instead of each rebuilding it.
+      - name: Pre-build ag-grid-community
+        run: yarn nx run-many -p ag-grid-community -t build:package build:types
+      # Download the Playwright browser binaries once and cache them (all three browsers, so
+      # both chromium-only and all-browser jobs can restore the same cache). The test jobs
+      # restore this and only need `install-deps` for OS libraries — no per-job download.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        working-directory: documentation/ag-grid-docs
+        # Bounded + retried via the shared wrapper; no --with-deps here, so no apt.
+        run: bash "${GITHUB_WORKSPACE}/scripts/ci/install-playwright.sh" browsers chromium firefox webkit
+
+  test-vanilla:
+    needs: initialise
+    if: ${{ github.event.inputs.skip_vanilla != 'true' }}
+    name: Test vanilla Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Scoped to the jobs that request the deployed site. At workflow scope the bypass credential would
+    # also be readable by publish-reports and the third-party actions it runs, which have no need for it.
+    env:
+      AWS_CI_BYPASS_SECRET: ${{ secrets.AWS_CI_BYPASS_SECRET }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/test-framework-examples
+        with:
+          base_url: ${{github.event.inputs.base_url}}
+          framework: vanilla
+          browsers: all
+          test_pattern: ${{github.event.inputs.test_pattern}}
+
+  test-typescript:
+    needs: initialise
+    if: ${{ github.event.inputs.skip_typescript != 'true' }}
+    name: Test typescript Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_CI_BYPASS_SECRET: ${{ secrets.AWS_CI_BYPASS_SECRET }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1]
+        shardTotal: [1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/test-framework-examples
+        with:
+          base_url: ${{github.event.inputs.base_url}}
+          framework: typescript
+          browsers: chromium
+          test_pattern: ${{github.event.inputs.test_pattern}}
+
+  test-reactFunctionalTs:
+    needs: initialise
+    if: ${{ github.event.inputs.skip_reactFunctionalTs != 'true' }}
+    name: Test reactFunctionalTs Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_CI_BYPASS_SECRET: ${{ secrets.AWS_CI_BYPASS_SECRET }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3]
+        shardTotal: [3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/test-framework-examples
+        with:
+          base_url: ${{github.event.inputs.base_url}}
+          framework: reactFunctionalTs
+          browsers: all
+          test_pattern: ${{github.event.inputs.test_pattern}}
+
+  test-vue3:
+    needs: initialise
+    if: ${{ github.event.inputs.skip_vue3 != 'true' }}
+    name: Test vue3 Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_CI_BYPASS_SECRET: ${{ secrets.AWS_CI_BYPASS_SECRET }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1]
+        shardTotal: [1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/test-framework-examples
+        with:
+          base_url: ${{github.event.inputs.base_url}}
+          framework: vue3
+          browsers: chromium
+          test_pattern: ${{github.event.inputs.test_pattern}}
+
+  test-angular:
+    needs: initialise
+    if: ${{ github.event.inputs.skip_angular != 'true' }}
+    name: Test angular Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_CI_BYPASS_SECRET: ${{ secrets.AWS_CI_BYPASS_SECRET }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/test-framework-examples
+        with:
+          base_url: ${{github.event.inputs.base_url}}
+          framework: angular
+          browsers: chromium
+          test_pattern: ${{github.event.inputs.test_pattern}}
+
+
+  test-recipes:
+    if: ${{ github.event.inputs.skip_recipes != 'true' }}
+    name: Test Public Testing Recipes
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup
+        id: setup
+        uses: ./.github/actions/setup-nx
+        with:
+          cache_mode: ro
+      - name: Run Public Testing Recipes
+        run: yarn nx run ag-grid-public-e2e-testing-recipes:test:recipes -c staging
+      - name: Upload Test Report
+        id: upload-recipes-report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-recipes
+          path: reports/
+          retention-days: ${{env.DEFAULT_RETENTION_DAYS}}
+  
+  publish-reports:
+    if: always()
+    needs:
+      # Without `initialise` here and in IS_SUCCESS, a failure there skips every shard
+      # ('skipped', not 'failure') and the run reports SUCCESS having run no tests.
+      - initialise
+      - test-reactFunctionalTs
+      - test-angular
+      - test-typescript
+      - test-vanilla
+      - test-vue3
+      - test-recipes
+    env:
+      IS_SUCCESS: ${{ needs.initialise.result != 'failure' && needs.test-angular.result != 'failure' && needs.test-reactFunctionalTs.result != 'failure' && needs.test-typescript.result != 'failure' && needs.test-vanilla.result != 'failure' && needs.test-vue3.result != 'failure' && needs.test-recipes.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Download all test reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: combined-reports
+
+      - name: Normalise example test reports
+        run: node documentation/ag-grid-docs/scripts/normalise-ctrf-reports.mjs combined-reports
+
+      # failed-folded-report is deliberately off: it embeds the full message/trace for every
+      # failed test with no cap, so a run with hundreds of failures produces a step summary
+      # over GitHub's 1MB per-job limit - at which point the summary is silently dropped
+      # entirely. "Summarise failed tests" below writes a fixed-size table instead, so the
+      # summary always renders.
+      - name: Publish Combined Test Report
+        id: ctrf
+        uses: ctrf-io/github-test-reporter@e500b992f936420eb633c91644cf10d4d71df700 # v1.1.0
+        with:
+          report-path: 'combined-reports/**/*.json'
+          summary-report: true
+          flaky-report: true
+          skipped-report: false
+          group-by: filePath
+          write-ctrf-to-file: ${{ env.CTRF_FILE }}
+
+      - name: Summarise failed tests
+        if: always()
+        run: node documentation/ag-grid-docs/scripts/summarise-ctrf-failures.mjs ${{ env.CTRF_FILE }}
+
+      - name: Upload combined CTRF report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ctrf-report
+          path: ${{ env.CTRF_FILE }}
+          retention-days: ${{ env.DEFAULT_RETENTION_DAYS }}
+
+      - name: Get previous run commit SHA
+        id: prev-commit-sha
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          restore-keys: |
+            doc-tests-prev-commit-
+            doc-tests-prev-commit-${{ github.ref }}
+          path: ${{ env.PREV_COMMIT_SHA_FILE }}
+          key: doc-tests-prev-commit-${{ github.ref }}-${{ github.sha }}
+
+      - name: Load files into environment
+        continue-on-error: true
+        run: |
+          if [ -f ${{ env.PREV_COMMIT_SHA_FILE }} ]; then
+          {
+             echo 'PREV_COMMIT_SHA<<EOF'
+             cat ${{ env.PREV_COMMIT_SHA_FILE }}
+             echo 'EOF'
+          } >> $GITHUB_ENV
+          else
+            echo 'PREV_COMMIT_SHA_FILE not found'
+          fi
+
+      - name: Slack Notification
+        if: ${{ github.event_name == 'schedule' || inputs.notify }}
+        continue-on-error: true
+        uses: ./external/ag-shared/github/actions/slack-integration
+        with:
+          AG_LIBRARY: ${{ env.AG_LIBRARY }}
+          CTRF_REPORT_FILE: ${{ env.CTRF_FILE }}
+          SLACK_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_BOT_OAUTH_TOKEN }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+          PREV_COMMIT_SHA: ${{ env.PREV_COMMIT_SHA }}
+          CURRENT_COMMIT_SHA: ${{ github.sha }}
+          IS_SUCCESS: ${{ env.IS_SUCCESS }}
+
+      - name: Create Jira Ticket
+        uses: ./.github/actions/jira-integration
+        continue-on-error: true
+        if: ${{ github.event_name == 'schedule' || inputs.force_jira_ticket }}
+        with:
+          JIRA_API_AUTH: ${{ secrets.JIRA_API_AUTH }}
+          JIRA_SUMMARY: "[NR] CI/CD workflow '${{ github.workflow }}' is failing."
+          CTRF_REPORT_FILE: ${{ env.CTRF_FILE }}
+          PREV_COMMIT_SHA: ${{ env.PREV_COMMIT_SHA }}
+          CURRENT_COMMIT_SHA: ${{ github.sha }}
+          IS_SUCCESS: ${{ env.IS_SUCCESS }}
+
+      - name: Set commit SHA
+        id: set-commit-sha
+        run: |
+          echo ${{ github.sha }} > ${{ env.PREV_COMMIT_SHA_FILE }}
+
+      - name: Save Current Commit Hash
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.PREV_COMMIT_SHA_FILE }}
+          key: ${{ steps.prev-commit-sha.outputs.cache-primary-key }}

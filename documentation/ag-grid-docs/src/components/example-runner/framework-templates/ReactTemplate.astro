@@ -1,51 +1,54 @@
 ---
 import { MetaData } from './lib/MetaData';
-import { ExampleStyle } from './lib/ExampleStyle';
-import { Styles } from './lib/Styles';
-import { Extras } from './lib/Extras';
-import { SystemJs } from './lib/SystemJs';
+import ExampleStyle from './lib/ExampleStyle.astro';
+import Styles from './lib/Styles.astro';
+import Extras from './lib/Extras.astro';
+import { ExampleModules } from './lib/ExampleModules';
 import { Scripts } from './lib/Scripts';
-import { pathJoin } from '@utils/pathJoin';
 import type { InternalFramework } from '@ag-grid-types';
 
 interface Props {
     isDev: boolean;
     title: string;
     isEnterprise: boolean;
+    isIntegratedCharts?: boolean;
     internalFramework: InternalFramework;
 
     modifiedTimeMs: number;
     entryFileName: string;
-    /**
-     * Extra script file names (not including entry file)
-     */
+    fileNames: string[];
     scriptFiles?: string[];
     styleFiles?: string[];
     appLocation: string;
-    boilerplatePath: string;
-    ignoreSystemJs?: boolean;
+    ignoreModuleLoader?: boolean;
     extraStyles?: string;
-    children?: any;
+    headFragment?: string;
     extras?: string[];
+    usesMathRandom?: boolean;
+    transpileInBrowser?: boolean;
+    nonce?: string;
 }
 
 const {
     title,
     isDev,
     isEnterprise,
+    isIntegratedCharts,
     internalFramework,
     modifiedTimeMs,
     appLocation,
     entryFileName,
+    fileNames,
     scriptFiles = [],
     styleFiles = [],
-    boilerplatePath,
-    ignoreSystemJs,
+    ignoreModuleLoader,
     extraStyles,
+    headFragment,
     extras,
+    usesMathRandom,
+    transpileInBrowser,
+    nonce,
 } = Astro.props as Props;
-
-const startFile = pathJoin(appLocation, entryFileName);
 ---
 
 <html lang="en">
@@ -54,19 +57,34 @@ const startFile = pathJoin(appLocation, entryFileName);
         <ExampleStyle rootSelector="#root" extraStyles={extraStyles} />
         <Styles baseUrl={appLocation} files={styleFiles} />
         <Extras extras={extras ?? []} />
+        <Fragment set:html={headFragment} />
     </head>
     <body>
         <div id="root"></div>
-        {scriptFiles && <Scripts baseUrl={appLocation} files={scriptFiles} />}
+
+        <script
+            is:inline
+            nonce={nonce}
+            define:vars={{
+                appLocation,
+            }}
+        >
+            window.__basePath = appLocation;
+        </script>
+
+        {scriptFiles && <Scripts baseUrl={appLocation} files={scriptFiles} nonce={nonce} />}
         {
-            !ignoreSystemJs && (
-                <SystemJs
-                    isDev={isDev}
-                    boilerplatePath={boilerplatePath}
+            !ignoreModuleLoader && (
+                <ExampleModules
                     appLocation={appLocation}
-                    startFile={startFile}
+                    entryFileName={entryFileName}
+                    fileNames={fileNames}
                     internalFramework={internalFramework}
                     isEnterprise={isEnterprise}
+                    isIntegratedCharts={isIntegratedCharts}
+                    usesMathRandom={usesMathRandom}
+                    transpileInBrowser={transpileInBrowser}
+                    nonce={nonce}
                 />
             )
         }

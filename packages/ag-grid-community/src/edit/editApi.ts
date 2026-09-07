@@ -1,13 +1,22 @@
-import type { StartEditingCellParams } from '../api/gridApi';
 import { ensureColumnVisible, ensureIndexVisible } from '../api/scrollApi';
-import { _unwrapUserComp } from '../components/framework/unwrapUserComp';
 import type { BeanCollection } from '../context/context';
 import type { AgColumn } from '../entities/agColumn';
-import { _getCellByPosition } from '../entities/positionUtils';
-import { _getActiveDomElement } from '../gridOptionsUtils';
-import type { GetCellEditorInstancesParams, ICellEditor } from '../interfaces/iCellEditor';
+import { _getRowNode } from '../entities/positionUtils';
+import type { RowNode } from '../entities/rowNode';
+import type {
+    EditingCellPosition,
+    ICellEditorValidationError,
+    StartEditingCellParams,
+} from '../interfaces/iCellEditor';
 import type { CellPosition } from '../interfaces/iCellPosition';
-import { _warn } from '../validation/logging';
+import type { IRowNode } from '../interfaces/iRowNode';
+import {
+    UNEDITED,
+    _flushEditors,
+    _readEditValidationErrors,
+    _sourceAndPendingDiffer,
+    _validateEdit,
+} from './utils/editors';
 
 export function undoCellEditing(beans: BeanCollection): void {
     beans.undoRedo?.undo('api');
@@ -17,78 +26,108 @@ export function redoCellEditing(beans: BeanCollection): void {
     beans.undoRedo?.redo('api');
 }
 
-export function getCellEditorInstances<TData = any>(
-    beans: BeanCollection,
-    params: GetCellEditorInstancesParams<TData> = {}
-): ICellEditor[] {
-    const res: ICellEditor[] = [];
-
-    beans.rowRenderer.getCellCtrls(params.rowNodes, params.columns as AgColumn[]).forEach((cellCtrl) => {
-        const cellEditor = cellCtrl.comp?.getCellEditor() as ICellEditor;
-
-        if (cellEditor) {
-            res.push(_unwrapUserComp(cellEditor));
-        }
-    });
-
-    return res;
+export function getEditRowValues(beans: BeanCollection, rowNode: IRowNode): Record<string, any> | undefined {
+    return beans.editModelSvc?.getEditRowDataValue(rowNode);
 }
 
-export function getEditingCells(beans: BeanCollection): CellPosition[] {
-    const res: CellPosition[] = [];
-
-    beans.rowRenderer.getAllCellCtrls().forEach((cellCtrl) => {
-        if (cellCtrl.editing) {
-            const { cellPosition } = cellCtrl;
-            res.push(cellPosition);
-        }
+export function getEditingCells(beans: BeanCollection): EditingCellPosition[] {
+    const edits = beans.editModelSvc?.getEditMap();
+    const positions: EditingCellPosition[] = [];
+    edits?.forEach((editRow, rowNode: RowNode) => {
+        editRow.forEach((editValue, column: AgColumn) => {
+            const editing = editValue.state === 'editing';
+            const changed = !editing && _sourceAndPendingDiffer(editValue);
+            if (editing || changed) {
+                const colId = column.colId;
+                let newValue = editValue.editorValue ?? editValue.pendingValue;
+                if (newValue === UNEDITED) {
+                    newValue = undefined;
+                }
+                positions.push({
+                    newValue,
+                    oldValue: editValue.sourceValue,
+                    state: editValue.state,
+                    column,
+                    colId,
+                    colKey: colId,
+                    rowIndex: rowNode.rowIndex!,
+                    rowPinned: rowNode.rowPinned,
+                });
+            }
+        });
     });
-
-    return res;
+    return positions;
 }
 
 export function stopEditing(beans: BeanCollection, cancel: boolean = false): void {
-    beans.editSvc?.stopAllEditing(cancel);
+    const { editSvc } = beans;
+    if (editSvc?.isBatchEditing()) {
+        editSvc.stopBatchEditors(cancel);
+    } else {
+        editSvc?.stopEditing(undefined, { cancel, source: 'edit', forceStop: !cancel, forceCancel: cancel });
+    }
+}
+
+export function isEditing(beans: BeanCollection, cellPosition: CellPosition): boolean {
+    // Resolved from the row model, not a cell controller: an unrendered row has no controller, and an
+    // undefined position makes isEditing answer "is anything editing" — a scroll-dependent wrong answer.
+    const rowNode = _getRowNode(beans, cellPosition);
+    return !!rowNode && !!beans.editSvc?.isEditing({ rowNode, column: cellPosition.column });
 }
 
 export function startEditingCell(beans: BeanCollection, params: StartEditingCellParams): void {
-    const column = beans.colModel.getCol(params.colKey);
+    const { key, colKey, rowIndex, rowPinned } = params;
+    const { editSvc, colModel } = beans;
+
+    const column = colModel.getCol(colKey);
     if (!column) {
-        _warn(12, { colKey: params.colKey });
+        beans.log.warn(12, { colKey });
         return;
     }
+
     const cellPosition: CellPosition = {
-        rowIndex: params.rowIndex,
-        rowPinned: params.rowPinned || null,
-        column: column,
+        rowIndex,
+        rowPinned: rowPinned || null,
+        column,
     };
-    const notPinned = params.rowPinned == null;
-    if (notPinned) {
-        ensureIndexVisible(beans, params.rowIndex);
-    }
 
-    ensureColumnVisible(beans, params.colKey);
-
-    const cell = _getCellByPosition(beans, cellPosition);
-    if (!cell) {
+    const rowNode = _getRowNode(beans, cellPosition);
+    if (!rowNode) {
+        beans.log.warn(290, { rowIndex, rowPinned });
         return;
     }
-    const { focusSvc, gos, editSvc } = beans;
-    const isFocusWithinCell = () => {
-        const activeElement = _getActiveDomElement(beans);
-        const eCell = cell.eGui;
-        return activeElement !== eCell && !!eCell?.contains(activeElement);
-    };
-    const forceBrowserFocus = gos.get('stopEditingWhenCellsLoseFocus') && isFocusWithinCell();
-    if (forceBrowserFocus || !focusSvc.isCellFocused(cellPosition)) {
-        focusSvc.setFocusedCell({
-            ...cellPosition,
-            forceBrowserFocus,
-            preventScrollOnBrowserFocus: true,
-        });
+
+    if (!editSvc?.isCellEditable({ rowNode, column }, 'api')) {
+        return;
     }
-    editSvc?.startRowOrCellEdit(cell, params.key);
+
+    const notPinned = rowPinned == null;
+    if (notPinned) {
+        ensureIndexVisible(beans, rowIndex);
+    }
+
+    ensureColumnVisible(beans, colKey);
+
+    editSvc?.startEditing(
+        {
+            rowNode,
+            column,
+        },
+        {
+            event: key ? new KeyboardEvent('keydown', { key }) : undefined,
+            source: 'api',
+            editable: true,
+        }
+    );
 }
+
+export function validateEdit(beans: BeanCollection): ICellEditorValidationError[] | null {
+    _flushEditors(beans);
+    return _validateEdit(beans);
+}
+
+export const getEditValidationErrors: (beans: BeanCollection) => ICellEditorValidationError[] | null =
+    _readEditValidationErrors;
 
 export function getCurrentUndoSize(beans: BeanCollection): number {
     return beans.undoRedo?.getCurrentUndoStackSize() ?? 0;

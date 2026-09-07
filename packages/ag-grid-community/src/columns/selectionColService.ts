@@ -1,28 +1,17 @@
 import type { NamedBean } from '../context/bean';
-import { BeanStub } from '../context/beanStub';
-import { AgColumn } from '../entities/agColumn';
-import type { AgColumnGroup } from '../entities/agColumnGroup';
-import type { ColDef } from '../entities/colDef';
+import type { ColKind } from '../entities/agColumn';
+import type { ColDef, SortComparatorFn } from '../entities/colDef';
 import type { GridOptions } from '../entities/gridOptions';
 import type { ColumnEventType } from '../events';
+import type { PropertyValueChangedEvent } from '../gridOptionsService';
 import { _getCheckboxLocation, _getCheckboxes, _getHeaderCheckbox, _isRowSelection } from '../gridOptionsUtils';
-import type { ColKey, ColumnCollections } from './columnModel';
-import { _applyColumnState, _getColumnState } from './columnStateUtils';
-import {
-    _areColIdsEqual,
-    _columnsMatch,
-    _convertColumnEventSourceType,
-    _destroyColumnTree,
-    _updateColsMap,
-    isColumnSelectionCol,
-} from './columnUtils';
+import { BaseSingleColService } from './baseSingleColService';
+import { SELECTION_COLUMN_ID, _convertColumnEventSourceType } from './columnUtils';
 
-export const CONTROLS_COLUMN_ID_PREFIX = 'ag-Grid-SelectionColumn' as const;
-
-export class SelectionColService extends BeanStub implements NamedBean {
+export class SelectionColService extends BaseSingleColService implements NamedBean {
     beanName = 'selectionColSvc' as const;
 
-    public selectionCols: ColumnCollections | null;
+    protected readonly colKind: ColKind = 'selection';
 
     public postConstruct(): void {
         this.addManagedPropertyListener('rowSelection', (event) => {
@@ -32,72 +21,22 @@ export class SelectionColService extends BeanStub implements NamedBean {
                 _convertColumnEventSourceType(event.source)
             );
         });
+
+        this.addManagedPropertyListener('selectionColumnDef', this.updateColumns.bind(this));
     }
 
-    public addSelectionCols(cols: ColumnCollections): void {
-        const selectionCols = this.selectionCols;
-        if (selectionCols == null) {
-            return;
-        }
-        cols.list = selectionCols.list.concat(cols.list);
-        cols.tree = selectionCols.tree.concat(cols.tree);
-        _updateColsMap(cols);
+    public updateColumns(event: PropertyValueChangedEvent<'selectionColumnDef'>): void {
+        this.refreshColDef(_convertColumnEventSourceType(event.source));
     }
 
-    public createSelectionCols(
-        cols: ColumnCollections,
-        updateOrders: (callback: (cols: AgColumn[] | null) => AgColumn[] | null) => void
-    ): void {
-        const destroyCollection = () => {
-            _destroyColumnTree(this.beans, this.selectionCols?.tree);
-            this.selectionCols = null;
-        };
-
-        // the new tree dept will equal the current tree dept of cols
-        const newTreeDepth = cols.treeDepth;
-        const oldTreeDepth = this.selectionCols?.treeDepth ?? -1;
-        const treeDeptSame = oldTreeDepth == newTreeDepth;
-
-        const list = this.generateSelectionCols();
-        const areSame = _areColIdsEqual(list, this.selectionCols?.list ?? []);
-
-        if (areSame && treeDeptSame) {
-            return;
-        }
-
-        destroyCollection();
-        const { colGroupSvc } = this.beans;
-        const treeDepth = colGroupSvc?.findDepth(cols.tree) ?? 0;
-        const tree = colGroupSvc?.balanceTreeForAutoCols(list, treeDepth) ?? [];
-        this.selectionCols = {
-            list,
-            tree,
-            treeDepth,
-            map: {},
-        };
-
-        const putSelectionColsFirstInList = (cols?: AgColumn[] | null): AgColumn[] | null => {
-            if (!cols) {
-                return null;
-            }
-            // we use colId, and not instance, to remove old selectionCols
-            const colsFiltered = cols.filter((col) => !isColumnSelectionCol(col));
-            return [...list, ...colsFiltered];
-        };
-
-        updateOrders(putSelectionColsFirstInList);
-    }
-
-    public isSelectionColumnEnabled(): boolean {
+    public isEnabled(): boolean {
         const { gos, beans } = this;
         const rowSelection = gos.get('rowSelection');
         if (typeof rowSelection !== 'object' || !_isRowSelection(gos)) {
             return false;
         }
 
-        const hasAutoCols = (beans.autoColSvc?.getAutoCols()?.length ?? 0) > 0;
-
-        if (rowSelection.checkboxLocation === 'autoGroupColumn' && hasAutoCols) {
+        if (rowSelection.checkboxLocation === 'autoGroupColumn' && !!beans.autoColSvc?.columns.length) {
             return false;
         }
 
@@ -107,15 +46,15 @@ export class SelectionColService extends BeanStub implements NamedBean {
         return checkboxes || headerCheckbox;
     }
 
-    private generateSelectionCols(): AgColumn[] {
-        if (!this.isSelectionColumnEnabled()) {
-            return [];
-        }
-
-        const { gos, validation } = this.beans;
+    protected createColDef(): ColDef {
+        const { gos } = this;
         const selectionColumnDef = gos.get('selectionColumnDef');
         const enableRTL = gos.get('enableRtl');
-        const colDef: ColDef = {
+
+        // We don't support row spanning in the selection column
+        const { rowSpan: _, spanRows: __, ...filteredSelColDef } = (selectionColumnDef ?? {}) as ColDef;
+
+        return {
             // overridable properties
             width: 50,
             resizable: false,
@@ -123,40 +62,17 @@ export class SelectionColService extends BeanStub implements NamedBean {
             sortable: false,
             suppressMovable: true,
             lockPosition: enableRTL ? 'right' : 'left',
-            comparator(valueA, valueB, nodeA, nodeB) {
-                const aSelected = nodeA.isSelected();
-                const bSelected = nodeB.isSelected();
-                return aSelected === bSelected ? 0 : aSelected ? 1 : -1;
-            },
+            comparator: selectionComparator,
             editable: false,
             suppressFillHandle: true,
+            suppressAutoSize: true,
+            pinned: null,
             // overrides
-            ...selectionColumnDef,
+            ...filteredSelColDef,
             // non-overridable properties
-            colId: CONTROLS_COLUMN_ID_PREFIX,
+            colId: SELECTION_COLUMN_ID,
+            chartDataType: 'excluded',
         };
-        const colId = colDef.colId!;
-        validation?.validateColDef(colDef, colId, true);
-        const col = new AgColumn(colDef, null, colId, false);
-        this.createBean(col);
-        return [col];
-    }
-
-    public putSelectionColsFirstInList(list: AgColumn[], cols?: AgColumn[] | null): AgColumn[] | null {
-        if (!cols) {
-            return null;
-        }
-        // we use colId, and not instance, to remove old selectionCols
-        const colsFiltered = cols.filter((col) => !isColumnSelectionCol(col));
-        return [...list, ...colsFiltered];
-    }
-
-    public getSelectionCol(key: ColKey): AgColumn | null {
-        return this.selectionCols?.list.find((col) => _columnsMatch(col, key)) ?? null;
-    }
-
-    public getSelectionCols(): AgColumn[] | null {
-        return this.selectionCols?.list ?? null;
     }
 
     private onSelectionOptionsChanged(
@@ -180,69 +96,10 @@ export class SelectionColService extends BeanStub implements NamedBean {
             this.beans.colModel.refreshAll(source);
         }
     }
-
-    public override destroy(): void {
-        _destroyColumnTree(this.beans, this.selectionCols?.tree);
-        super.destroy();
-    }
-
-    public refreshVisibility(source: ColumnEventType): void {
-        if (!this.isSelectionColumnEnabled()) {
-            return;
-        }
-
-        const beans = this.beans;
-        const visibleColumns = beans.visibleCols.getAllTrees() ?? [];
-
-        if (visibleColumns.length === 0) {
-            return;
-        }
-
-        // check first: one or more columns showing -- none are selection column
-        if (!visibleColumns.some(isLeafColumnSelectionCol)) {
-            const existingState = _getColumnState(beans).find((state) => isColumnSelectionCol(state.colId));
-
-            if (existingState) {
-                _applyColumnState(
-                    beans,
-                    {
-                        state: [{ colId: existingState.colId, hide: !existingState.hide }],
-                    },
-                    source
-                );
-            }
-        }
-
-        // lastly, check only one column showing -- selection column
-        if (visibleColumns.length === 1) {
-            const firstColumn = visibleColumns[0];
-            const leafSelectionCol = getLeafColumnSelectionCol(firstColumn);
-
-            if (!leafSelectionCol) {
-                return;
-            }
-
-            _applyColumnState(beans, { state: [{ colId: leafSelectionCol.getColId(), hide: true }] }, source);
-        }
-    }
 }
 
-const isLeafColumnSelectionCol = (c: AgColumn | AgColumnGroup): boolean =>
-    c.isColumn ? isColumnSelectionCol(c) : c.getChildren()?.some(isLeafColumnSelectionCol) ?? false;
-
-function getLeafColumnSelectionCol(c: AgColumn | AgColumnGroup): AgColumn | null {
-    if (c.isColumn) {
-        return isColumnSelectionCol(c) ? c : null;
-    }
-
-    const children = c.getChildren() ?? [];
-
-    for (const child of children) {
-        const selCol = getLeafColumnSelectionCol(child);
-        if (selCol) {
-            return selCol;
-        }
-    }
-
-    return null;
-}
+const selectionComparator: SortComparatorFn = (_valueA, _valueB, nodeA, nodeB) => {
+    const aSelected = nodeA.isSelected();
+    const bSelected = nodeB.isSelected();
+    return aSelected === bSelected ? 0 : aSelected ? 1 : -1;
+};

@@ -1,36 +1,22 @@
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
 import type { ChartTranslationKey } from '../../../../services/chartTranslationService';
-import type { ThemeTemplateParameters } from '../../miniChartsContainer';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { stackData } from '../miniChartHelpers';
-import { MiniArea } from './miniArea';
+import { MiniAreaClass, miniAreaData } from './miniArea';
 
-export class MiniStackedArea extends MiniArea {
-    static override chartType: ChartType = 'stackedArea';
-    static override readonly data = stackData(MiniArea.data);
+export const miniStackedAreaData = stackData(miniAreaData);
 
+export class MiniStackedAreaClass extends MiniAreaClass {
     constructor(
         container: HTMLElement,
         agChartsExports: AgChartsExports,
         fills: string[],
         strokes: string[],
-        _themeTemplateParameters: ThemeTemplateParameters,
         _isCustomTheme: boolean,
-        data: number[][] = MiniStackedArea.data,
+        data: number[][] = miniStackedAreaData,
         tooltipName: ChartTranslationKey = 'stackedAreaTooltip'
     ) {
-        super(
-            container,
-            agChartsExports,
-            fills,
-            strokes,
-            _themeTemplateParameters,
-            _isCustomTheme,
-            data,
-            tooltipName,
-            true
-        );
+        super(container, agChartsExports, fills, strokes, _isCustomTheme, data, tooltipName, true);
     }
 
     override updateColors(fills: string[], strokes: string[]) {
@@ -40,3 +26,8 @@ export class MiniStackedArea extends MiniArea {
         });
     }
 }
+
+export const MiniStackedArea: MiniChartSelector = {
+    chartType: 'stackedArea',
+    miniChart: MiniStackedAreaClass,
+};

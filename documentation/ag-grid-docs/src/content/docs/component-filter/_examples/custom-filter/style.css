@@ -1,5 +1,5 @@
 .person-filter {
-    padding: 4px;
+    padding: 12px;
     width: 200px;
 }
 
@@ -9,20 +9,4 @@
 
 .person-filter > div:not(:last-child) {
     margin-bottom: 8px;
-}
-
-.year-filter {
-    width: 200px;
-}
-
-.year-filter > * {
-    margin: 8px;
-}
-
-.year-filter > div:first-child {
-    font-weight: bold;
-}
-
-.year-filter > label {
-    display: inline-block;
 }

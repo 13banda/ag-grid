@@ -1,12 +1,27 @@
+import { RefPlaceholder, _getScrollLeft, _isVisible, _setFixedHeight, _setFixedWidth, _setScrollLeft } from 'ag-stack';
+
 import type { VisibleColsService } from '../columns/visibleColsService';
 import type { BeanCollection } from '../context/context';
-import { _getScrollLeft, _isVisible, _setFixedHeight, _setFixedWidth, _setScrollLeft } from '../utils/dom';
+import type { ElementParams } from '../utils/element';
 import type { ComponentSelector } from '../widgets/component';
-import { RefPlaceholder } from '../widgets/component';
-import { AbstractFakeScrollComp } from './abstractFakeScrollComp';
-import { CenterWidthFeature } from './centerWidthFeature';
+import { AbstractFakeScrollComp, INVISIBLE_SCROLLBAR_SIZE } from './abstractFakeScrollComp';
 import type { ScrollVisibleService } from './scrollVisibleService';
 
+const FakeHScrollElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-body-horizontal-scroll',
+    attrs: { 'aria-hidden': 'true' },
+    children: [
+        {
+            tag: 'div',
+            ref: 'eViewport',
+            cls: 'ag-body-horizontal-scroll-viewport',
+            children: [{ tag: 'div', ref: 'eContainer', cls: 'ag-body-horizontal-scroll-container' }],
+        },
+        { tag: 'div', ref: 'eEndSpacer', cls: 'ag-body-horizontal-scroll-end-spacer' },
+    ],
+};
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class FakeHScrollComp extends AbstractFakeScrollComp {
     private visibleCols: VisibleColsService;
     private scrollVisibleSvc: ScrollVisibleService;
@@ -16,40 +31,32 @@ export class FakeHScrollComp extends AbstractFakeScrollComp {
         this.scrollVisibleSvc = beans.scrollVisibleSvc;
     }
 
-    private readonly eLeftSpacer: HTMLElement = RefPlaceholder;
-    private readonly eRightSpacer: HTMLElement = RefPlaceholder;
-
     private enableRtl: boolean;
+    private readonly eEndSpacer: HTMLElement = RefPlaceholder;
 
     constructor() {
-        super(
-            /* html */ `<div class="ag-body-horizontal-scroll" aria-hidden="true">
-            <div class="ag-horizontal-left-spacer" data-ref="eLeftSpacer"></div>
-            <div class="ag-body-horizontal-scroll-viewport" data-ref="eViewport">
-                <div class="ag-body-horizontal-scroll-container" data-ref="eContainer"></div>
-            </div>
-            <div class="ag-horizontal-right-spacer" data-ref="eRightSpacer"></div>
-        </div>`,
-            'horizontal'
-        );
+        super(FakeHScrollElement, 'horizontal');
     }
 
     public override postConstruct(): void {
         super.postConstruct();
 
-        // When doing printing, this changes whether cols are pinned or not
-        const spacerWidthsListener = this.setFakeHScrollSpacerWidths.bind(this);
+        const widthListener = this.setContainerWidth.bind(this);
 
         this.addManagedEventListeners({
-            displayedColumnsChanged: spacerWidthsListener,
-            displayedColumnsWidthChanged: spacerWidthsListener,
+            displayedColumnsChanged: widthListener,
+            displayedColumnsWidthChanged: widthListener,
+            leftPinnedWidthChanged: widthListener,
+            rightPinnedWidthChanged: widthListener,
+            gridSizeChanged: widthListener,
+            scrollVisibilityChanged: widthListener,
             pinnedRowDataChanged: this.refreshCompBottom.bind(this),
         });
 
-        this.addManagedPropertyListener('domLayout', spacerWidthsListener);
+        this.addManagedPropertyListener('domLayout', widthListener);
 
         this.beans.ctrlsSvc.register('fakeHScrollComp', this);
-        this.createManagedBean(new CenterWidthFeature((width) => (this.eContainer.style.width = `${width}px`)));
+        this.setContainerWidth();
 
         this.addManagedPropertyListeners(['suppressHorizontalScroll'], this.onScrollVisibilityChanged.bind(this));
     }
@@ -81,59 +88,53 @@ export class FakeHScrollComp extends AbstractFakeScrollComp {
         this.getGui().style.bottom = `${bottomPinnedHeight}px`;
     }
 
-    protected override onScrollVisibilityChanged(): void {
-        super.onScrollVisibilityChanged();
-        this.setFakeHScrollSpacerWidths();
-    }
-
-    private setFakeHScrollSpacerWidths(): void {
-        const vScrollShowing = this.scrollVisibleSvc.verticalScrollShowing;
-
-        // we pad the right based on a) if cols are pinned to the right and
-        // b) if v scroll is showing on the right (normal position of scroll)
-        let rightSpacing = this.visibleCols.getDisplayedColumnsRightWidth();
-        const scrollOnRight = !this.enableRtl && vScrollShowing;
-        const scrollbarWidth = this.scrollVisibleSvc.getScrollbarWidth();
-
-        if (scrollOnRight) {
-            rightSpacing += scrollbarWidth;
-        }
-        _setFixedWidth(this.eRightSpacer, rightSpacing);
-        this.eRightSpacer.classList.toggle('ag-scroller-corner', rightSpacing <= scrollbarWidth);
-
-        // we pad the left based on a) if cols are pinned to the left and
-        // b) if v scroll is showing on the left (happens in LTR layout only)
-        let leftSpacing = this.visibleCols.getColsLeftWidth();
-        const scrollOnLeft = this.enableRtl && vScrollShowing;
-
-        if (scrollOnLeft) {
-            leftSpacing += scrollbarWidth;
-        }
-
-        _setFixedWidth(this.eLeftSpacer, leftSpacing);
-        this.eLeftSpacer.classList.toggle('ag-scroller-corner', leftSpacing <= scrollbarWidth);
+    private setContainerWidth(): void {
+        const gridBodyCtrl = this.beans.ctrlsSvc.getGridBodyCtrl();
+        const width = gridBodyCtrl
+            ? gridBodyCtrl.getHorizontalContentWidth()
+            : this.visibleCols.bodyWidth +
+              this.visibleCols.getLeftStickyColumnContainerWidth() +
+              this.visibleCols.getRightStickyColumnContainerWidth();
+        this.eContainer.style.width = `${Math.max(width, 1)}px`;
     }
 
     private setScrollVisibleDebounce = 0;
 
     protected setScrollVisible(): void {
+        this.enableRtl = this.gos.get('enableRtl');
         const hScrollShowing = this.scrollVisibleSvc.horizontalScrollShowing;
         const invisibleScrollbar = this.invisibleScrollbar;
         const isSuppressHorizontalScroll = this.gos.get('suppressHorizontalScroll');
         const scrollbarWidth = hScrollShowing ? this.scrollVisibleSvc.getScrollbarWidth() || 0 : 0;
-        const adjustedScrollbarWidth = scrollbarWidth === 0 && invisibleScrollbar ? 16 : scrollbarWidth;
+        const adjustedScrollbarWidth =
+            scrollbarWidth === 0 && invisibleScrollbar ? INVISIBLE_SCROLLBAR_SIZE : scrollbarWidth;
         const scrollContainerSize = !isSuppressHorizontalScroll ? adjustedScrollbarWidth : 0;
 
         // Avoid scrollbars flickering on as we resize the grid. Before showing
         // a scrollbar, give a little time for the grid to resize, after which a
         // scrollbar may no longer be required
         const apply = () => {
+            if (!this.isAlive()) {
+                return;
+            }
             this.setScrollVisibleDebounce = 0;
-            this.addOrRemoveCssClass('ag-scrollbar-invisible', invisibleScrollbar);
+            this.toggleCss('ag-scrollbar-invisible', invisibleScrollbar);
             _setFixedHeight(this.getGui(), scrollContainerSize);
             _setFixedHeight(this.eViewport, scrollContainerSize);
             _setFixedHeight(this.eContainer, scrollContainerSize);
-            this.setDisplayed(hScrollShowing, { skipAriaHidden: true });
+            _setFixedHeight(this.eEndSpacer, scrollContainerSize);
+            const verticalScrollbarWidth = this.getVerticalSpacerWidth();
+            _setFixedWidth(this.eEndSpacer, verticalScrollbarWidth);
+            this.eEndSpacer.style.display = verticalScrollbarWidth > 0 ? '' : 'none';
+            this.eViewport.style.width =
+                verticalScrollbarWidth > 0 ? `calc(100% - ${verticalScrollbarWidth}px)` : '100%';
+
+            if (!scrollContainerSize) {
+                // the container needs a min-height of 1px to be
+                // able to sync scroll position while hidden
+                this.eContainer.style.setProperty('min-height', '1px');
+            }
+            this.setVisible(hScrollShowing, { skipAriaHidden: true });
         };
         window.clearTimeout(this.setScrollVisibleDebounce);
         if (!hScrollShowing) {
@@ -141,6 +142,24 @@ export class FakeHScrollComp extends AbstractFakeScrollComp {
         } else {
             this.setScrollVisibleDebounce = window.setTimeout(apply, 100);
         }
+    }
+
+    private getVerticalSpacerWidth(): number {
+        const gridBodyCtrl = this.beans.ctrlsSvc.getGridBodyCtrl();
+        if (gridBodyCtrl) {
+            return gridBodyCtrl.getVerticalScrollbarWidth();
+        }
+
+        const scrollVisibleSvc = this.scrollVisibleSvc;
+        if (!scrollVisibleSvc.verticalScrollShowing) {
+            return 0;
+        }
+
+        const scrollbarWidth = scrollVisibleSvc.getScrollbarWidth() || 0;
+        if (scrollbarWidth > 0) {
+            return scrollbarWidth;
+        }
+        return this.invisibleScrollbar ? 16 : 0;
     }
 
     public getScrollPosition(): number {

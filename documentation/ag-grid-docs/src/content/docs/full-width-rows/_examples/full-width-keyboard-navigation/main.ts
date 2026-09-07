@@ -3,14 +3,19 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 import { FullWidthCellRenderer } from './fullWidthCellRenderer_typescript';
 
-ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextFilterModule, ClientSideRowModelModule]);
 
 const GRID_CELL_CLASSNAME = 'ag-full-width-row';
 

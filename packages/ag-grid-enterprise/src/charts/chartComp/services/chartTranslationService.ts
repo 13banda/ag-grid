@@ -3,7 +3,7 @@ import { BeanStub } from 'ag-grid-community';
 
 export type ChartTranslationKey = keyof typeof DEFAULT_CHART_TRANSLATIONS;
 
-export const DEFAULT_CHART_TRANSLATIONS = {
+const DEFAULT_CHART_TRANSLATIONS = {
     pivotChartTitle: 'Pivot Chart',
     rangeChartTitle: 'Range Chart',
     settings: 'Chart',
@@ -214,7 +214,6 @@ export const DEFAULT_CHART_TRANSLATIONS = {
     stackedSeriesGroupType: 'Stacked',
     normalizedSeriesGroupType: '100% Stacked',
     legendEnabled: 'Enabled',
-    invalidColor: 'Color value is invalid',
     groupedColumnFull: 'Grouped Column',
     stackedColumnFull: 'Stacked Column',
     normalizedColumnFull: '100% Stacked Column',
@@ -226,6 +225,20 @@ export const DEFAULT_CHART_TRANSLATIONS = {
     stackedLineFull: 'Stacked Line',
     normalizedLineFull: '100% Stacked Line',
     customCombo: 'Custom Combination',
+    funnel: 'Funnel',
+    coneFunnel: 'Cone Funnel',
+    pyramid: 'Pyramid',
+    funnelGroup: 'Funnel',
+    funnelTooltip: 'Funnel',
+    coneFunnelTooltip: 'Cone Funnel',
+    pyramidTooltip: 'Pyramid',
+    dropOff: 'Drop-Off',
+    stageLabels: 'Stage Labels',
+    reverse: 'Reverse',
+    tooltipMode: 'Tooltip Mode',
+    tooltipModeSingle: 'Single',
+    tooltipModeShared: 'Multiple',
+    tooltipModeCompact: 'Compact',
 
     // menu items
     groupedColumn: 'Grouped',

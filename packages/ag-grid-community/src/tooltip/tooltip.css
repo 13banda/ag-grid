@@ -6,11 +6,27 @@
     border: var(--ag-tooltip-border);
     border-radius: var(--ag-border-radius);
     white-space: normal;
+
+    /* break long words so the tooltip stays within its constrained width. */
+    overflow-wrap: break-word;
+
+    /* tooltips must sit above all in-grid layers and popups. */
     z-index: 99999;
+
+    &:where(.ag-cell-editor-tooltip),
+    &:where(.ag-cell-formula-tooltip),
+    &:where(.ag-calculated-column-expression-tooltip) {
+        background-color: var(--ag-tooltip-error-background-color);
+        color: var(--ag-tooltip-error-text-color);
+        border: var(--ag-tooltip-error-border);
+        font-weight: 500;
+    }
 }
 
 .ag-tooltip-custom {
     position: absolute;
+
+    /* custom tooltips share the same top-most layer as built-in tooltips. */
     z-index: 99999;
 }
 

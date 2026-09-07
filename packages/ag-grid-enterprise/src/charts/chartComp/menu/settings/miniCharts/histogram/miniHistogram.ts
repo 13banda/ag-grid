@@ -1,13 +1,10 @@
 import type { Rect } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
-export class MiniHistogram extends MiniChartWithAxes {
-    static chartType: ChartType = 'histogram';
-
+export class MiniHistogramClass extends MiniChartWithAxes {
     private readonly bars: Rect[];
 
     constructor(container: HTMLElement, agChartsExports: AgChartsExports, fills: string[], strokes: string[]) {
@@ -54,9 +51,14 @@ export class MiniHistogram extends MiniChartWithAxes {
     }
 
     updateColors([fill]: string[], [stroke]: string[]) {
-        this.bars.forEach((bar) => {
+        for (const bar of this.bars) {
             bar.fill = fill;
             bar.stroke = stroke;
-        });
+        }
     }
 }
+
+export const MiniHistogram: MiniChartSelector = {
+    chartType: 'histogram',
+    miniChart: MiniHistogramClass,
+};

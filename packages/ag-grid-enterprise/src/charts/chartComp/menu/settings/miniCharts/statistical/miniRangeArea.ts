@@ -1,13 +1,10 @@
 import type { Path } from 'ag-charts-types/scene';
 
-import type { ChartType } from 'ag-grid-community';
-
 import type { AgChartsExports } from '../../../../../agChartsExports';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
-export class MiniRangeArea extends MiniChartWithAxes {
-    static chartType: ChartType = 'rangeArea';
-
+export class MiniRangeAreaClass extends MiniChartWithAxes {
     private readonly lines: Path[][];
     private readonly areas: Path[];
 
@@ -145,8 +142,12 @@ function zigzag(options: { offset: number; length: number; pattern: ZigzagPatter
     // Ensure the first and last points are clamped to the start and end of the range
     const xMin = 0;
     const xMax = length;
-    if (points.length === 0 || points[0][0] !== xMin) points.unshift(getZigzagPoint(xMin, offset, pattern));
-    if (points[points.length - 1][0] !== xMax) points.push(getZigzagPoint(xMax, offset, pattern));
+    if (points.length === 0 || points[0][0] !== xMin) {
+        points.unshift(getZigzagPoint(xMin, offset, pattern));
+    }
+    if (points[points.length - 1][0] !== xMax) {
+        points.push(getZigzagPoint(xMax, offset, pattern));
+    }
 
     return points;
 
@@ -194,3 +195,8 @@ function swapArrayItems<T>(items: T[], leftIndex: number, rightIndex: number): T
     results[rightIndex] = temp;
     return results;
 }
+
+export const MiniRangeArea: MiniChartSelector = {
+    chartType: 'rangeArea',
+    miniChart: MiniRangeAreaClass,
+};

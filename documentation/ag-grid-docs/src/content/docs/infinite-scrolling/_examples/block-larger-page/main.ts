@@ -13,12 +13,17 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     PaginationModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, SetFilterModule } from 'ag-grid-enterprise';
 
 import { countries } from './countries';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     PaginationModule,
@@ -28,7 +33,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const filterParams = { values: countries() };

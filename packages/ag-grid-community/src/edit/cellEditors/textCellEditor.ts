@@ -1,39 +1,92 @@
-import { _exists } from '../../utils/generic';
-import type { AgInputTextField } from '../../widgets/agInputTextField';
-import { AgInputTextFieldSelector } from '../../widgets/agInputTextField';
+import type { LocaleTextFunc } from 'ag-stack';
+import { _exists, _isBrowserSafari, _isStringLargerThan } from 'ag-stack';
+
+import { AgInputTextFieldSelector } from '../../agWidgets/agInputTextField';
+import type { ElementParams } from '../../utils/element';
+import type { GridInputTextField } from '../../widgets/gridWidgetTypes';
 import type { CellEditorInput } from './iCellEditorInput';
 import type { ITextCellEditorParams } from './iTextCellEditor';
 import { SimpleCellEditor } from './simpleCellEditor';
 
-class TextCellEditorInput<TValue = any>
-    implements CellEditorInput<TValue, ITextCellEditorParams<any, TValue>, AgInputTextField>
-{
-    private eInput: AgInputTextField;
+const TextCellEditorElement: ElementParams = {
+    tag: 'ag-input-text-field',
+    ref: 'eEditor',
+    cls: 'ag-cell-editor',
+};
+class TextCellEditorInput<TValue = any> implements CellEditorInput<
+    TValue,
+    ITextCellEditorParams<any, TValue>,
+    GridInputTextField
+> {
+    private eEditor: GridInputTextField;
     private params: ITextCellEditorParams<any, TValue>;
+    /** Last raw input passed to `params.parseValue`. Initialised to `this` as an "uncached" sentinel — a DOM raw value can never equal the editor instance, so the first cache check always misses. */
+    private cachedRaw: unknown = this;
+    /** Memoised parse result for `cachedRaw`. Returned by `getValue()` when the raw input is unchanged across repeated validation/sync passes within an edit session. */
+    private cachedParsed: TValue | null | undefined;
 
-    public getTemplate() {
-        return /* html */ `<ag-input-text-field class="ag-cell-editor" data-ref="eInput"></ag-input-text-field>`;
+    constructor(private readonly getLocaleTextFunc: () => LocaleTextFunc) {}
+
+    public getTemplate(): ElementParams {
+        return TextCellEditorElement;
     }
+
     public getAgComponents() {
         return [AgInputTextFieldSelector];
     }
 
-    public init(eInput: AgInputTextField, params: ITextCellEditorParams<any, TValue>): void {
-        this.eInput = eInput;
+    public init(eEditor: GridInputTextField, params: ITextCellEditorParams<any, TValue>): void {
+        this.eEditor = eEditor;
         this.params = params;
-        const maxLength = params.maxLength;
+
+        const { maxLength, browserAutoComplete } = params;
+
+        eEditor.setAutoComplete(browserAutoComplete);
+
         if (maxLength != null) {
-            eInput.setMaxLength(maxLength);
+            eEditor.setMaxLength(maxLength);
         }
     }
 
+    public getValidationErrors(): string[] | null {
+        const { params } = this;
+        const { maxLength, getValidationErrors } = params;
+        const value = this.getValue();
+
+        const translate = this.getLocaleTextFunc();
+
+        let internalErrors: string[] | null = [];
+
+        if (maxLength != null && _isStringLargerThan(value, maxLength)) {
+            internalErrors.push(
+                translate('maxLengthValidation', `Must be ${maxLength} characters or fewer.`, [String(maxLength)])
+            );
+        }
+
+        if (!internalErrors.length) {
+            internalErrors = null;
+        }
+
+        if (getValidationErrors) {
+            return getValidationErrors({ value, cellEditorParams: params, internalErrors });
+        }
+
+        return internalErrors;
+    }
+
     public getValue(): TValue | null | undefined {
-        const { eInput, params } = this;
-        const value = eInput.getValue();
+        const { eEditor, params } = this;
+        const value = eEditor.getValue();
         if (!_exists(value) && !_exists(params.value)) {
             return params.value;
         }
-        return params.parseValue(value!);
+        if (Object.is(this.cachedRaw, value)) {
+            return this.cachedParsed;
+        }
+        const parsed = params.parseValue(value!);
+        this.cachedRaw = value;
+        this.cachedParsed = parsed;
+        return parsed;
     }
 
     public getStartValue(): string | null | undefined {
@@ -43,11 +96,18 @@ class TextCellEditorInput<TValue = any>
     }
 
     public setCaret(): void {
+        if (_isBrowserSafari()) {
+            // If not safari, input is already focused.
+            // For safari we need to focus only for this use case to avoid AG-3238,
+            // but still ensure the input has focus.
+            this.eEditor.getInputElement().focus({ preventScroll: true });
+        }
+
         // when we started editing, we want the caret at the end, not the start.
         // this comes into play in two scenarios:
         //   a) when user hits F2
         //   b) when user hits a printable character
-        const eInput = this.eInput;
+        const eInput = this.eEditor;
         const value = eInput.getValue();
         const len = (_exists(value) && value.length) || 0;
 
@@ -57,8 +117,8 @@ class TextCellEditorInput<TValue = any>
     }
 }
 
-export class TextCellEditor extends SimpleCellEditor<any, ITextCellEditorParams, AgInputTextField> {
+export class TextCellEditor extends SimpleCellEditor<any, ITextCellEditorParams, GridInputTextField> {
     constructor() {
-        super(new TextCellEditorInput());
+        super(new TextCellEditorInput(() => this.getLocaleTextFunc()));
     }
 }

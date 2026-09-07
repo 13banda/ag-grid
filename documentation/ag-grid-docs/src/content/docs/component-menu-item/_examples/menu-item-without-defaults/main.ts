@@ -4,8 +4,8 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     CellSelectionModule,
@@ -17,6 +17,11 @@ import {
 
 import { MenuItem } from './menuItem_typescript';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     TextFilterModule,
     NumberFilterModule,
@@ -26,7 +31,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     CellSelectionModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
@@ -49,7 +53,6 @@ const gridOptions: GridOptions<IOlympicData> = {
         suppressHeaderFilterButton: true,
     },
     columnDefs: columnDefs,
-    rowData: null,
     getMainMenuItems: (params: GetMainMenuItemsParams) => {
         return [
             ...params.defaultItems.filter((item) => item !== 'columnFilter'),

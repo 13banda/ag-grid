@@ -6,10 +6,15 @@ enterprise: true
 Cross-filtering charts allow users to interact with data in an easy and intuitive way. Clicking on chart elements
 automatically filters values in both the grid and other cross-filter charts.
 
+{% warning %}
+Cross-filtering in AG Grid is no longer being actively developed. For interactive dashboards and a more powerful cross-filtering experience, check out our purpose-built dashboarding tool [AG Studio](https://www.ag-grid.com/studio/javascript/filters/#cross-filtering).
+{% /warning %}
+
 {% gif imagePath="resources/cross-filtering.gif" alt="Cross Filtering" /%}
 
 This built-in feature of integrated charts is particularly useful for creating interactive reports and dashboards.
-## Creating cross-filter charts
+
+## Creating Cross-filter Charts
 
 Cross-Filter charts are created programmatically using `createCrossFilterChart(params)` on the grid's API.
 
@@ -46,9 +51,9 @@ Cross-filtering Charts only support Client-Side Row Model. Grid filtering needs 
 
 The following example shows how to create a simple cross-filtering pie chart. Note the following:
 
-* **Click** on a sector of the pie chart to filter rows in the grid by the selected sales rep.
-* **Ctrl (Cmd) Click** on another sector to additionally adds rows corresponding to the selected sales rep.
-* **Click Chart Background** to remove / reset the filtering in the grid to restore all rows in the grid.
+- **Click** on a sector of the pie chart to filter rows in the grid by the selected sales rep.
+- **Ctrl (Cmd) Click** on another sector to additionally adds rows corresponding to the selected sales rep.
+- **Click Chart Background** to remove / reset the filtering in the grid to restore all rows in the grid.
 
 {% gridExampleRunner title="Simple Cross-Filter" name="simple-cross-filter"  exampleHeight=680 /%}
 
@@ -79,6 +84,12 @@ The following examples show the different chart types that support cross-filteri
 
 {% gridExampleRunner title="Most Populous Cities" name="most-populous-cities"  exampleHeight=1000 /%}
 
-## Next Up
+### Example: Custom Theme
 
-Continue to the next section to learn about [Chart Types](./integrated-charts-chart-types/).
+In this example, we use a custom theme to style the charts using `customChartTheme` and `chartTheme`. See the [Custom Chart Themes](./integrated-charts-customisation/#custom-chart-themes) section for more information.
+
+{% note %}
+Note that for cosmetic changes in cross-filtering charts, you must use a custom theme. Cross-filtering charts rely on a theme to derive filtered value colours from existing theme colours. Specifying your own colours in the theme overrides will disable this behaviour.
+{% /note %}
+
+{% gridExampleRunner title="Custom Theme" name="custom-theme"  exampleHeight=1000 /%}

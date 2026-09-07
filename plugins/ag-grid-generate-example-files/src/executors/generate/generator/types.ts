@@ -12,10 +12,14 @@ export interface ExampleConfig {
     noStyle?: boolean;
     licenseKey?: boolean;
     supportedFrameworks?: InternalFramework[];
+    vue3VModel?: boolean;
+    hideConsoleLogger?: boolean;
     /**
      * Example uses `#myGrid`, which needs to be generated in framework examples
      */
     myGridReference?: boolean;
+
+    usesWebWorker?: boolean;
 }
 
 export interface BindingImport {
@@ -44,6 +48,7 @@ export interface ExternalEventHandlers {
 export interface DataCallback {
     url: string;
     callback: string;
+    totalRows?: number;
 }
 export interface Property {
     name: string;
@@ -89,14 +94,25 @@ export interface ParsedBindings {
 
 export interface GeneratedContents extends ExampleConfig {
     isEnterprise: boolean;
-    isIntegratedCharts: boolean;
+    isIntegratedCharts?: boolean;
+    isLocale?: boolean;
+    hasExampleConsoleLog?: boolean;
+    hasSimpleHtml?: boolean;
     entryFileName: string;
     mainFileName: string;
     files: FileContents;
+    sourceFileList: string[];
     scriptFiles: string[];
+    specFiles: string[];
     styleFiles: string[];
+    htmlFiles: string[];
     boilerPlateFiles: FileContents;
     packageJson: Record<string, any>;
+}
+
+// Make sure to update the Astro copy of this interface when making changes.
+export interface ExampleSubstitutions {
+    '${baseWWWUrl}': string;
 }
 
 export type InternalFramework = 'vanilla' | 'typescript' | 'reactFunctional' | 'reactFunctionalTs' | 'angular' | 'vue3';

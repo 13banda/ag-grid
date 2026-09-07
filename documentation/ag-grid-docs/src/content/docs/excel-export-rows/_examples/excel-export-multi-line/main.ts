@@ -6,12 +6,17 @@ import {
     ICellRendererParams,
     ModuleRegistry,
     RowAutoHeightModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule } from 'ag-grid-enterprise';
 
 import { MultilineCellRenderer } from './multilineCellRenderer_typescript';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     RowAutoHeightModule,
@@ -21,7 +26,6 @@ ModuleRegistry.registerModules([
     ExcelExportModule,
     ColumnMenuModule,
     ContextMenuModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [

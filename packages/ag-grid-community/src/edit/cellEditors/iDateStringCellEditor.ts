@@ -1,7 +1,8 @@
+import type { IAutoCompleteComponentParams } from '../../interfaces/iAutoComplete';
 import type { ICellEditorParams } from '../../interfaces/iCellEditor';
 
 export interface IDateStringCellEditorParams<TData = any, TContext = any>
-    extends ICellEditorParams<TData, string, TContext> {
+    extends ICellEditorParams<TData, string, TContext>, IAutoCompleteComponentParams {
     /** Min allowed value. Either `Date` object or string in format `'yyyy-mm-dd'`. */
     min?: string | Date;
     /** Max allowed value. Either `Date` object or string in format `'yyyy-mm-dd'`. */
@@ -13,4 +14,13 @@ export interface IDateStringCellEditorParams<TData = any, TContext = any>
      * Defaults to any value allowed.
      */
     step?: number;
+    /**
+     * Defines whether time should be included when editing dates.
+     *
+     * - `true`: Date and time will be editable.
+     * - `false`: Only date portion will be editable.
+     *
+     * @default false
+     */
+    includeTime?: boolean;
 }

@@ -19,7 +19,7 @@ const gridOptions = {
 }
 ```
 
-Columns can be also be configured under [Column Groups](./column-groups/), which present the columns under shared headers. These can be configured by adding a level of nesting to the column definition.
+Columns can also be configured under [Column Groups](./column-groups/), which present the columns under shared headers. These can be configured by adding a level of nesting to the column definition.
 
 ```{% frameworkTransform=true %}
 const gridOptions = {
@@ -38,7 +38,7 @@ const gridOptions = {
 
 ## Referencing Columns
 
-Columns can be updated via the `colDefs` grid option when a sufficient ID has been provided, or manipulated via the API with a Column Object.
+Columns can be updated via the `columnDefs` grid option when a sufficient ID has been provided, or manipulated via the API with a Column Object.
 
 ### Column IDs
 
@@ -48,14 +48,14 @@ It is recommended to provide an explicit `colId` for any column that will be ref
 
 In the example below, the column IDs are logged to the dev console. Note the following:
 
-* Col 1 uses the `field`.
-* Col 2 and 3 use the `colId`.
-* Col 4 and Col 5 have neither `colId` or `field` so the grid generates column IDs.
+- Col 1 uses the `field`.
+- Col 2 and 3 use the `colId`.
+- Col 4 and Col 5 have neither `colId` or `field` so the grid generates column IDs.
 
 {% gridExampleRunner title="Column IDs" name="column-ids" exampleHeight=300 /%}
 
 {% warning %}
-Column Ids should be unique across the grid. Where the provided `colId` or `field` are not unique, the grid will append `_n` where necessary (`n` being the first positive number that allows uniqueness). It is not recommend to rely on IDs generated with this behaviour.
+Column Ids should be unique across the grid. Where the provided `colId` or `field` are not unique, the grid will append `_n` where necessary (`n` being the first positive number that allows uniqueness). It is not recommended to rely on IDs generated with this behaviour.
 {% /warning %}
 
 ### Column Objects
@@ -68,6 +68,8 @@ Columns can be accessed via Grid API methods, and provided as parameters from so
 The [Column Reference](./column-object/) displays a list of functions available on the Column Object.
 
 It is also possible to listen for [Column Events](./column-events/) by attaching an [Event Listener](./column-object/#reference-events-addEventListener).
+
+Clicking on the `Log All Columns` and `Log All Column IDs` buttons will log the data to the developer console.
 
 {% gridExampleRunner title="Column Object" name="column-object" exampleHeight=321 /%}
 

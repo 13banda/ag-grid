@@ -1,18 +1,17 @@
-import type { ChartType } from 'ag-grid-community';
+import { _flatten } from 'ag-stack';
 
 import type { AgChartsExports } from '../../../../../agChartsExports';
 import type { ChartTranslationKey } from '../../../../services/chartTranslationService';
-import type { ThemeTemplateParameters } from '../../miniChartsContainer';
+import type { MiniChartSelector } from '../../miniChartsContainer';
 import { MiniChartWithAxes } from '../miniChartWithAxes';
 
-export class MiniStackedBar extends MiniChartWithAxes {
-    static chartType: ChartType = 'stackedBar';
-    static data = [
-        [8, 12, 16],
-        [6, 9, 12],
-        [2, 3, 4],
-    ];
+export const miniStackedBarData = [
+    [8, 12, 16],
+    [6, 9, 12],
+    [2, 3, 4],
+];
 
+export class MiniStackedBarClass extends MiniChartWithAxes {
     private readonly bars: any[][];
 
     constructor(
@@ -20,9 +19,8 @@ export class MiniStackedBar extends MiniChartWithAxes {
         agChartsExports: AgChartsExports,
         fills: string[],
         strokes: string[],
-        _themeTemplateParameters: ThemeTemplateParameters,
         _isCustomTheme: boolean,
-        data = MiniStackedBar.data,
+        data = miniStackedBarData,
         xScaleDomain = [0, 16],
         tooltipName: ChartTranslationKey = 'stackedBarTooltip'
     ) {
@@ -32,7 +30,7 @@ export class MiniStackedBar extends MiniChartWithAxes {
         const size = this.size;
         const padding = this.padding;
 
-        const yScale = new _Scene.BandScale();
+        const yScale = new _Scene.CategoryScale();
         yScale.domain = [0, 1, 2];
         yScale.range = [padding, size - padding];
         yScale.paddingInner = 0.3;
@@ -60,7 +58,7 @@ export class MiniStackedBar extends MiniChartWithAxes {
         );
 
         this.updateColors(fills, strokes);
-        this.root.append(([] as any[]).concat.apply([], this.bars));
+        this.root.append(_flatten(this.bars));
     }
 
     updateColors(fills: string[], strokes: string[]) {
@@ -72,3 +70,8 @@ export class MiniStackedBar extends MiniChartWithAxes {
         );
     }
 }
+
+export const MiniStackedBar: MiniChartSelector = {
+    chartType: 'stackedBar',
+    miniChart: MiniStackedBarClass,
+};

@@ -1,10 +1,13 @@
+import type { AgPromise } from 'ag-stack';
+
 import type { ColDef, KeyCreatorParams, ValueFormatterParams } from '../entities/colDef';
-import type { IProvidedFilter, IProvidedFilterParams } from '../filter/provided/iProvidedFilter';
+import type { FilterUiChangedEvent } from '../events';
+import type { IProvidedFilter, IProvidedFilterParams, ProvidedFilterModel } from '../filter/provided/iProvidedFilter';
 import type { Column } from '../interfaces/iColumn';
 import type { ITooltipParams } from '../tooltip/tooltipComponent';
-import type { AgPromise } from '../utils/promise';
+import type { IAutoCompleteComponentParams } from './iAutoComplete';
 import type { AgGridCommon } from './iCommon';
-import type { IFilterParams, ProvidedFilterModel } from './iFilter';
+import type { IFilterParams } from './iFilter';
 
 export type SetFilterModelValue = (string | null)[];
 export interface SetFilterModel extends ProvidedFilterModel {
@@ -13,10 +16,11 @@ export interface SetFilterModel extends ProvidedFilterModel {
 }
 
 /**
- * Interface contract for the public aspects of the SetFilter implementation.
- * @param V type of value in the Set Filter
+ * @deprecated v34 Use `SetFilterUi` for the filter UI component, and `SetFilterHandler` for the filter handler.
  */
 export interface ISetFilter<V = string> extends IProvidedFilter {
+    readonly filterType: 'set';
+
     /**
      * Returns a model representing the current state of the filter, or `null` if the filter is
      * not active.
@@ -63,6 +67,39 @@ export interface ISetFilter<V = string> extends IProvidedFilter {
     getModelFromUi(): SetFilterModel | null;
 }
 
+export interface SetFilterHandler<TValue = string> {
+    /** Returns the full list of unique keys used by the Set Filter. */
+    getFilterKeys(): SetFilterModelValue;
+
+    /** Returns the full list of unique values used by the Set Filter. */
+    getFilterValues(): (TValue | null)[];
+
+    /** Sets the values used in the Set Filter on the fly. */
+    setFilterValues(values: (TValue | null)[]): void;
+    /**
+     * Refreshes the values shown in the filter from the original source. For example, if a
+     * callback was provided, the callback will be executed again and the filter will refresh using
+     * the values returned.
+     */
+    refreshFilterValues(): void;
+    /**
+     * Resets the Set Filter to use values from the grid, rather than any values that have been
+     * provided directly.
+     */
+    resetFilterValues(): void;
+}
+
+export interface SetFilterUi<TValue = string> {
+    /** Returns the current mini-filter text. */
+    getMiniFilter(): string | null;
+
+    /** Sets the text in the Mini Filter at the top of the filter (the 'quick search' in the popup). */
+    setMiniFilter(newMiniFilter: string | null): void;
+
+    /** Returns the corresponding Set Filter Handler. */
+    getFilterHandler(): SetFilterHandler<TValue>;
+}
+
 /**
  * @param TData type of data row
  * @param V type of value in the Set Filter
@@ -98,9 +135,9 @@ export type SetFilterParams<TData = any, V = string> = ISetFilterParams<TData, V
  * @param TData type of data row
  * @param V type of value in the Set Filter
  */
-export interface ISetFilterParams<TData = any, V = string> extends IProvidedFilterParams {
+export interface ISetFilterParams<TData = any, V = string> extends IProvidedFilterParams, IAutoCompleteComponentParams {
     /**
-     * The values to display in the Filter List. If this is not set, the filter will takes its
+     * The values to display in the Filter List. If this is not set, the filter will take its
      * values from what is loaded in the table.
      */
     values?: SetFilterValues<TData, V>;
@@ -194,7 +231,8 @@ export interface ISetFilterParams<TData = any, V = string> extends IProvidedFilt
     treeList?: boolean;
     /**
      * Requires `treeList = true`. If provided, this gets the tree path to display in the Set Filter List based on the column values.
-     * Each row must map to a leaf value in the tree.
+     * Each row must map to a leaf value in the tree. The `value` argument may be `null` — for example on group
+     * rows or when the `field` is absent from the row data; the callback must handle this.
      */
     treeListPathGetter?: (value: V | null) => string[] | null;
     /**
@@ -205,6 +243,15 @@ export interface ISetFilterParams<TData = any, V = string> extends IProvidedFilt
      * This will be an empty array if the node is at the root level.
      */
     treeListFormatter?: (pathKey: string | null, level: number, parentPathKeys: (string | null)[]) => string;
+    /**
+     * By default, if using provided filter values and there is an active filter model,
+     * when the filter values are refreshed such that every value is in the filter model,
+     * the filter model will be cleared (reset to `null`).
+     *
+     * To prevent this behaviour, set this property to `true`.
+     * This is useful if using SSRM and updating the filter values based on other column filters.
+     */
+    suppressClearModelOnRefreshValues?: boolean;
 }
 
 /**
@@ -213,4 +260,8 @@ export interface ISetFilterParams<TData = any, V = string> extends IProvidedFilt
 export interface ISetFilterTreeListTooltipParams extends ITooltipParams {
     /** Level of the tree (starting at 0). */
     level: number;
+}
+
+export interface SetFilterUiChangedEvent<TData = any, TContext = any> extends FilterUiChangedEvent<TData, TContext> {
+    miniFilterValue?: string | null;
 }

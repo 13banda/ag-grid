@@ -28,6 +28,15 @@
         border-top: var(--ag-borders-critical) var(--ag-border-color);
     }
 
+    .ag-menu-option {
+        position: relative;
+    }
+    @include ag.keyboard-focus((ag-menu-option), 1px);
+
+    .ag-menu-list-no-focus-ring .ag-menu-option:focus-visible::after {
+        content: none;
+    }
+
     .ag-menu-option-active,
     .ag-compact-menu-option-active {
         background-color: var(--ag-row-hover-color);
@@ -41,6 +50,12 @@
 
     .ag-menu-option-disabled,
     .ag-compact-menu-option-disabled {
+        opacity: 0.5;
+    }
+
+    // A "Show Values As" mode not meaningful in the current view: greyed like a disabled item, but still
+    // selectable (the menu option carries no disabled state).
+    .ag-show-values-as-inapplicable {
         opacity: 0.5;
     }
 
@@ -186,8 +201,7 @@
     .ag-set-filter-item {
         @include ag.unthemed-rtl(
             (
-                padding-left:
-                    calc(
+                padding-left: calc(
                         var(--ag-widget-container-horizontal-padding) + var(--ag-indentation-level) *
                             var(--ag-set-filter-indent-size)
                     ),
@@ -212,7 +226,7 @@
     }
 
     .ag-filter-menu .ag-set-filter-list {
-        min-width: 200px;
+        min-width: max(200px, 100%);
     }
 
     @include ag.keyboard-focus((ag-filter-virtual-list-item), 1px);
@@ -232,7 +246,11 @@
     }
 
     .ag-simple-filter-body-wrapper {
-        @include ag.vertical-widget-container();
+        display: flex;
+        flex-direction: column;
+        gap: var(--ag-widget-vertical-spacing);
+        padding: var(--ag-widget-container-vertical-padding) var(--ag-widget-container-horizontal-padding);
+        padding-bottom: var(--ag-widget-container-vertical-padding);
         overflow-y: auto;
         min-height: calc(
             var(--ag-list-item-height) + var(--ag-widget-container-vertical-padding) + var(--ag-widget-vertical-spacing)

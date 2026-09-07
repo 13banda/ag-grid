@@ -5,19 +5,18 @@ import {
     ModuleRegistry,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    TextEditorModule,
-    ColumnAutoSizeModule,
-    ClientSideRowModelModule,
-    NumberEditorModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TextEditorModule, ColumnAutoSizeModule, ClientSideRowModelModule, NumberEditorModule]);
 
 const columnDefs: ColDef[] = [
     {
@@ -58,7 +57,6 @@ let gridApi: GridApi;
 const gridOptions: GridOptions = {
     columnDefs: columnDefs,
     defaultColDef: {
-        flex: 1,
         sortable: false,
     },
     rowData: getData(),

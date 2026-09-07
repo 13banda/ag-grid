@@ -1,10 +1,11 @@
+import type { VisibleColsService } from '../columns/visibleColsService';
 import { BeanStub } from '../context/beanStub';
 import type { AgColumn } from '../entities/agColumn';
 import type { AgColumnGroup } from '../entities/agColumnGroup';
+import { edgeLeafColumn, getColGroupAtLevel } from '../entities/agColumnGroup';
 import type { ColumnEventType } from '../events';
 import type { IHeaderResizeFeature } from '../headerRendering/cells/abstractCell/abstractHeaderCellCtrl';
 import type { IHeaderGroupCellComp } from '../headerRendering/cells/columnGroup/headerGroupCellCtrl';
-import type { ColumnPinnedType } from '../interfaces/iColumn';
 import type { ColumnResizeSet } from './columnResizeService';
 
 interface ColumnSizeAndRatios {
@@ -25,10 +26,9 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
     private resizeTakeFromRatios?: number[];
 
     constructor(
-        private comp: IHeaderGroupCellComp,
-        private eResize: HTMLElement,
-        private pinned: ColumnPinnedType,
-        private columnGroup: AgColumnGroup
+        private readonly comp: IHeaderGroupCellComp,
+        private readonly eResize: HTMLElement,
+        private readonly columnGroup: AgColumnGroup
     ) {
         super();
     }
@@ -43,6 +43,7 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
 
         const finishedWithResizeFunc = horizontalResizeSvc!.addResizeBar({
             eResizeBar: this.eResize,
+            isColumn: true,
             onResizeStart: this.onResizeStart.bind(this),
             onResizing: this.onResizing.bind(this, false),
             onResizeEnd: this.onResizing.bind(this, true),
@@ -106,7 +107,7 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
         let groupAfter: AgColumnGroup | null = null;
 
         if (shiftKey) {
-            groupAfter = this.beans.colGroupSvc?.getGroupAtDirection(this.columnGroup, 'After') ?? null;
+            groupAfter = getColGroupAfter(this.beans.visibleCols, this.columnGroup);
         }
 
         if (groupAfter) {
@@ -196,7 +197,7 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
     }
 
     public toggleColumnResizing(resizing: boolean): void {
-        this.comp.addOrRemoveCssClass('ag-column-resizing', resizing);
+        this.comp.toggleCss('ag-column-resizing', resizing);
     }
 
     private getColumnsToResize(): AgColumn[] {
@@ -208,13 +209,16 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
     // note - this method is duplicated in RenderedHeaderCell - should refactor out?
     private normaliseDragChange(dragChange: number): number {
         let result = dragChange;
+        const { columnGroup } = this;
+        const firstDisplayedLeafCol = edgeLeafColumn(columnGroup, true, false);
+        const pinned = firstDisplayedLeafCol?.getPinned() ?? columnGroup.getPinned();
 
         if (this.gos.get('enableRtl')) {
             // for RTL, dragging left makes the col bigger, except when pinning left
-            if (this.pinned !== 'left') {
+            if (pinned !== 'left') {
                 result *= -1;
             }
-        } else if (this.pinned === 'right') {
+        } else if (pinned === 'right') {
             // for LTR (ie normal), dragging left makes the col smaller, except when pinning right
             result *= -1;
         }
@@ -232,3 +236,21 @@ export class GroupResizeFeature extends BeanStub implements IHeaderResizeFeature
         this.resizeTakeFromRatios = undefined;
     }
 }
+
+/** Scan leaf-by-leaf from `columnGroup`'s trailing edge to the adjacent displayed group at the same level. */
+const getColGroupAfter = (visibleCols: VisibleColsService, columnGroup: AgColumnGroup): AgColumnGroup | null => {
+    const requiredLevel = columnGroup.providedColumnGroup.level + columnGroup.getPaddingLevel();
+    let col = edgeLeafColumn(columnGroup, true, true);
+    while (col) {
+        const column = visibleCols.getColAfter(col);
+        if (!column) {
+            return null;
+        }
+        const groupPointer = getColGroupAtLevel(column, requiredLevel);
+        if (groupPointer !== columnGroup) {
+            return groupPointer;
+        }
+        col = column;
+    }
+    return null;
+};

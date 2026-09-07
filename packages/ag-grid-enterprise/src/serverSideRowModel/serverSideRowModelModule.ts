@@ -1,13 +1,16 @@
 import type { _ModuleWithApi, _ModuleWithoutApi, _ServerSideRowModelGridApi } from 'ag-grid-community';
 import {
     _CsrmSsrmSharedApiModule,
+    _RowModelSharedApiModule,
     _SharedRowSelectionModule,
     _SortModule,
     _SsrmInfiniteSharedApiModule,
+    onRowHeightChanged,
+    resetRowHeights,
 } from 'ag-grid-community';
 
 import { EnterpriseCoreModule } from '../agGridEnterpriseModule';
-import { LoadingCellRendererModule, SkeletonCellRendererModule } from '../cellRenderers/enterpriseCellRendererModule';
+import { LoadingCellRendererModule } from '../cellRenderers/enterpriseCellRendererModule';
 import { SharedPivotModule } from '../pivot/pivotModule';
 import { SharedTreeDataModule } from '../treeData/treeDataModule';
 import { VERSION } from '../version';
@@ -67,7 +70,6 @@ export const ServerSideRowModelModule: _ModuleWithoutApi = {
         SharedPivotModule,
         SharedTreeDataModule,
         LoadingCellRendererModule,
-        SkeletonCellRendererModule,
     ],
 };
 
@@ -77,7 +79,6 @@ export const ServerSideRowModelModule: _ModuleWithoutApi = {
 export const ServerSideRowModelApiModule: _ModuleWithApi<_ServerSideRowModelGridApi<any>> = {
     moduleName: 'ServerSideRowModelApi',
     version: VERSION,
-    rowModels: ['serverSide'],
     apiFunctions: {
         getServerSideSelectionState,
         setServerSideSelectionState,
@@ -88,6 +89,8 @@ export const ServerSideRowModelApiModule: _ModuleWithApi<_ServerSideRowModelGrid
         flushServerSideAsyncTransactions,
         refreshServerSide,
         getServerSideGroupLevelState,
+        resetRowHeights,
+        onRowHeightChanged,
     },
-    dependsOn: [EnterpriseCoreModule, _CsrmSsrmSharedApiModule, _SsrmInfiniteSharedApiModule],
+    dependsOn: [EnterpriseCoreModule, _RowModelSharedApiModule, _CsrmSsrmSharedApiModule, _SsrmInfiniteSharedApiModule],
 };

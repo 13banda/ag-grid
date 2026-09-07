@@ -1,8 +1,13 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { AllCommunityModule, ModuleRegistry, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', minWidth: 170 },
@@ -20,7 +25,6 @@ const columnDefs: ColDef[] = [
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
-    rowData: null,
     columnDefs: columnDefs,
     defaultColDef: {
         editable: true,

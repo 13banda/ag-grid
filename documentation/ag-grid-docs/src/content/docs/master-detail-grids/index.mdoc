@@ -13,16 +13,13 @@ The Detail Grid fits inside one row of the Master Grid without using any of the 
 
 The Detail Grid is a fully fledged independent grid instance. This means that the Detail Grid has access to the full range of grid features.
 
-The instance of the grid is instantiated using native JavaScript and not any particular framework. This means properties are provided via a plain JavaScript object called Grid Options and not bound by any framework or HTML tags or bindings.
-
-The Grid Options JSON is provided to the Detail Grid using the parameter `detailGridOptions`.
+The Grid Options object is provided to the Detail Grid using the parameter `detailGridOptions`.
 
 The example below shows configuring a Detail Grid with some additional Grid Options set. Note the following:
 
-* The `detailGridOptions` is provided inside the `detailCellRendererParams`.
-* The Detail Grid Options has the following properties set: `rowSelection={mode: 'multiRow', headerCheckbox: false}`, `pagination=true` and `paginationAutoPageSize=true`.
-* The Detail Grid Options is provided with a Default Column Definition (`defaultColDef`) that makes all columns use Flex for sizing.
-* The first Column Definition is configured to use Checkbox Selection.
+- The `detailGridOptions` is provided inside the `detailCellRendererParams`.
+- The Detail Grid Options has the following properties set: `rowSelection={mode: 'multiRow', headerCheckbox: false}`, `pagination=true` and `paginationAutoPageSize=true`.
+- The Detail Grid Options is provided with a Default Column Definition (`defaultColDef`) that makes all columns use Flex for sizing.
 
 {% gridExampleRunner title="Detail Grid Options" name="grid-options" /%}
 
@@ -30,17 +27,13 @@ The example below shows configuring a Detail Grid with some additional Grid Opti
 
 Row data is provided to the Detail Grid by implementing the `getDetailRowData` callback of the Detail Cell Renderer Params. The interface of this callback is as follows:
 
-{% interfaceDocumentation interfaceName="IDetailCellRendererParams" names=["getDetailRowData"] config={"overrideBottomMargin":"1rem"} /%}
+{% interfaceDocumentation interfaceName="IDetailCellRendererParams" names=["getDetailRowData"] config={"overrideBottomMargin":"1rem", "description": ""} /%}
 
 The `successCallback` can be called immediately in a synchronous fashion (typical if the data is already available) or asynchronously at a later time (typical if the data needs to be fetched remotely).
 
 The Master Grid in turn will call `api.setGridOption('rowData', data)` on the Detail Grid with the data provided.
 
-All the previous examples on Master Detail provided the result synchronously and as such another specific example is not given here.
-
-The following snippet illustrates this using a simple `setTimeout()` function to delay supplying data to the detail row after a fixed timeout.
-
-Below shows an example using `setTimeout()` to simulate lazying loading of data in the detail.
+Below shows an example using `setTimeout()` to delay supplying data to the detail row to simulate asynchronous loading of data in the detail.
 
 {% gridExampleRunner title="Lazy Load Detail Rows" name="lazy-load-rows"  exampleHeight=550 /%}
 
@@ -52,8 +45,8 @@ This is done by providing a function to `detailCellRendererParams` that in turn 
 
 Below shows an example of this, where the Detail Grids are configured with different columns. Note the following:
 
-* Expanding rows 'Mila Smith' or 'Harper Johnson' will use a detail grid with the columns {Call ID, Number}.
-* Expanding all other rows will use a detail grid with the columns {Call ID, Direction, Duration, Switch Code}.
+- Expanding rows 'Mila Smith' or 'Harper Johnson' will use a detail grid with the columns {Call ID, Number}.
+- Expanding all other rows will use a detail grid with the columns {Call ID, Direction, Duration, Switch Code}.
 
 {% gridExampleRunner title="Dynamic Params" name="dynamic-params" /%}
 
@@ -65,14 +58,14 @@ The Master Grid manages all the Detail Grid instances. You can access the API of
 
 The Detail Grid Info objects contain a reference to the underlying [Grid API](./grid-api/) for each detail grid. The interface for Detail Grid Info is as follows:
 
-{% interfaceDocumentation interfaceName="DetailGridInfo" /%}
+{% interfaceDocumentation interfaceName="DetailGridInfo" config={"description": ""} /%}
 
 The Detail Grid Info objects are accessed via the Master Grid's API via the following methods:
 
 {% apiDocumentation source="grid-api/api.json" section="masterDetail" names=["getDetailGridInfo"] /%}
 
 ```{% frameworkTransform=true %}
-// lookup a specific DetailGridInfo by id, and then call stopEditing() on it
+// lookup a specific DetailGridInfo by id, and then call flashCells() on it
 const detailGridInfo = api.getDetailGridInfo('detail_someId');
 detailGridInfo.api.flashCells();
 ```
@@ -82,7 +75,7 @@ The grid generates IDs for detail grids by prefixing the parent row's ID with `d
 {% apiDocumentation source="grid-api/api.json" section="masterDetail" names=["forEachDetailGridInfo"] /%}
 
 ```{% frameworkTransform=true %}
-// iterate over all DetailGridInfos, and call stopEditing() on each one
+// iterate over all DetailGridInfos, and call flashCells() on each one
 api.forEachDetailGridInfo(detailGridInfo => {
     detailGridInfo.api.flashCells();
 });
@@ -90,29 +83,39 @@ api.forEachDetailGridInfo(detailGridInfo => {
 
 The following example shows flashing cells on the detail grids by using the Grid API `flashCells()`. Note the following:
 
-* The example is made more compact by a) setting Detail Row Height to 200 pixels and b) setting CSS to reduce padding around the Detail Grid.
-* The callback `getRowId` is implemented in the Master Grid to give each row an ID. In this instance the `account` attribute is used.
-* Button 'Flash Mila Smith' uses `getDetailGridInfo` to get access to the Grid API for the Mila Smith Detail Grid.
-* Button 'Flash All' uses `forEachDetailGridInfo` to access all existing Detail Grids.
+- The example is made more compact by a) setting Detail Row Height to 200 pixels and b) setting CSS to reduce padding around the Detail Grid.
+- The callback `getRowId` is implemented in the Master Grid to give each row an ID. In this instance the `account` attribute is used.
+- Button 'Flash Mila Smith' uses `getDetailGridInfo` to get access to the Grid API for the Mila Smith Detail Grid.
+- Button 'Flash All' uses `forEachDetailGridInfo` to access all existing Detail Grids.
 
 {% gridExampleRunner title="Detail Grid API" name="detail-grid-api"  exampleHeight=535 /%}
 
 ## Detail Grid Lifecycle
 
-When a Master Row is expanded a Detail Row is created. When the Master Row is collapsed, the Detail Row is destroyed. When the Master Row is expanded a second time, a Detail Row is created again from scratch. This can be undesirable behaviour if there was context in the Detail Row, e.g. if the user sorted or filtered data in the Detail Row, the sort or filter will be reset the second time the Retail Row is displayed.
+When a Master Row is expanded a Detail Row is created. When the Master Row is collapsed, the Detail Row is destroyed. When the Master Row is expanded a second time, a Detail Row is created again from scratch. This can be undesirable behaviour if there was context in the Detail Row, e.g. if the user sorted or filtered data in the Detail Row, the sort or filter will be reset the second time the Detail Row is displayed.
 
-To prevent losing the context of Details Rows, the grid provides two properties to cache the Details Rows to be reused the next time the row is shows. The properties are as follows:
+To prevent losing the context of Details Rows, the grid provides two properties to cache the Details Rows to be reused the next time the row is shown. The properties are as follows:
 
 {% apiDocumentation source="grid-options/properties.json" section="masterDetail" names=["keepDetailRows", "keepDetailRowsCount"] /%}
 
 The example below demonstrates keeping Detail Rows. Note the following:
 
-* The Master Grid has property `keepDetailRows=true` to turn on keeping Detail Rows.
-* The Master Grid has property `keepDetailRowsCount=2` which sets the number of Details Rows to keep to 2.
-* All the Detail Grids allow moving and sorting columns. If you change the state of a Detail Grid (e.g. by sorting a Detail Grid), that state will be kept if you close the Parent Row and then open the Parent Row again.
-* The maximum number of Detail Rows kept is two. If you open three Detail Rows and apply sorting on each Detail Grid, then close all three Detail Rows (so none are showing) and then open all three again, only two of them will have the sort state kept.
+- The Master Grid has property `keepDetailRows=true` to turn on keeping Detail Rows.
+- The Master Grid has property `keepDetailRowsCount=2` which sets the number of Details Rows to keep to 2.
+- All the Detail Grids allow moving and sorting columns. If you change the state of a Detail Grid (e.g. by sorting a Detail Grid), that state will be kept if you close the Parent Row and then open the Parent Row again.
+- The maximum number of Detail Rows kept is two. If you open three Detail Rows and apply sorting on each Detail Grid, then close all three Detail Rows (so none are showing) and then open all three again, only two of them will have the sort state kept.
 
 {% gridExampleRunner title="Keep Detail Rows" name="keep-detail-rows"  exampleHeight=565 /%}
+
+## Performance with many detail grids
+
+A detail grid is created when expanded and destroyed when collapsed, and remains active between these two events, even if the row scrolls out of the grid viewport. This is different to regular cell rendering where [DOM Virtualisation](./dom-virtualisation/) will remove hidden rows for improved performance.
+
+When many rows are expanded at once, rendering can become slow as re-rendering your application now involves re-rendering every detail grid, even the off-screen ones.
+
+1. Given the data that your application renders, consider how many detail grids can be expanded and decide if performance is acceptable
+2. Consider using pagination to limit the number of detail grids that can be displayed at once
+3. Consider using [enableContentVisibilityAuto](./grid-options/#reference-rendering-enableContentVisibilityAuto) in `detailGridOptions` to reduce the rendering work that the browser needs to do for off-screen grids. See [Scrolling Performance](./scrolling-performance/#skip-rendering-off-screen-grids) for details.
 
 ## Detail Parameters
 
@@ -128,4 +131,29 @@ The example below demonstrates keeping Detail Rows. Note the following:
 
 The pattern of setting components such as Cell Renderers and providing parameters to those components is consistent across the grid and explained in [Grid Components](./components/).
 
-As with all components, the parameters object (in this case `detailCellRendererParams`) can either be a JSON Object, or it can be a function that returns a JSON Object. The latter allows providing different parameters for each Detail Grid, allowing Detail Grids to be configured differently.
+As with all components, the parameters object (in this case `detailCellRendererParams`) can either be an Object, or it can be a function that returns an Object. The latter allows providing different parameters for each Detail Grid, allowing Detail Grids to be configured differently.
+
+## Styling Detail Grids
+
+Detail grids must have the same theme as their master grid, but you can use CSS to change the style of the detail grid. See [Master / Detail Styling](./theming-master-detail/) for more details.
+
+## Row Selection
+
+By default, selecting rows in the Master Grid has no effect on any of the Detail Grids. In order to have the selection state of the Master Grid be reflected in the Detail Grids (and vice-versa), users should use the `rowSelection.masterSelects` grid option:
+
+```{% frameworkTransform=true %}
+const gridOptions = {
+    rowSelection: {
+        mode: 'multiRow',
+        masterSelects: 'detail',
+    }
+}
+```
+
+In the example below, selecting a master row will select all rows in the associated detail grid. Similarly, selecting all rows in the detail grid will select the master row. When only some rows in the detail grid are selected, the master row will have the indeterminate state.
+
+{% gridExampleRunner title="Row Selection" name="row-selection"  exampleHeight=550 /%}
+
+Note that selecting a master row will select _all_ rows in the detail grid, regardless of the value of `rowSelection.selectAll` in the `detailGridOptions`.
+
+Note also that calling the API methods `getSelectedNodes` and `getSelectedRows` on the master grid will not return any information about the selection states of any detail grids.

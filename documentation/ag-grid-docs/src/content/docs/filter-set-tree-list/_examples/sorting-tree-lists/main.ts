@@ -2,9 +2,9 @@ import type { GridApi, GridOptions, ISetFilterParams, KeyCreatorParams } from 'a
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
-    ValidationModule,
     ValueFormatterParams,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -15,6 +15,11 @@ import {
     TreeDataModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
@@ -23,7 +28,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     SetFilterModule,
     TreeDataModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

@@ -1,24 +1,30 @@
 import type { GetRowIdParams, GridApi, GridOptions } from 'ag-grid-community';
 import {
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     ColumnApiModule,
     ModuleRegistry,
     RowSelectionModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { CellSelectionModule, RowGroupingModule, StatusBarModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnApiModule,
     TextFilterModule,
     RowSelectionModule,
+    ClientSideRowModelApiModule,
     ClientSideRowModelModule,
     CellSelectionModule,
     RowGroupingModule,
     StatusBarModule,
-    ValidationModule /* Development Only */,
 ]);
 
 function getInitialData() {

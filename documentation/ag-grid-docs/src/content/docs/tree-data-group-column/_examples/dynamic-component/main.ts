@@ -1,11 +1,16 @@
 import type { CellDoubleClickedEvent, CellKeyDownEvent, ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { TreeDataModule } from 'ag-grid-enterprise';
 
 import { CustomGroupCellRenderer } from './customGroupCellRenderer_typescript';
 import { getData } from './data';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, TreeDataModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, TreeDataModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'created' },
@@ -14,6 +19,10 @@ const columnDefs: ColDef[] = [
         field: 'size',
         aggFunc: 'sum',
         valueFormatter: (params) => {
+            if (params.value == null) {
+                return ''; // params.value can be null/undefined here (e.g. no size for this row)
+            }
+
             const sizeInKb = params.value / 1024;
 
             if (sizeInKb > 1024) {
@@ -49,7 +58,7 @@ const gridOptions: GridOptions = {
         flex: 1,
         minWidth: 120,
     },
-    groupDefaultExpanded: -1,
+    groupDefaultExpanded: 1,
     rowData: getData(),
     onCellDoubleClicked: (params: CellDoubleClickedEvent<IOlympicData, any>) => {
         if (params.colDef.showRowGroup) {
@@ -64,6 +73,9 @@ const gridOptions: GridOptions = {
             return;
         }
         if (params.event.code !== 'Enter') {
+            return;
+        }
+        if (params.node.level === 0) {
             return;
         }
         if (params.colDef.showRowGroup) {

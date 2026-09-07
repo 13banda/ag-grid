@@ -1,0 +1,82 @@
+{
+    "_config_": {},
+    "PdfExportParams": {
+        "fonts": {},
+        "language": {},
+        "direction": {},
+        "documentTitle": {},
+        "documentTitleStyle": {},
+        "documentSubtitle": {},
+        "documentSubtitleStyle": {},
+        "coverPage": {},
+        "headerFooterConfig": {},
+        "watermark": {},
+        "colors": {},
+        "skipGridStyles": {},
+        "processStyleCallback": {},
+        "processCellHyperlinkCallback": {},
+        "addImageToCell": {},
+        "page": {},
+        "defaultCellStyle": {},
+        "defaultHeaderStyle": {},
+        "columnWidth": {},
+        "rowGroupIndentSize": {},
+        "rowHeight": {},
+        "headerRowHeight": {},
+        "repeatHeader": {},
+        "drawCellBorders": {},
+        "prependContent": {},
+        "appendContent": {},
+        "fileName": {},
+        "mimeType": {}
+    },
+    "PdfCell": {
+        "data": {
+            "isRequired": true
+        }
+    },
+    "PdfCellData": {
+        "value": {
+            "isRequired": true
+        },
+        "hyperlink": {},
+        "image": {}
+    },
+    "PdfImage": {
+        "id": {
+            "isRequired": true
+        },
+        "base64": {
+            "isRequired": true
+        },
+        "imageType": {
+            "isRequired": true
+        },
+        "altText": {},
+        "width": {},
+        "height": {},
+        "alignment": {},
+        "gap": {}
+    },
+    "PdfCellImageResult": {
+        "image": {
+            "isRequired": true
+        },
+        "value": {}
+    },
+    "PdfFontFamilyDefinition": {
+        "family": {
+            "isRequired": true
+        },
+        "faces": {
+            "isRequired": true
+        }
+    },
+    "PdfFontFace": {
+        "data": {
+            "isRequired": true
+        },
+        "weight": {},
+        "style": {}
+    }
+}

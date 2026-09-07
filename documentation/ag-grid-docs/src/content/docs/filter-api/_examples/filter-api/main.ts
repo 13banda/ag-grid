@@ -1,5 +1,5 @@
-import type { ColDef, GridApi, GridOptions, ISetFilter } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import type { ColDef, GridApi, GridOptions, SetFilterUi } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
@@ -8,6 +8,11 @@ import {
     SetFilterModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
@@ -15,7 +20,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [{ field: 'athlete', filter: 'agSetColumnFilter' }];
@@ -38,19 +42,19 @@ const gridOptions: GridOptions<IOlympicData> = {
 let savedMiniFilterText: string | null = '';
 
 function getMiniFilterText() {
-    gridApi!.getColumnFilterInstance<ISetFilter>('athlete').then((athleteFilter) => {
+    gridApi!.getColumnFilterInstance<SetFilterUi>('athlete').then((athleteFilter) => {
         console.log(athleteFilter!.getMiniFilter());
     });
 }
 
 function saveMiniFilterText() {
-    gridApi!.getColumnFilterInstance<ISetFilter>('athlete').then((athleteFilter) => {
+    gridApi!.getColumnFilterInstance<SetFilterUi>('athlete').then((athleteFilter) => {
         savedMiniFilterText = athleteFilter!.getMiniFilter();
     });
 }
 
 function restoreMiniFilterText() {
-    gridApi!.getColumnFilterInstance<ISetFilter>('athlete').then((athleteFilter) => {
+    gridApi!.getColumnFilterInstance<SetFilterUi>('athlete').then((athleteFilter) => {
         athleteFilter!.setMiniFilter(savedMiniFilterText);
     });
 }

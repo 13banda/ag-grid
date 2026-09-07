@@ -3,26 +3,38 @@ import {
     ClientSideRowModelModule,
     ColumnApiModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
-import { ColumnsToolPanelModule, PivotModule, RowGroupingPanelModule } from 'ag-grid-enterprise';
+import {
+    ColumnHeaderEditModule,
+    ColumnMenuModule,
+    ColumnsToolPanelModule,
+    PivotModule,
+    RowGroupingPanelModule,
+} from 'ag-grid-enterprise';
 
 declare let window: any;
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ColumnsToolPanelModule,
+    ColumnHeaderEditModule,
+    ColumnMenuModule,
     PivotModule,
     RowGroupingPanelModule,
     ColumnApiModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: ColDef[] = [
-    { field: 'athlete' },
-    { field: 'age' },
-    { field: 'country' },
+    { field: 'athlete', headerNameEditable: true },
+    { field: 'age', headerNameEditable: true },
+    { field: 'country', headerNameEditable: true },
     { field: 'sport' },
     { field: 'year' },
     { field: 'date' },
@@ -51,7 +63,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     pivotPanelShow: 'always',
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
 };
 
 function saveState() {

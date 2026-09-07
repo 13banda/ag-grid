@@ -5,10 +5,15 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ContextMenuModule, ExcelExportModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     TextFilterModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     ColumnMenuModule,
     ContextMenuModule,
     NumberFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
@@ -77,7 +81,6 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
     // debug: true,
     columnDefs: columnDefs,
-    rowData: null,
     defaultExcelExportParams: {
         freezeColumns: 'pinned',
     },

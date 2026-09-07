@@ -1,5 +1,8 @@
+import type { IComponent } from 'ag-stack';
+
 import type { AgGridCommon } from './iCommon';
-import type { IComponent } from './iComponent';
+
+export type StatusBar = { statusPanels: StatusPanelDef[] };
 
 export interface StatusPanelDef {
     statusPanel?: any;
@@ -8,17 +11,32 @@ export interface StatusPanelDef {
     statusPanelParams?: any;
 }
 
-export interface IStatusPanelParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {}
+export interface IStatusPanelValueFormatterParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /* The value of the current Status Bar Panel */
+    value: number | null;
+    /* The bigint value of the current Status Bar Panel (when applicable) */
+    bigintValue?: bigint;
+    /* The total row count of the grid. */
+    totalRows: number;
+    /* The name of the current Status Bar Panel */
+    key: string;
+}
+export interface IProvidedStatusPanelParams {
+    valueFormatter?: (params: IStatusPanelValueFormatterParams) => string;
+}
+
+export interface IStatusPanelParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    key: string;
+}
 
 export type AggregationStatusPanelAggFunc = 'count' | 'sum' | 'min' | 'max' | 'avg';
 
-export interface IAggregationStatusPanelParams {
+export interface IAggregationStatusPanelParams extends IProvidedStatusPanelParams {
     aggFuncs: AggregationStatusPanelAggFunc[];
 }
 
 export interface AggregationStatusPanelParams<TData = any, TContext = any>
-    extends IAggregationStatusPanelParams,
-        IStatusPanelParams<TData, TContext> {
+    extends IAggregationStatusPanelParams, IStatusPanelParams<TData, TContext> {
     aggFuncs: AggregationStatusPanelAggFunc[];
 }
 
@@ -35,5 +53,4 @@ export interface IStatusPanel<TData = any, TContext = any> {
 }
 
 export interface IStatusPanelComp<TData = any, TContext = any>
-    extends IStatusPanel<TData, TContext>,
-        IComponent<IStatusPanelParams<TData, TContext>> {}
+    extends IStatusPanel<TData, TContext>, IComponent<IStatusPanelParams<TData, TContext>> {}

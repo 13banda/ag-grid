@@ -1,7 +1,7 @@
 import type { AgBubbleSeriesOptions, AgCartesianAxisOptions, AgScatterSeriesOptions } from 'ag-charts-types';
 
 import { DEFAULT_CHART_CATEGORY } from '../../model/chartDataModel';
-import type { ChartProxyParams, FieldDefinition, UpdateParams } from '../chartProxy';
+import type { FieldDefinition, UpdateParams } from '../chartProxy';
 import { CartesianChartProxy } from './cartesianChartProxy';
 
 interface SeriesDefinition {
@@ -11,21 +11,17 @@ interface SeriesDefinition {
 }
 
 export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'> {
-    public constructor(params: ChartProxyParams) {
-        super(params);
-    }
-
-    protected override getAxes(_params: UpdateParams): AgCartesianAxisOptions[] {
-        return [
-            {
+    protected override getAxes(_params: UpdateParams): Record<string, AgCartesianAxisOptions> {
+        return {
+            x: {
                 type: 'number',
                 position: 'bottom',
             },
-            {
+            y: {
                 type: 'number',
                 position: 'left',
             },
-        ];
+        };
     }
 
     protected override getSeries(params: UpdateParams): (AgScatterSeriesOptions | AgBubbleSeriesOptions)[] {
@@ -38,14 +34,14 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
             if (seriesDefinition?.sizeField) {
                 const opts: AgBubbleSeriesOptions = {
                     type: 'bubble',
-                    xKey: seriesDefinition!.xField.colId,
-                    xName: seriesDefinition!.xField.displayName ?? undefined,
-                    yKey: seriesDefinition!.yField.colId,
-                    yName: seriesDefinition!.yField.displayName ?? undefined,
-                    title: `${seriesDefinition!.yField.displayName} vs ${seriesDefinition!.xField.displayName}`,
-                    sizeKey: seriesDefinition!.sizeField.colId,
-                    sizeName: seriesDefinition!.sizeField.displayName ?? '',
-                    labelKey: labelFieldDefinition ? labelFieldDefinition.id : seriesDefinition!.yField.colId,
+                    xKey: seriesDefinition.xField.colId,
+                    xName: seriesDefinition.xField.displayName ?? undefined,
+                    yKey: seriesDefinition.yField.colId,
+                    yName: seriesDefinition.yField.displayName ?? undefined,
+                    title: `${seriesDefinition.yField.displayName} vs ${seriesDefinition.xField.displayName}`,
+                    sizeKey: seriesDefinition.sizeField.colId,
+                    sizeName: seriesDefinition.sizeField.displayName ?? '',
+                    labelKey: labelFieldDefinition ? labelFieldDefinition.id : seriesDefinition.yField.colId,
                     labelName: labelFieldDefinition ? labelFieldDefinition.name : undefined,
                 };
                 return opts;
@@ -72,7 +68,6 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
         params: UpdateParams
     ): (AgScatterSeriesOptions | AgBubbleSeriesOptions)[] {
         const { data } = params;
-        const palette = this.getChartPalette();
 
         const filteredOutKey = (key: string) => `${key}-filtered-out`;
 
@@ -95,28 +90,20 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
             return undefined;
         };
 
-        const updatePrimarySeries = <T extends AgScatterSeriesOptions | AgBubbleSeriesOptions>(
-            series: T,
-            idx: number
-        ): T => {
-            const fill = palette?.fills?.[idx];
-            const stroke = palette?.strokes?.[idx];
-
-            let markerDomain: [number, number] | undefined = undefined;
+        const updatePrimarySeries = <T extends AgScatterSeriesOptions | AgBubbleSeriesOptions>(series: T): T => {
+            let sizeDomain: AgBubbleSeriesOptions['sizeDomain'];
             if (series.type === 'bubble') {
                 const { sizeKey } = series;
-                markerDomain = calcMarkerDomain(data, sizeKey);
+                sizeDomain = calcMarkerDomain(data, sizeKey);
             }
 
             return {
                 ...series,
-                fill,
-                stroke,
-                domain: markerDomain,
-                highlightStyle: { item: { fill: 'yellow' } },
+                ...(sizeDomain != null ? { sizeDomain } : {}),
+                highlight: { highlightedItem: { fill: 'yellow' } },
                 listeners: {
                     ...series.listeners,
-                    nodeClick: this.crossFilterCallback,
+                    seriesNodeClick: this.crossFilterCallback,
                 },
             };
         };
@@ -126,33 +113,31 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
 
             let alteredSizeKey = {};
             if (series.type === 'bubble') {
-                alteredSizeKey = { sizeKey: filteredOutKey(series.sizeKey!) };
+                alteredSizeKey = { sizeKey: filteredOutKey(series.sizeKey) };
             }
 
             return {
                 ...series,
                 ...alteredSizeKey,
-                yKey: filteredOutKey(yKey!),
-                xKey: filteredOutKey(xKey!),
-                fillOpacity: 0.3,
-                strokeOpacity: 0.3,
+                yKey: filteredOutKey(yKey),
+                xKey: filteredOutKey(xKey),
                 showInLegend: false,
                 listeners: {
                     ...series.listeners,
-                    nodeClick: (e: any) => {
-                        const value = e.datum[filteredOutKey(xKey!)];
+                    seriesNodeClick: (e: any) => {
+                        const value = e.datum[filteredOutKey(xKey)];
 
                         // Need to remove the `-filtered-out` suffixes from the event so that
                         // upstream processing maps the event correctly onto grid column ids.
                         const filterableEvent = {
                             ...e,
                             xKey,
-                            datum: { ...e.datum, [xKey!]: value },
+                            datum: { ...e.datum, [xKey]: value },
                         };
                         this.crossFilterCallback(filterableEvent);
                     },
                 },
-            };
+            } as T;
         };
 
         const updatedSeries = series.map(updatePrimarySeries);
@@ -178,7 +163,7 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
                               }
                             : null
                     )
-                    .filter((x) => x && x.yField && x.sizeField);
+                    .filter((x) => x?.yField && x.sizeField);
             }
             return fields
                 .map((currentXField, i) =>
@@ -189,7 +174,7 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
                           }
                         : null
                 )
-                .filter((x) => x && x.yField);
+                .filter((x) => x?.yField);
         }
 
         const xField = fields[0];
@@ -205,7 +190,7 @@ export class ScatterChartProxy extends CartesianChartProxy<'scatter' | 'bubble'>
                           }
                         : null
                 )
-                .filter((x) => x && x.sizeField);
+                .filter((x) => x?.sizeField);
         }
 
         return fields.filter((value, i) => i > 0).map((yField) => ({ xField, yField }));

@@ -5,6 +5,7 @@ import type {
     CellStyle,
     ColDef,
     ColGroupDef,
+    DefaultMenuItem,
     GetContextMenuItemsParams,
     GridApi,
     GridOptions,
@@ -14,457 +15,283 @@ import type {
     SelectionChangedEvent,
     ValueSetterParams,
 } from 'ag-grid-community';
-import { ModuleRegistry, createGrid } from 'ag-grid-community';
+import { LocaleModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
 import { CountryCellRenderer } from './country-renderer_typescript';
-import { PersonFilter } from './person-filter_typescript';
-import { WinningsFilter } from './winnings-filter_typescript';
+import { COUNTRY_CODES, LANGUAGES, createRowData } from './data';
+import type { LanguageConfig } from './data';
 
-ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule)]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
-const colNames = [
-    'Station',
-    'Railway',
-    'Street',
-    'Address',
-    'Toy',
-    'Soft Box',
-    'Make and Model',
-    'Longest Day',
-    'Shortest Night',
-];
-
-const countries = [
-    { country: 'Ireland', continent: 'Europe', language: 'English' },
-    { country: 'Spain', continent: 'Europe', language: 'Spanish' },
-    { country: 'United Kingdom', continent: 'Europe', language: 'English' },
-    { country: 'France', continent: 'Europe', language: 'French' },
-    { country: 'Germany', continent: 'Europe', language: 'German' },
-    { country: 'Luxembourg', continent: 'Europe', language: 'French' },
-    { country: 'Sweden', continent: 'Europe', language: 'Swedish' },
-    { country: 'Norway', continent: 'Europe', language: 'Norwegian' },
-    { country: 'Italy', continent: 'Europe', language: 'Italian' },
-    { country: 'Greece', continent: 'Europe', language: 'Greek' },
-    { country: 'Iceland', continent: 'Europe', language: 'Icelandic' },
-    { country: 'Portugal', continent: 'Europe', language: 'Portuguese' },
-    { country: 'Malta', continent: 'Europe', language: 'Maltese' },
-    { country: 'Brazil', continent: 'South America', language: 'Portuguese' },
-    { country: 'Argentina', continent: 'South America', language: 'Spanish' },
-    { country: 'Colombia', continent: 'South America', language: 'Spanish' },
-    { country: 'Peru', continent: 'South America', language: 'Spanish' },
-    { country: 'Venezuela', continent: 'South America', language: 'Spanish' },
-    { country: 'Uruguay', continent: 'South America', language: 'Spanish' },
-    { country: 'Belgium', continent: 'Europe', language: 'French' },
-];
-
-const games = [
-    'Chess',
-    'Cross and Circle',
-    'Daldøs',
-    'Downfall',
-    'DVONN',
-    'Fanorona',
-    'Game of the Generals',
-    'Ghosts',
-    'Abalone',
-    'Agon',
-    'Backgammon',
-    'Battleship',
-    'Blockade',
-    'Blood Bowl',
-    'Bul',
-    'Camelot',
-    'Checkers',
-    'Go',
-    'Gipf',
-    'Guess Who?',
-    'Hare and Hounds',
-    'Hex',
-    'Hijara',
-    'Isola',
-    'Janggi (Korean Chess)',
-    'Le Jeu de la Guerre',
-    'Patolli',
-    'Plateau',
-    'PÜNCT',
-    'Rithmomachy',
-    'Sáhkku',
-    'Senet',
-    'Shogi',
-    'Space Hulk',
-    'Stratego',
-    'Sugoroku',
-    'Tâb',
-    'Tablut',
-    'Tantrix',
-    'Wari',
-    'Xiangqi (Chinese chess)',
-    'YINSH',
-    'ZÈRTZ',
-    'Kalah',
-    'Kamisado',
-    'Liu po',
-    'Lost Cities',
-    'Mad Gab',
-    'Master Mind',
-    "Nine Men's Morris",
-    'Obsession',
-    'Othello',
-];
-const booleanValues = [true, 'true', false, 'false'];
-
-const firstNames = [
-    'Sophie',
-    'Isabelle',
-    'Emily',
-    'Olivia',
-    'Lily',
-    'Chloe',
-    'Isabella',
-    'Amelia',
-    'Jessica',
-    'Sophia',
-    'Ava',
-    'Charlotte',
-    'Mia',
-    'Lucy',
-    'Grace',
-    'Ruby',
-    'Ella',
-    'Evie',
-    'Freya',
-    'Isla',
-    'Poppy',
-    'Daisy',
-    'Layla',
-];
-
-const lastNames = [
-    'Beckham',
-    'Black',
-    'Braxton',
-    'Brennan',
-    'Brock',
-    'Bryson',
-    'Cadwell',
-    'Cage',
-    'Carson',
-    'Chandler',
-    'Cohen',
-    'Cole',
-    'Corbin',
-    'Dallas',
-    'Dalton',
-    'Dane',
-    'Donovan',
-    'Easton',
-    'Fisher',
-    'Fletcher',
-    'Grady',
-    'Greyson',
-    'Griffin',
-    'Gunner',
-    'Hayden',
-    'Hudson',
-    'Hunter',
-    'Jacoby',
-    'Jagger',
-    'Jaxon',
-    'Jett',
-    'Kade',
-    'Kane',
-    'Keating',
-    'Keegan',
-    'Kingston',
-    'Kobe',
-];
-
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule), LocaleModule]);
 
 const dataSize: string = '.1x22';
 
-const autoGroupColumnDef: ColDef = {
-    headerName: 'Group',
-    width: 200,
-    field: 'name',
-    valueGetter: (params) => {
-        if (params.node && params.node.group) {
-            return params.node.key;
-        } else {
-            return params.data[params.colDef.field!];
-        }
-    },
-    cellRenderer: 'agGroupCellRenderer',
-};
-
+let currentLang: LanguageConfig = LANGUAGES['arabic'];
 let gridApi: GridApi;
 
-const gridOptions: GridOptions = {
-    defaultColDef: {
-        editable: true,
-        minWidth: 100,
-        filter: true,
-        floatingFilter: true,
-    },
-    sideBar: true,
-    rowGroupPanelShow: 'always', // on of ['always','onlyWhenGrouping']
-    pivotPanelShow: 'always', // on of ['always','onlyWhenPivoting']
-    enableRtl: true,
-    statusBar: {
-        statusPanels: [{ statusPanel: 'agAggregationComponent' }],
-    },
-    rowSelection: {
-        mode: 'multiRow',
-        groupSelects: 'descendants',
-        selectAll: 'filtered',
-    },
-    quickFilterText: undefined,
-    autoGroupColumnDef: autoGroupColumnDef,
-    onRowSelected: rowSelected, //callback when row selected
-    onSelectionChanged: selectionChanged, //callback when selection changed,
-    getBusinessKeyForNode: (node) => {
-        if (node.data) {
-            return node.data.name;
-        } else {
-            return '';
-        }
-    },
-    getContextMenuItems: getContextMenuItems,
-};
+function getAutoGroupColumnDef(): ColDef {
+    return {
+        headerName: currentLang.headers.group,
+        width: 200,
+        field: 'name',
+        valueGetter: (params) => {
+            if (params.node && params.node.group) {
+                return params.node.key;
+            } else {
+                return params.data[params.colDef.field!];
+            }
+        },
+        cellRenderer: 'agGroupCellRenderer',
+    };
+}
 
-function getContextMenuItems(params: GetContextMenuItemsParams): (string | MenuItemDef)[] {
-    const result: (string | MenuItemDef)[] = params.defaultItems!.splice(0);
+function getGridOptions(language: string): GridOptions {
+    currentLang = LANGUAGES[language];
+    return {
+        columnDefs: createCols(),
+        rowData: createRowData(language),
+        context: { COUNTRY_CODES },
+        defaultColDef: {
+            editable: true,
+            minWidth: 100,
+            filter: true,
+            floatingFilter: true,
+        },
+        sideBar: true,
+        rowGroupPanelShow: 'always',
+        pivotPanelShow: 'always',
+        enableRtl: currentLang.enableRtl,
+        localeText: currentLang.localeText,
+        statusBar: {
+            statusPanels: [{ statusPanel: 'agAggregationComponent' }],
+        },
+        rowSelection: {
+            mode: 'multiRow',
+            groupSelects: 'descendants',
+            selectAll: 'filtered',
+        },
+        quickFilterText: undefined,
+        autoGroupColumnDef: getAutoGroupColumnDef(),
+        onRowSelected: rowSelected,
+        onSelectionChanged: selectionChanged,
+        getBusinessKeyForNode: (node) => {
+            if (node.data) {
+                return node.data.name;
+            } else {
+                return '';
+            }
+        },
+        getContextMenuItems: getContextMenuItems,
+    };
+}
+
+function getContextMenuItems(params: GetContextMenuItemsParams): (DefaultMenuItem | MenuItemDef)[] {
+    const result: (DefaultMenuItem | MenuItemDef)[] = params.defaultItems!.splice(0);
     result.push({
-        name: 'Custom Menu Item',
+        name: currentLang.contextMenu.customMenuItem,
         icon: '<img src="https://www.ag-grid.com/example-assets/lab.png" style="width: 14px;" />',
-        //shortcut: 'Alt + M',
         action: () => {
             const value = params.value ? params.value : '<empty>';
-            window.alert('You clicked a custom menu item on cell ' + value);
+            console.log('You clicked a custom menu item on cell ' + value);
         },
     });
 
     return result;
 }
 
-const firstColumn: ColDef = {
-    headerName: 'Name',
-    field: 'name',
-    width: 200,
-    editable: true,
-    enableRowGroup: true,
-    filter: PersonFilter,
-    icons: {
-        sortAscending: '<i class="fa fa-sort-alpha-up"/>',
-        sortDescending: '<i class="fa fa-sort-alpha-down"/>',
-    },
-};
-
-const defaultCols: (ColDef | ColGroupDef)[] = [
-    {
-        // column group 'Participant
-        headerName: 'Participant',
-        children: [
-            firstColumn,
-            {
-                field: 'language',
-                width: 150,
-                editable: true,
-                filter: 'agSetColumnFilter',
-                cellRenderer: languageCellRenderer,
-                cellEditor: 'agSelectCellEditor',
-                enableRowGroup: true,
-                enablePivot: true,
-                cellEditorParams: {
-                    values: [
-                        'English',
-                        'Spanish',
-                        'French',
-                        'Portuguese',
-                        'German',
-                        'Swedish',
-                        'Norwegian',
-                        'Italian',
-                        'Greek',
-                        'Icelandic',
-                        'Portuguese',
-                        'Maltese',
-                    ],
-                },
-                pinned: 'right',
-                headerTooltip: 'Example tooltip for Language',
-            },
-            {
-                field: 'country',
-                width: 150,
-                editable: true,
-                cellRenderer: CountryCellRenderer,
-                enableRowGroup: true,
-                enablePivot: true,
-                cellEditor: 'agRichSelectCellEditor',
-                cellEditorParams: {
-                    cellRenderer: CountryCellRenderer,
-                    values: [
-                        'Argentina',
-                        'Brazil',
-                        'Colombia',
-                        'France',
-                        'Germany',
-                        'Greece',
-                        'Iceland',
-                        'Ireland',
-                        'Italy',
-                        'Malta',
-                        'Portugal',
-                        'Norway',
-                        'Peru',
-                        'Spain',
-                        'Sweden',
-                        'United Kingdom',
-                        'Uruguay',
-                        'Venezuela',
-                        'Belgium',
-                        'Luxembourg',
-                    ],
-                },
-                filterParams: {
-                    cellRenderer: CountryCellRenderer,
-                },
-            },
-        ],
-    },
-    {
-        // column group 'Game of Choice'
-        headerName: 'Game of Choice',
-        children: [
-            {
-                headerName: 'Game Name',
-                field: 'game.name',
-                width: 180,
-                editable: true,
-                filter: 'agSetColumnFilter',
-                tooltipField: 'game.name',
-                cellClass: () => {
-                    return 'alphabet';
-                },
-                enableRowGroup: true,
-                enablePivot: true,
-                pinned: 'left',
-                icons: {
-                    sortAscending: '<i class="fa fa-sort-alpha-up"/>',
-                    sortDescending: '<i class="fa fa-sort-alpha-down"/>',
-                },
-            },
-            {
-                headerName: 'Bought',
-                field: 'game.bought',
-                filter: 'agSetColumnFilter',
-                editable: true,
-                width: 100,
-                enableRowGroup: true,
-                enablePivot: true,
-                enableValue: true,
-                cellRenderer: booleanCellRenderer,
-                cellStyle: { 'text-align': 'center' },
-                comparator: booleanComparator,
-                filterParams: { cellRenderer: booleanFilterCellRenderer },
-            },
-        ],
-    },
-    {
-        // column group 'Performance'
-        groupId: 'performance',
-        children: [
-            {
-                field: 'bankBalance',
-                width: 150,
-                editable: true,
-                filter: WinningsFilter,
-                cellRenderer: currencyRenderer,
-                cellStyle: currencyCssFunc,
-                filterParams: { cellRenderer: currencyRenderer },
-                enableValue: true,
-                icons: {
-                    sortAscending: '<i class="fa fa-sort-amount-up"/>',
-                    sortDescending: '<i class="fa fa-sort-amount-down"/>',
-                },
-            },
-            {
-                headerName: 'Extra Info 1',
-                columnGroupShow: 'open',
-                width: 150,
-                editable: false,
-                sortable: false,
-                suppressHeaderMenuButton: true,
-                cellStyle: { 'text-align': 'right' },
-                cellRenderer: () => {
-                    return 'Abra...';
-                },
-            },
-            {
-                headerName: 'Extra Info 2',
-                columnGroupShow: 'open',
-                width: 150,
-                editable: false,
-                sortable: false,
-                suppressHeaderMenuButton: true,
-                cellStyle: { 'text-align': 'left' },
-                cellRenderer: () => {
-                    return '...cadabra!';
-                },
-            },
-        ],
-    },
-    {
-        field: 'rating',
-        width: 100,
+function createDefaultCols(): (ColDef | ColGroupDef)[] {
+    const firstColumn: ColDef = {
+        headerName: currentLang.headers.name,
+        field: 'name',
+        width: 200,
         editable: true,
-        cellRenderer: ratingRenderer,
         enableRowGroup: true,
-        enablePivot: true,
-        enableValue: true,
-        filterParams: { cellRenderer: ratingFilterRenderer },
-    },
-    {
-        field: 'totalWinnings',
-        filter: 'agNumberColumnFilter',
-        editable: true,
-        valueSetter: numberValueSetter,
-        width: 150,
-        enableValue: true,
-        cellRenderer: currencyRenderer,
-        cellStyle: currencyCssFunc,
         icons: {
-            sortAscending: '<i class="fa fa-sort-amount-up"/>',
-            sortDescending: '<i class="fa fa-sort-amount-down"/>',
+            sortAscending: '<i class="fa fa-sort-alpha-up"/>',
+            sortDescending: '<i class="fa fa-sort-alpha-down"/>',
         },
-    },
-];
-//put in the month cols
-const monthGroup: ColGroupDef = {
-    headerName: 'Monthly Breakdown',
-    children: [],
-};
-defaultCols.push(monthGroup);
-months.forEach((month) => {
-    const child: ColDef = {
-        headerName: month,
-        field: month.toLocaleLowerCase(),
-        width: 100,
-        filter: 'agNumberColumnFilter',
-        editable: true,
-        enableValue: true,
-        cellClassRules: {
-            'good-score': 'typeof x === "number" && x > 50000',
-            'bad-score': 'typeof x === "number" && x < 10000',
-        },
-        valueSetter: numberValueSetter,
-        cellRenderer: currencyRenderer,
-        cellStyle: { 'text-align': 'right' },
     };
-    monthGroup.children.push(child);
-});
+
+    const cols: (ColDef | ColGroupDef)[] = [
+        {
+            headerName: currentLang.headers.participant,
+            children: [
+                firstColumn,
+                {
+                    headerName: currentLang.headers.language,
+                    field: 'language',
+                    width: 150,
+                    editable: true,
+                    filter: 'agSetColumnFilter',
+                    cellRenderer: languageCellRenderer,
+                    cellEditor: 'agSelectCellEditor',
+                    enableRowGroup: true,
+                    enablePivot: true,
+                    cellEditorParams: {
+                        values: currentLang.editorLanguages,
+                    },
+                    pinned: 'right',
+                    headerTooltip: currentLang.headers.languageTooltip,
+                },
+                {
+                    headerName: currentLang.headers.country,
+                    field: 'country',
+                    width: 150,
+                    editable: true,
+                    cellRenderer: CountryCellRenderer,
+                    enableRowGroup: true,
+                    enablePivot: true,
+                    cellEditor: 'agRichSelectCellEditor',
+                    cellEditorParams: {
+                        cellRenderer: CountryCellRenderer,
+                        values: currentLang.editorCountries,
+                    },
+                    filterParams: {
+                        cellRenderer: CountryCellRenderer,
+                    },
+                },
+            ],
+        },
+        {
+            headerName: currentLang.headers.gameOfChoice,
+            children: [
+                {
+                    headerName: currentLang.headers.gameName,
+                    field: 'game.name',
+                    width: 180,
+                    editable: true,
+                    filter: 'agSetColumnFilter',
+                    tooltip: true,
+                    cellClass: () => {
+                        return 'alphabet';
+                    },
+                    enableRowGroup: true,
+                    enablePivot: true,
+                    pinned: 'left',
+                    icons: {
+                        sortAscending: '<i class="fa fa-sort-alpha-up"/>',
+                        sortDescending: '<i class="fa fa-sort-alpha-down"/>',
+                    },
+                },
+                {
+                    headerName: currentLang.headers.bought,
+                    field: 'game.bought',
+                    filter: 'agSetColumnFilter',
+                    editable: true,
+                    width: 100,
+                    enableRowGroup: true,
+                    enablePivot: true,
+                    enableValue: true,
+                    cellRenderer: booleanCellRenderer,
+                    cellStyle: { 'text-align': 'center' },
+                    comparator: booleanComparator,
+                    filterParams: { cellRenderer: booleanFilterCellRenderer },
+                },
+            ],
+        },
+        {
+            groupId: 'performance',
+            children: [
+                {
+                    headerName: currentLang.headers.bankBalance,
+                    field: 'bankBalance',
+                    width: 150,
+                    editable: true,
+                    cellRenderer: currencyRenderer,
+                    cellStyle: currencyCssFunc,
+                    filter: 'agNumberColumnFilter',
+                    enableValue: true,
+                    icons: {
+                        sortAscending: '<i class="fa fa-sort-amount-up"/>',
+                        sortDescending: '<i class="fa fa-sort-amount-down"/>',
+                    },
+                },
+                {
+                    headerName: currentLang.headers.extraInfo1,
+                    columnGroupShow: 'open',
+                    width: 150,
+                    editable: false,
+                    sortable: false,
+                    suppressHeaderMenuButton: true,
+                    cellStyle: { 'text-align': 'right' },
+                    cellRenderer: () => {
+                        return currentLang.cellContent.abra;
+                    },
+                },
+                {
+                    headerName: currentLang.headers.extraInfo2,
+                    columnGroupShow: 'open',
+                    width: 150,
+                    editable: false,
+                    sortable: false,
+                    suppressHeaderMenuButton: true,
+                    cellStyle: { 'text-align': 'left' },
+                    cellRenderer: () => {
+                        return currentLang.cellContent.cadabra;
+                    },
+                },
+            ],
+        },
+        {
+            headerName: currentLang.headers.rating,
+            field: 'rating',
+            width: 100,
+            editable: true,
+            cellRenderer: ratingRenderer,
+            enableRowGroup: true,
+            enablePivot: true,
+            enableValue: true,
+            filterParams: { cellRenderer: ratingFilterRenderer },
+        },
+        {
+            headerName: currentLang.headers.totalWinnings,
+            field: 'totalWinnings',
+            filter: 'agNumberColumnFilter',
+            editable: true,
+            valueSetter: numberValueSetter,
+            width: 150,
+            enableValue: true,
+            cellRenderer: currencyRenderer,
+            cellStyle: currencyCssFunc,
+            icons: {
+                sortAscending: '<i class="fa fa-sort-amount-up"/>',
+                sortDescending: '<i class="fa fa-sort-amount-down"/>',
+            },
+        },
+    ];
+
+    const monthGroup: ColGroupDef = {
+        headerName: currentLang.headers.monthlyBreakdown,
+        children: [],
+    };
+    cols.push(monthGroup);
+    for (let i = 0, len = currentLang.months.length; i < len; ++i) {
+        const month = currentLang.months[i];
+        const child: ColDef = {
+            headerName: month,
+            field: 'month_' + i,
+            width: 100,
+            filter: 'agNumberColumnFilter',
+            editable: true,
+            enableValue: true,
+            cellClassRules: {
+                'good-score': 'typeof x === "number" && x > 50000',
+                'bad-score': 'typeof x === "number" && x < 10000',
+            },
+            valueSetter: numberValueSetter,
+            cellRenderer: currencyRenderer,
+            cellStyle: { 'text-align': 'right' },
+        };
+        monthGroup.children.push(child);
+    }
+
+    return cols;
+}
 
 function getColCount() {
     switch (dataSize) {
@@ -475,29 +302,13 @@ function getColCount() {
     }
 }
 
-function getRowCount() {
-    switch (dataSize) {
-        case '.1x22':
-            return 100;
-        case '1x22':
-            return 1000;
-        case '10x100':
-            return 10000;
-        case '100x22':
-            return 100000;
-        default:
-            return -1;
-    }
-}
-
 function createCols() {
     const colCount = getColCount();
-    // start with a copy of the default cols
+    const defaultCols = createDefaultCols();
     const columns = defaultCols.slice(0, colCount);
 
-    // there are 22 cols by default
     for (let col = 22; col < colCount; col++) {
-        const colName = colNames[col % colNames.length];
+        const colName = currentLang.colNames[col % currentLang.colNames.length];
         const colDef = {
             headerName: colName,
             field: 'col' + col,
@@ -510,100 +321,8 @@ function createCols() {
     return columns;
 }
 
-let loadInstance = 0;
-
-function createData() {
-    loadInstance++;
-
-    const loadInstanceCopy = loadInstance;
-    gridApi!.setGridOption('loading', true);
-
-    const colDefs = createCols();
-
-    const rowCount = getRowCount();
-    const colCount = getColCount();
-
-    let row = 0;
-    const data: any[] = [];
-
-    const intervalId = setInterval(() => {
-        if (loadInstanceCopy != loadInstance) {
-            clearInterval(intervalId);
-            return;
-        }
-
-        for (let i = 0; i < 1000; i++) {
-            if (row < rowCount) {
-                const rowItem = createRowItem(row, colCount);
-                data.push(rowItem);
-                row++;
-            }
-        }
-
-        if (row >= rowCount) {
-            clearInterval(intervalId);
-            setTimeout(() => {
-                gridApi!.setGridOption('columnDefs', colDefs);
-                gridApi!.setGridOption('rowData', data);
-                gridApi!.setGridOption('loading', false);
-            }, 0);
-        }
-    }, 0);
-}
-
-function createRowItem(row: number, colCount: number) {
-    const rowItem: any = {};
-
-    //create data for the known columns
-    const countriesToPickFrom = Math.floor(countries.length * (((row % 3) + 1) / 3));
-    const countryData = countries[(row * 19) % countriesToPickFrom];
-    rowItem.country = countryData.country;
-    rowItem.continent = countryData.continent;
-    rowItem.language = countryData.language;
-
-    const firstName = firstNames[row % firstNames.length];
-    const lastName = lastNames[row % lastNames.length];
-    rowItem.name = firstName + ' ' + lastName;
-
-    rowItem.game = {
-        name: games[Math.floor(((row * 13) / 17) * 19) % games.length],
-        bought: booleanValues[row % booleanValues.length],
-    };
-
-    rowItem.bankBalance = Math.round(pseudoRandom() * 10000000) / 100 - 3000;
-    rowItem.rating = Math.round(pseudoRandom() * 5);
-
-    let totalWinnings = 0;
-    months.forEach((month) => {
-        const value = Math.round(pseudoRandom() * 10000000) / 100 - 20;
-        rowItem[month.toLocaleLowerCase()] = value;
-        totalWinnings += value;
-    });
-    rowItem.totalWinnings = totalWinnings;
-
-    //create dummy data for the additional columns
-    for (let col = defaultCols.length; col < colCount; col++) {
-        var value;
-        const randomBit = pseudoRandom().toString().substring(2, 5);
-        value = colNames[col % colNames.length] + '-' + randomBit + ' - (' + (row + 1) + ',' + col + ')';
-        rowItem['col' + col] = value;
-    }
-
-    return rowItem;
-}
-
-let seed = 123456789;
-const m = Math.pow(2, 32);
-const a = 1103515245;
-const c = 12345;
-
-function pseudoRandom() {
-    seed = (a * seed + c) % m;
-    return seed / m;
-}
-
 function selectionChanged(event: SelectionChangedEvent) {
-    console.log('Callback selectionChanged: selection count = ' + gridApi!.getSelectedNodes().length);
+    console.log('Callback selectionChanged: selection count = ' + event.selectedNodes?.length);
 }
 
 function rowSelected(event: RowSelectedEvent) {
@@ -660,7 +379,7 @@ function ratingRendererGeneral(value: any, forFilter: boolean) {
     }
 
     if (forFilter && Number(value) === 0) {
-        result += '(No stars)';
+        result += currentLang.cellContent.noStars;
     }
 
     return result;
@@ -672,7 +391,6 @@ function currencyRenderer(params: ICellRendererParams) {
     } else if (isNaN(params.value)) {
         return 'NaN';
     } else {
-        // if we are doing 'count', then we do not show pound sign
         if (params.node.group && params.column!.getAggFunc() === 'count') {
             return params.value;
         } else {
@@ -728,7 +446,7 @@ function booleanFilterCellRenderer(params: ICellRendererParams) {
     } else if (params.value === '(Select All)') {
         return params.value;
     } else {
-        return '(empty)';
+        return currentLang.cellContent.empty;
     }
 }
 
@@ -750,9 +468,16 @@ function languageCellRenderer(params: ICellRendererParams) {
     }
 }
 
+function onLanguageChange() {
+    const select = document.querySelector<HTMLSelectElement>('#language')!;
+    const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
+
+    gridApi.destroy();
+    gridApi = createGrid(gridDiv, getGridOptions(select.value));
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const gridDiv = document.querySelector<HTMLElement>('#myGrid')!;
 
-    gridApi = createGrid(gridDiv, gridOptions);
-    createData();
+    gridApi = createGrid(gridDiv, getGridOptions('arabic'));
 });

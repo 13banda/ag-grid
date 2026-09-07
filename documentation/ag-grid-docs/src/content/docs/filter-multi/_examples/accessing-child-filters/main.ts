@@ -3,15 +3,15 @@ import type {
     GridOptions,
     IMultiFilter,
     IMultiFilterParams,
-    ISetFilter,
     ITextFilterParams,
+    SetFilterUi,
 } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ClipboardModule,
@@ -21,6 +21,11 @@ import {
     SetFilterModule,
 } from 'ag-grid-enterprise';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ClipboardModule,
@@ -29,7 +34,6 @@ ModuleRegistry.registerModules([
     MultiFilterModule,
     SetFilterModule,
     TextFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -62,16 +66,9 @@ const gridOptions: GridOptions<IOlympicData> = {
     },
 };
 
-function getTextModel() {
-    gridApi!.getColumnFilterInstance<IMultiFilter>('athlete').then((multiFilterInstance) => {
-        const textFilter = multiFilterInstance!.getChildFilterInstance(0)!;
-        console.log('Current Text Filter model: ', textFilter.getModel());
-    });
-}
-
 function getSetMiniFilter() {
     gridApi!.getColumnFilterInstance<IMultiFilter>('athlete').then((multiFilterInstance) => {
-        const setFilter = multiFilterInstance!.getChildFilterInstance(1) as ISetFilter;
+        const setFilter = multiFilterInstance!.getChildFilterInstance<SetFilterUi>(1)!;
         console.log('Current Set Filter search text: ', setFilter.getMiniFilter());
     });
 }

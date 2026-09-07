@@ -1,8 +1,8 @@
 import type { BeanCollection, ChartToolPanelMenuOptions } from 'ag-grid-community';
-import { AgPromise, Component } from 'ag-grid-community';
+import { AgPromise, Component, _createElement } from 'ag-grid-community';
 
-import type { TabbedItem } from '../../../widgets/iTabbedLayout';
-import { TabbedLayout } from '../../../widgets/tabbedLayout';
+import { AgTabbedLayout } from '../../../agStack/agTabbedLayout';
+import type { TabbedItem, TabbedLayout } from '../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartTranslationKey, ChartTranslationService } from '../services/chartTranslationService';
 import type { ChartMenuContext } from './chartMenuContext';
 import { ChartDataPanel } from './data/chartDataPanel';
@@ -12,7 +12,7 @@ import { ChartSettingsPanel } from './settings/chartSettingsPanel';
 const TAB_DATA = 'data';
 const TAB_FORMAT = 'format';
 
-export type TabbedChartMenuEvent = 'closed';
+type TabbedChartMenuEvent = 'closed';
 export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     private chartTranslation: ChartTranslationService;
 
@@ -21,7 +21,7 @@ export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     }
 
     private tabbedLayout: TabbedLayout;
-    private tabs: TabbedItem[] = [];
+    private readonly tabs: TabbedItem[] = [];
     private eventSource?: HTMLElement;
 
     constructor(
@@ -32,16 +32,16 @@ export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     }
 
     public postConstruct(): void {
-        this.panels.forEach((panel) => {
+        for (const panel of this.panels) {
             const panelType = panel.replace('chart', '').toLowerCase() as 'settings' | 'data' | 'format';
             const panelComp = this.createPanel(panelType);
             const tabItem = this.createTab(panel, panelType, panelComp);
 
             this.tabs.push(tabItem);
             this.addDestroyFunc(() => this.destroyBean(panelComp));
-        });
+        }
 
-        this.tabbedLayout = new TabbedLayout({
+        this.tabbedLayout = new AgTabbedLayout({
             items: this.tabs,
             cssClass: 'ag-chart-tabbed-menu',
             keepScrollPosition: true,
@@ -58,16 +58,14 @@ export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     }
 
     private createTab(name: ChartToolPanelMenuOptions, title: ChartTranslationKey, panelComp: Component): TabbedItem {
-        const eWrapperDiv = document.createElement('div');
-        eWrapperDiv.classList.add('ag-chart-tab', `ag-chart-${title}`);
+        const eWrapperDiv = _createElement({ tag: 'div', cls: `ag-chart-tab ag-chart-${title}` });
 
         this.createBean(panelComp);
 
         eWrapperDiv.appendChild(panelComp.getGui());
 
-        const titleEl = document.createElement('div');
         const translatedTitle = this.chartTranslation.translate(title);
-        titleEl.innerText = translatedTitle;
+        const titleEl = _createElement({ tag: 'div', children: translatedTitle });
 
         return {
             title: titleEl,
@@ -87,7 +85,7 @@ export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     }
 
     public override getGui(): HTMLElement {
-        return this.tabbedLayout && this.tabbedLayout.getGui();
+        return this.tabbedLayout?.getGui();
     }
 
     public showMenu(eventSource?: HTMLElement, suppressFocus?: boolean): void {
@@ -98,7 +96,7 @@ export class TabbedChartMenu extends Component<TabbedChartMenuEvent> {
     }
 
     public override destroy(): void {
-        if (this.parentComponent && this.parentComponent.isAlive()) {
+        if (this.parentComponent?.isAlive()) {
             this.destroyBean(this.parentComponent);
         }
         super.destroy();

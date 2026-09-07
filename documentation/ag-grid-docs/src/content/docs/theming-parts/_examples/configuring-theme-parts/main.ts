@@ -1,6 +1,5 @@
 import type { ColDef, GridOptions, Part, Theme } from 'ag-grid-community';
 import {
-    AllCommunityModule,
     ModuleRegistry,
     colorSchemeDark,
     colorSchemeDarkBlue,
@@ -9,6 +8,7 @@ import {
     colorSchemeLightCold,
     colorSchemeLightWarm,
     createGrid,
+    enableDevValidations,
     iconSetAlpine,
     iconSetMaterial,
     iconSetQuartzBold,
@@ -16,16 +16,23 @@ import {
     iconSetQuartzRegular,
     themeAlpine,
     themeBalham,
+    themeMaterial,
     themeQuartz,
 } from 'ag-grid-community';
 import { AllEnterpriseModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([AllCommunityModule, AllEnterpriseModule]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([AllEnterpriseModule]);
 
 const baseThemes: Record<string, Theme> = {
     quartz: themeQuartz,
     balham: themeBalham,
     alpine: themeAlpine,
+    material: themeMaterial,
 };
 let baseTheme = themeQuartz;
 

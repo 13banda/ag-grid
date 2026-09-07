@@ -10,8 +10,8 @@ import {
     CsvExportModule,
     ModuleRegistry,
     NumberFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -20,6 +20,11 @@ import {
     RowGroupingModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberFilterModule,
@@ -30,7 +35,6 @@ ModuleRegistry.registerModules([
     ContextMenuModule,
     RowGroupingModule,
     SetFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const getParams: () => ExcelExportParams = () => ({

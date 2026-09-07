@@ -1,26 +1,30 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-const replace = require('replace-in-file');
+const { replaceInFile: replace } = require('replace-in-file');
 const fs = require('fs');
 const { EOL } = require('os');
 const ts = require('typescript');
 const { _getCallbackForEvent, _PUBLIC_EVENTS } = require('ag-grid-community');
 const { getFormatterForTS } = require('./../../scripts/formatAST');
-const { _ALL_GRID_OPTIONS } = require('ag-grid-community');
-
+const { _GET_ALL_GRID_OPTIONS } = require('ag-grid-community');
 const { formatNode, findNode, getFullJsDoc } = getFormatterForTS(ts);
+const prettier = require('prettier');
 
 const AG_CHART_TYPES = ['AgChartTheme', 'AgChartThemeOverrides'];
 
 function writeSortedLines(toWrite, result) {
     toWrite.sort((a, b) => {
-        if (a.order < b.order) return -1;
-        if (a.order > b.order) return 1;
+        if (a.order < b.order) {
+            return -1;
+        }
+        if (a.order > b.order) {
+            return 1;
+        }
         return 0;
     });
 
-    toWrite.forEach((p) => {
+    for (const p of toWrite) {
         result += p.line;
-    });
+    }
     // for readability
     result += EOL;
     return result;
@@ -56,14 +60,16 @@ function extractTypesFromNode(srcFile, node, { typeLookup, eventTypeLookup, publ
 }
 
 function generateAngularInputOutputs({ typeLookup, eventTypeLookup, docLookup }) {
-    const skippableProperties = ['gridOptions', 'reactiveCustomComponents'];
+    const skippableProperties = ['gridOptions', 'reactiveCustomComponents', 'renderingMode'];
     const skippableEvents = ['gridPreDestroyed'];
     const skippableEventTypes = ['GridPreDestroyedEvent'];
     let propsToWrite = [];
     const typeKeysOrder = Object.keys(typeLookup);
 
-    _ALL_GRID_OPTIONS.forEach((property) => {
-        if (skippableProperties.includes(property)) return;
+    for (const property of _GET_ALL_GRID_OPTIONS()) {
+        if (skippableProperties.includes(property)) {
+            continue;
+        }
 
         const typeName = typeLookup[property];
         const inputType = getSafeType(typeName);
@@ -78,14 +84,16 @@ function generateAngularInputOutputs({ typeLookup, eventTypeLookup, docLookup })
         line += `    @Input(${isBoolean ? '{ transform: booleanAttribute }' : ''}) public ${property}: ${inputTypeWithGenerics} = undefined;${EOL}`;
         const order = typeKeysOrder.findIndex((p) => p === property);
         propsToWrite.push({ order, line });
-    });
+    }
 
     let result = writeSortedLines(propsToWrite, '');
 
     let eventsToWrite = [];
     const missingEventTypes = [];
-    _PUBLIC_EVENTS.forEach((event) => {
-        if (skippableEvents.includes(event)) return;
+    for (const event of _PUBLIC_EVENTS) {
+        if (skippableEvents.includes(event)) {
+            continue;
+        }
 
         const onEvent = _getCallbackForEvent(event);
         const eventType = eventTypeLookup[onEvent];
@@ -97,7 +105,7 @@ function generateAngularInputOutputs({ typeLookup, eventTypeLookup, docLookup })
         } else {
             missingEventTypes.push(event);
         }
-    });
+    }
 
     if (missingEventTypes.length > 0) {
         throw new Error(
@@ -141,6 +149,7 @@ function addDocLine(docLookup, property, result) {
     const doc = docLookup[property];
     if (doc) {
         // Get comments to line up properly
+        // eslint-disable-next-line sonarjs/no-nested-template-literals
         result += `    ${doc.replace(/\s\*/g, `     *`)}${EOL}`;
     }
     return result;
@@ -161,15 +170,15 @@ function extractTypes(context, propsToSkip = [], typesToSkip = []) {
 
     let propertyTypes = [];
     const regex = new RegExp(/(?<!\w)(?:[A-Z]\w+)/, 'g');
-    allTypes.forEach((tt) => {
+    for (const tt of allTypes) {
         const matches = tt.matchAll(regex);
         for (const match of matches) {
             propertyTypes.push(Array.from(match, (m) => m));
         }
-    });
+    }
     let expandedTypes = propertyTypes.flatMap((m) => m);
 
-    const nonAgTypes = ['Partial', 'Document', 'HTMLElement', 'Function', 'TData'];
+    const nonAgTypes = ['Partial', 'Document', 'HTMLElement', 'Function', 'TData', 'Iterable'];
     expandedTypes = [...new Set(expandedTypes)]
         .filter((t) => !nonAgTypes.includes(t) && !AG_CHART_TYPES.includes(t))
         .sort();
@@ -183,8 +192,9 @@ function getGridPropertiesAndEventsJs() {
 
     // Apply @Output formatting to public events that are present in this lookup
     const publicEventLookup = {};
-    _PUBLIC_EVENTS.forEach((e) => (publicEventLookup[_getCallbackForEvent(e)] = true));
-
+    for (const e of _PUBLIC_EVENTS) {
+        publicEventLookup[_getCallbackForEvent(e)] = true;
+    }
     let context = {
         typeLookup: {},
         eventTypeLookup: {},
@@ -199,7 +209,7 @@ function getGridPropertiesAndEventsJs() {
 const updateGridProperties = (getGridPropertiesAndEvents) => {
     // extract the grid properties & events and add them to our angular grid component
     const { code: gridPropertiesAndEvents, types } = getGridPropertiesAndEvents();
-    const importsForProps = `import type {${EOL}    ${types.join(',' + EOL + '    ')}${EOL}} from "ag-grid-community";`;
+    const importsForProps = `import type {${EOL}    ${types.join(',' + EOL + '    ')}${EOL}} from 'ag-grid-community';`;
     const optionsForGrid = {
         files: './projects/ag-grid-angular/src/lib/ag-grid-angular.component.ts',
         from: [/(\/\/ @START@)[^]*(\/\/ @END@)/, /(\/\/ @START_IMPORTS@)[^]*(\/\/ @END_IMPORTS@)/],
@@ -215,6 +225,23 @@ const updateGridProperties = (getGridPropertiesAndEvents) => {
         console.log(
             `Grid Properties: ${changes.length === 0 ? 'No Modified files' : 'Modified files: ' + changes.map((change) => change.file).join(', ')}`
         );
+
+        if (changes.length) {
+            const prettierConfig = JSON.parse(fs.readFileSync('../../.prettierrc', 'utf-8'));
+            prettier
+                .format(fs.readFileSync('./projects/ag-grid-angular/src/lib/ag-grid-angular.component.ts', 'utf-8'), {
+                    ...prettierConfig,
+                    filepath: './projects/ag-grid-angular/src/lib/ag-grid-angular.component.ts',
+                })
+                .then((result) =>
+                    fs.writeFileSync('./projects/ag-grid-angular/src/lib/ag-grid-angular.component.ts', result)
+                )
+                .catch((error) => {
+                    // eslint-disable-next-line no-console
+                    console.error(error);
+                    process.exitCode = 1;
+                });
+        }
     });
 };
 

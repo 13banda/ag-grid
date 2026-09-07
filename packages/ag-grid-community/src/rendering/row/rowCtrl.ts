@@ -1,60 +1,85 @@
-import { setupCompBean } from '../../components/emptyBean';
 import {
-    _getFullWidthCellRendererDetails,
-    _getFullWidthDetailCellRendererDetails,
-    _getFullWidthGroupCellRendererDetails,
-    _getFullWidthLoadingCellRendererDetails,
-} from '../../components/framework/userCompUtils';
+    _addOrRemoveAttribute,
+    _batchCall,
+    _escapeString,
+    _exists,
+    _getActiveDomElement,
+    _isElementChildOfClass,
+    _isVisible,
+    _makeNull,
+    _setAriaExpanded,
+    _setAriaRowIndex,
+} from 'ag-stack';
+
+import { setupCompBean } from '../../components/emptyBean';
 import { BeanStub } from '../../context/beanStub';
 import type { BeanCollection } from '../../context/context';
 import type { AgColumn } from '../../entities/agColumn';
 import type { RowStyle } from '../../entities/gridOptions';
+import { _getAbsoluteRowIndex } from '../../entities/positionUtils';
 import type { RowNode } from '../../entities/rowNode';
 import type { AgEventType } from '../../eventTypes';
-import type { CellFocusedEvent, RowEvent, VirtualRowRemovedEvent } from '../../events';
+import type {
+    CellFocusedEvent,
+    RowClickedEvent,
+    RowDoubleClickedEvent,
+    RowEvent,
+    VirtualRowRemovedEvent,
+} from '../../events';
 import type { RowContainerType } from '../../gridBodyComp/rowContainer/rowContainerCtrl';
 import {
-    _getActiveDomElement,
+    _addGridCommonParams,
     _getRowHeightForNode,
     _isAnimateRows,
+    _isClientSideLoadingRow,
     _isDomLayout,
+    _isFullWidthGroupRow,
     _isGetRowHeightFunction,
-    _isGroupUseEntireRow,
     _isRowSelection,
     _setDomData,
 } from '../../gridOptionsUtils';
+import type { PinnedSectionWidths } from '../../headerRendering/headerUtils';
+import { getAriaHeaderRowCount, getPinnedSectionWidths } from '../../headerRendering/headerUtils';
 import type { BrandedType } from '../../interfaces/brandedType';
 import type { ProcessRowParams, RenderedRowEvent } from '../../interfaces/iCallbackParams';
-import type { CellPosition } from '../../interfaces/iCellPosition';
-import type { ColumnInstanceId, ColumnPinnedType } from '../../interfaces/iColumn';
+import type { RefreshRowsParams } from '../../interfaces/iCellsParams';
+import type { ColumnPinnedType } from '../../interfaces/iColumn';
 import type { WithoutGridCommon } from '../../interfaces/iCommon';
+import type { HorizontalSection, HorizontalSectionMap } from '../../interfaces/iGridSection';
 import type { DataChangedEvent, IRowNode } from '../../interfaces/iRowNode';
 import type { RowPosition } from '../../interfaces/iRowPosition';
 import type { UserCompDetails } from '../../interfaces/iUserCompDetails';
+import type { GetNoteParams } from '../../interfaces/notes';
 import { calculateRowLevel } from '../../styling/rowStyleService';
-import type { TooltipFeature } from '../../tooltip/tooltipFeature';
-import { _setAriaExpanded, _setAriaRowIndex } from '../../utils/aria';
-import { _addOrRemoveAttribute, _isElementChildOfClass, _isFocusableFormField, _isVisible } from '../../utils/dom';
-import { _isStopPropagationForAgGrid } from '../../utils/event';
-import { _findNextFocusableElement } from '../../utils/focus';
-import { _executeNextVMTurn } from '../../utils/function';
-import { _exists, _makeNull } from '../../utils/generic';
-import { _escapeString } from '../../utils/string';
+import { _isStopPropagationForAgGrid } from '../../utils/gridEvent';
+import { _clamp } from '../../utils/number';
 import type { Component } from '../../widgets/component';
 import { CellCtrl } from '../cell/cellCtrl';
 import type { ICellRenderer, ICellRendererParams } from '../cellRenderers/iCellRenderer';
+import { DOM_DATA_KEY_ROW_CTRL } from '../renderUtils';
+import { FullWidthRowFeature } from './fullWidthRowFeature';
+import type { FullWidthTarget, IRowModeFeature } from './iRowModeFeature';
+import { NormalRowFeature } from './normalRowFeature';
 
 type RowType = 'Normal' | 'FullWidth' | 'FullWidthLoading' | 'FullWidthGroup' | 'FullWidthDetail';
 
 let instanceIdSequence = 0;
 export type RowCtrlInstanceId = BrandedType<string, 'RowCtrlInstanceId'>;
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IRowComp {
     setDomOrder(domOrder: boolean): void;
-    addOrRemoveCssClass(cssClassName: string, on: boolean): void;
+    toggleCss(cssClassName: string, on: boolean): void;
     setCellCtrls(cellCtrls: CellCtrl[], useFlushSync: boolean): void;
+    getPinnedLeftRowElement(): HTMLElement | undefined;
+    getScrollingRowElement(): HTMLElement | undefined;
+    getPinnedRightRowElement(): HTMLElement | undefined;
+    refreshPinnedSections(): void;
     showFullWidth(compDetails: UserCompDetails): void;
-    getFullWidthCellRenderer(): ICellRenderer | null | undefined;
+    showEmbeddedFullWidth?(compDetails: HorizontalSectionMap<UserCompDetails>): void;
+    getFullWidthCellRenderers(): (ICellRenderer | null | undefined)[];
+    getFullWidthCellRendererParams(): ICellRendererParams | undefined;
+    getFullWidthCellRendererParamsForPinned?(pinned: ColumnPinnedType): ICellRendererParams | undefined;
     setTop(top: string): void;
     setTransform(transform: string): void;
     setRowIndex(rowIndex: string): void;
@@ -62,8 +87,10 @@ export interface IRowComp {
     setRowBusinessKey(businessKey: string): void;
     setUserStyles(styles: RowStyle | undefined): void;
     refreshFullWidth(getUpdatedParams: () => ICellRendererParams): boolean;
+    refreshEmbeddedFullWidth?(getUpdatedParams: (pinned: ColumnPinnedType) => ICellRendererParams): boolean;
 }
 
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface RowGui {
     rowComp: IRowComp;
     element: HTMLElement;
@@ -71,55 +98,33 @@ export interface RowGui {
     compBean: BeanStub;
 }
 
-interface CellCtrlListAndMap {
-    list: CellCtrl[];
-    map: { [key: ColumnInstanceId]: CellCtrl };
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export type PinnedCellGroupWidths = PinnedSectionWidths;
+
+interface MappedPinnedCellGroupWidths extends PinnedCellGroupWidths {
+    renderLeft: boolean;
+    renderRight: boolean;
 }
 
-export const DOM_DATA_KEY_ROW_CTRL = 'renderedRow';
-
-export type RowCtrlEvent = RenderedRowEvent;
+type RowCtrlEvent = RenderedRowEvent;
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export class RowCtrl extends BeanStub<RowCtrlEvent> {
     public readonly instanceId: RowCtrlInstanceId;
 
-    private tooltipFeature: TooltipFeature | undefined;
-
     private rowType: RowType;
 
-    private leftGui: RowGui | undefined;
-    private centerGui: RowGui | undefined;
-    private rightGui: RowGui | undefined;
-    private fullWidthGui: RowGui | undefined;
-
-    private allRowGuis: RowGui[] = [];
+    private rowGui: RowGui | undefined;
+    private readonly rowModeFeature: IRowModeFeature;
 
     private firstRowOnPage: boolean;
     private lastRowOnPage: boolean;
 
     private active = true;
 
-    public stoppingRowEdit: boolean;
-    /** full row editing */
-    public editing: boolean;
     private rowFocused: boolean;
 
-    private centerCellCtrls: CellCtrlListAndMap = { list: [], map: {} };
-    private leftCellCtrls: CellCtrlListAndMap = { list: [], map: {} };
-    private rightCellCtrls: CellCtrlListAndMap = { list: [], map: {} };
-
-    private slideInAnimation: { [key in RowContainerType]: boolean } = {
-        left: false,
-        center: false,
-        right: false,
-        fullWidth: false,
-    };
-
-    private fadeInAnimation: { [key in RowContainerType]: boolean } = {
-        left: false,
-        center: false,
-        right: false,
-        fullWidth: false,
-    };
+    private slideInAnimation = false;
+    private fadeInAnimation = false;
 
     private rowDragComps: Component[] = [];
 
@@ -130,27 +135,37 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     private rowLevel: number;
     public rowStyles: RowStyle;
     private readonly emptyStyle: RowStyle = {};
-    private readonly suppressRowTransform: boolean;
-
-    private updateColumnListsPending = false;
+    private readonly useTopPositioning: boolean;
 
     public rowId: string | null = null;
+    public ariaRowIndex: number | null = null;
     /** sanitised */
     public businessKey: string | null = null;
     private businessKeyForNodeFunc: ((node: IRowNode<any>) => string) | undefined;
+
+    public isEmbeddedFullWidth = false;
+    public embeddedSectionHasContent: HorizontalSectionMap<boolean> = {
+        left: true,
+        center: true,
+        right: true,
+    };
 
     constructor(
         public readonly rowNode: RowNode,
         beans: BeanCollection,
         animateIn: boolean,
-        private readonly useAnimationFrameForCreate: boolean,
+        public readonly useAnimationFrameForCreate: boolean,
         public readonly printLayout: boolean
     ) {
         super();
         this.beans = beans;
         this.gos = beans.gos;
         this.paginationPage = beans.pagination?.getCurrentPage() ?? 0;
-        this.suppressRowTransform = this.gos.get('suppressRowTransform');
+        // Transformed rows create stacking contexts which prevent spanned centre cells,
+        // regular pinned cells, and spanned pinned cells from being layered independently.
+        // Top positioning keeps those sections in the same stacking context, allowing
+        // pinned sections to remain synchronised by native CSS sticky positioning.
+        this.useTopPositioning = !!(this.gos.get('suppressRowTransform') || this.gos.get('enableCellSpan'));
 
         this.instanceId = (rowNode.id + '-' + instanceIdSequence++) as RowCtrlInstanceId;
         this.rowId = _escapeString(rowNode.id);
@@ -163,8 +178,24 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         this.setRowType();
         this.setAnimateFlags(animateIn);
         this.rowStyles = this.processStylesFromGridOptions();
+        this.rowModeFeature = this.createRowModeFeature();
 
         this.addListeners();
+
+        this.rowModeFeature.prepareInitialCellCtrls?.();
+    }
+
+    private isClientSideLoadingRow(): boolean {
+        return _isClientSideLoadingRow(this.gos, this.rowNode);
+    }
+
+    private createRowModeFeature(): IRowModeFeature {
+        const { context } = this.beans;
+        const feature = this.isFullWidth() ? new FullWidthRowFeature(this) : new NormalRowFeature(this);
+
+        this.createBean(feature, context);
+        this.addDestroyFunc(() => this.destroyBean(feature, context));
+        return feature;
     }
 
     private initRowBusinessKey(): void {
@@ -173,23 +204,11 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     }
 
     private updateRowBusinessKey(): void {
-        if (typeof this.businessKeyForNodeFunc !== 'function') {
+        if (this.isClientSideLoadingRow() || typeof this.businessKeyForNodeFunc !== 'function') {
             return;
         }
         const businessKey = this.businessKeyForNodeFunc(this.rowNode);
-        this.businessKey = _escapeString(businessKey!);
-    }
-
-    private updateGui(containerType: RowContainerType, gui: RowGui | undefined) {
-        if (containerType === 'left') {
-            this.leftGui = gui;
-        } else if (containerType === 'right') {
-            this.rightGui = gui;
-        } else if (containerType === 'fullWidth') {
-            this.fullWidthGui = gui;
-        } else {
-            this.centerGui = gui;
-        }
+        this.businessKey = _escapeString(businessKey);
     }
 
     public setComp(
@@ -198,26 +217,32 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         containerType: RowContainerType,
         compBean: BeanStub<any> | undefined
     ): void {
-        compBean = setupCompBean(this, this.beans.context, compBean);
+        const { context, rowRenderer } = this.beans;
+        const rowCompBean = setupCompBean(this, context, compBean);
 
-        const gui: RowGui = { rowComp, element, containerType, compBean };
-        this.allRowGuis.push(gui);
-        this.updateGui(containerType, gui);
+        const rowGui: RowGui = { rowComp, element, containerType, compBean: rowCompBean };
+        this.rowGui = rowGui;
 
-        this.initialiseRowComp(gui);
+        this.initialiseRowComp();
 
+        const rowNode = this.rowNode;
+        const isLoadingRow = this.rowType === 'FullWidthLoading' || rowNode.stub;
+        const isIrmLoadingRow = !rowNode.data && this.beans.rowModel.getType() === 'infinite';
         // pinned rows render before the main grid body in the SSRM, only fire the event after the main body has rendered.
-        if (this.rowType !== 'FullWidthLoading' && !this.rowNode.rowPinned) {
+        if (!isLoadingRow && !isIrmLoadingRow && !rowNode.rowPinned) {
             // this is fired within setComp as we know that the component renderer is now trying to render.
             // linked with the fact the function implementation queues behind requestAnimationFrame should allow
             // us to be certain that all rendering is done by the time the event fires.
-            this.beans.rowRenderer.dispatchFirstDataRenderedEvent();
+            rowRenderer.dispatchFirstDataRenderedEvent();
         }
+
+        this.rowModeFeature.setupFocus?.();
     }
 
     public unsetComp(containerType: RowContainerType): void {
-        this.allRowGuis = this.allRowGuis.filter((rowGui) => rowGui.containerType !== containerType);
-        this.updateGui(containerType, undefined);
+        if (this.rowGui?.containerType === containerType) {
+            this.rowGui = undefined;
+        }
     }
 
     public isCacheable(): boolean {
@@ -226,63 +251,68 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
 
     public setCached(cached: boolean): void {
         const displayValue = cached ? 'none' : '';
-        this.allRowGuis.forEach((rg) => (rg.element.style.display = displayValue));
+        this.rowGui?.element.style.setProperty('display', displayValue);
     }
 
-    private initialiseRowComp(gui: RowGui): void {
+    private initialiseRowComp(): void {
+        const rowGui = this.rowGui;
+        if (!rowGui) {
+            return;
+        }
+
         const gos = this.gos;
 
         this.onSuppressCellFocusChanged(this.beans.gos.get('suppressCellFocus'));
 
-        this.listenOnDomOrder(gui);
-        this.beans.rowAutoHeight?.checkAutoHeights(this.rowNode);
-        this.onRowHeightChanged(gui);
-        this.updateRowIndexes(gui);
-        this.setFocusedClasses(gui);
-        this.setStylesFromGridOptions(false, gui); // no need to calculate styles already set in constructor
+        this.listenOnDomOrder(rowGui);
+        this.onRowHeightChanged();
+        this.updateRowIndexes();
+        this.setFocusedClasses();
+        this.setStylesFromGridOptions(false); // no need to calculate styles already set in constructor
 
         if (_isRowSelection(gos) && this.rowNode.selectable) {
-            this.onRowSelected(gui);
+            this.onRowSelected();
         }
 
-        this.updateColumnLists(!this.useAnimationFrameForCreate);
+        this.rowModeFeature.initialiseComp();
 
-        const comp = gui.rowComp;
+        const { rowComp, element, compBean } = rowGui;
 
-        const initialRowClasses = this.getInitialRowClasses(gui.containerType);
-        initialRowClasses.forEach((name) => comp.addOrRemoveCssClass(name, true));
+        const initialRowClasses = this.getInitialRowClasses();
+        for (const name of initialRowClasses) {
+            rowComp.toggleCss(name, true);
+        }
+        // Cells apply their own edit styles on creation; rows otherwise only pick theirs up from
+        // postProcessCss, which never runs for a row that renders once and never changes index.
+        this.beans.editSvc?.applyRowEditStyles(this);
+        this.executeSlideAndFadeAnimations();
 
-        this.executeSlideAndFadeAnimations(gui);
-
-        if (this.rowNode.group) {
-            _setAriaExpanded(gui.element, this.rowNode.expanded == true);
+        if (this.rowNode.isExpandable()) {
+            _setAriaExpanded(element, !!this.rowNode.expanded);
         }
 
-        this.setRowCompRowId(comp);
-        this.setRowCompRowBusinessKey(comp);
+        this.setRowCompRowId();
+        this.setRowCompRowBusinessKey();
 
         // DOM DATA
-        _setDomData(gos, gui.element, DOM_DATA_KEY_ROW_CTRL, this);
-        gui.compBean.addDestroyFunc(() => _setDomData(gos, gui.element, DOM_DATA_KEY_ROW_CTRL, null));
+        _setDomData(gos, element, DOM_DATA_KEY_ROW_CTRL, this);
+        compBean.addDestroyFunc(() => _setDomData(gos, element, DOM_DATA_KEY_ROW_CTRL, null));
 
         // adding hover functionality adds listener to this row, so we
         // do it lazily in an animation frame
         if (this.useAnimationFrameForCreate) {
             this.beans.animationFrameSvc!.createTask(
-                this.addHoverFunctionality.bind(this, gui),
+                this.addHoverFunctionality.bind(this, rowGui),
                 this.rowNode.rowIndex!,
-                'createTasksP2'
+                'p2',
+                false
             );
         } else {
-            this.addHoverFunctionality(gui);
-        }
-
-        if (this.isFullWidth()) {
-            this.setupFullWidth(gui);
+            this.addHoverFunctionality(rowGui);
         }
 
         if (gos.get('rowDragEntireRow')) {
-            this.addRowDraggerToRow(gui);
+            this.addRowDraggerToRow();
         }
 
         if (this.useAnimationFrameForCreate) {
@@ -296,87 +326,88 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
                 if (!this.isAlive()) {
                     return;
                 }
-                gui.rowComp.addOrRemoveCssClass('ag-after-created', true);
+                rowComp.toggleCss('ag-after-created', true);
             });
         }
 
         this.executeProcessRowPostCreateFunc();
     }
 
-    private setRowCompRowBusinessKey(comp: IRowComp): void {
+    private setRowCompRowBusinessKey(): void {
         if (this.businessKey == null) {
             return;
         }
-        comp.setRowBusinessKey(this.businessKey);
+        this.rowGui?.rowComp.setRowBusinessKey(this.businessKey);
     }
 
-    private setRowCompRowId(comp: IRowComp) {
+    private setRowCompRowId() {
         const rowId = _escapeString(this.rowNode.id);
         this.rowId = rowId;
         if (rowId == null) {
             return;
         }
 
-        comp.setRowId(rowId);
+        this.rowGui?.rowComp.setRowId(rowId);
     }
 
-    private executeSlideAndFadeAnimations(gui: RowGui): void {
-        const { containerType } = gui;
+    private executeSlideAndFadeAnimations(): void {
+        const rowGui = this.rowGui;
+        if (!rowGui) {
+            return;
+        }
 
-        const shouldSlide = this.slideInAnimation[containerType];
-        if (shouldSlide) {
-            _executeNextVMTurn(() => {
+        if (this.slideInAnimation) {
+            _batchCall(() => {
                 this.onTopChanged();
             });
-            this.slideInAnimation[containerType] = false;
+            this.slideInAnimation = false;
         }
 
-        const shouldFade = this.fadeInAnimation[containerType];
-        if (shouldFade) {
-            _executeNextVMTurn(() => {
-                gui.rowComp.addOrRemoveCssClass('ag-opacity-zero', false);
+        if (this.fadeInAnimation) {
+            _batchCall(() => {
+                rowGui.rowComp.toggleCss('ag-opacity-zero', false);
             });
-            this.fadeInAnimation[containerType] = false;
+            this.fadeInAnimation = false;
         }
     }
 
-    private addRowDraggerToRow(gui: RowGui) {
-        const rowDragComp = this.beans.rowDragSvc?.createRowDragCompForRow(this.rowNode, gui.element);
+    private addRowDraggerToRow() {
+        const rowGui = this.rowGui;
+        if (!rowGui) {
+            return;
+        }
+        const rowDragComp = this.beans.rowDragSvc?.createRowDragCompForRow(this.rowNode, rowGui.element);
         if (!rowDragComp) {
             return;
         }
         const rowDragBean = this.createBean(rowDragComp, this.beans.context);
         this.rowDragComps.push(rowDragBean);
-        gui.compBean.addDestroyFunc(() => {
+        rowGui.compBean.addDestroyFunc(() => {
             this.rowDragComps = this.rowDragComps.filter((r) => r !== rowDragBean);
             this.destroyBean(rowDragBean, this.beans.context);
         });
     }
 
-    private setupFullWidth(gui: RowGui): void {
-        const pinned = this.getPinnedForContainer(gui.containerType);
-        const compDetails = this.createFullWidthCompDetails(gui.element, pinned);
-        gui.rowComp.showFullWidth(compDetails);
-    }
-
-    public getFullWidthCellRenderers(): (ICellRenderer<any> | null | undefined)[] {
-        if (this.gos.get('embedFullWidthRows')) {
-            return this.allRowGuis.map((gui) => gui?.rowComp?.getFullWidthCellRenderer());
-        }
-        return [this.fullWidthGui?.rowComp?.getFullWidthCellRenderer()];
+    public getModeCellRenderers(): (ICellRenderer<any> | null | undefined)[] {
+        return this.rowModeFeature.getModeCellRenderers?.() ?? [];
     }
 
     private executeProcessRowPostCreateFunc(): void {
         const func = this.gos.getCallback('processRowPostCreate');
-        if (!func || !this.areAllContainersReady()) {
+        const rowGui = this.rowGui;
+        if (this.isClientSideLoadingRow() || !func || rowGui?.containerType !== 'center') {
             return;
         }
 
+        // In the flattened layout there is a single row element per row. Preserve `latest`'s
+        // contract by mapping the legacy pinned-row params to that same element when the
+        // corresponding pinned section has columns, and `undefined` otherwise.
+        const { visibleCols } = this.beans;
+        const eRow = rowGui.element;
         const params: WithoutGridCommon<ProcessRowParams> = {
-            // areAllContainersReady asserts that centerGui is not null
-            eRow: this.centerGui!.element,
-            ePinnedLeftRow: this.leftGui ? this.leftGui.element : undefined,
-            ePinnedRightRow: this.rightGui ? this.rightGui.element : undefined,
+            eRow,
+            ePinnedLeftRow: visibleCols.leftCols.length ? eRow : undefined,
+            ePinnedRightRow: visibleCols.rightCols.length ? eRow : undefined,
             node: this.rowNode,
             rowIndex: this.rowNode.rowIndex!,
             addRenderedRowListener: this.addEventListener.bind(this),
@@ -384,21 +415,10 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         func(params);
     }
 
-    private areAllContainersReady(): boolean {
-        const {
-            leftGui,
-            centerGui,
-            rightGui,
-            beans: { visibleCols },
-        } = this;
-        const isLeftReady = !!leftGui || !visibleCols.isPinningLeft();
-        const isCenterReady = !!centerGui;
-        const isRightReady = !!rightGui || !visibleCols.isPinningRight();
-
-        return isLeftReady && isCenterReady && isRightReady;
-    }
-
     private isNodeFullWidthCell(): boolean {
+        if (this.isClientSideLoadingRow()) {
+            return false;
+        }
         if (this.rowNode.detail) {
             return true;
         }
@@ -409,19 +429,23 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
 
     private setRowType(): void {
         // groupHideOpenParents implicitly disables full width loading
-        const isStub =
-            this.rowNode.stub &&
-            !this.gos.get('suppressServerSideFullWidthLoadingRow') &&
-            !this.gos.get('groupHideOpenParents');
+        const {
+            rowNode,
+            gos,
+            beans: { colModel },
+        } = this;
+        const suppressFullWidthLoading = gos.get('suppressServerSideFullWidthLoadingRow');
+        const groupHideOpenParents = gos.get('groupHideOpenParents');
+        const isServerSide = this.beans.rowModel.getType() === 'serverSide';
+        const isStub = isServerSide && rowNode.stub && !suppressFullWidthLoading && !groupHideOpenParents;
         const isFullWidthCell = this.isNodeFullWidthCell();
-        const isDetailCell = this.gos.get('masterDetail') && this.rowNode.detail;
-        const pivotMode = this.beans.colModel.isPivotMode();
-        // we only use full width for groups, not footers. it wouldn't make sense to include footers if not looking
-        // for totals. if users complain about this, then we should introduce a new property 'footerUseEntireRow'
-        // so each can be set independently (as a customer complained about footers getting full width, hence
-        // introducing this logic)
-        const isGroupRow = !!this.rowNode.group && !this.rowNode.footer;
-        const isFullWidthGroup = isGroupRow && _isGroupUseEntireRow(this.gos, pivotMode);
+        const isDetailCell = gos.get('masterDetail') && rowNode.detail;
+        const pivotMode = colModel.pivotMode;
+        const isFullWidthGroup = _isFullWidthGroupRow(gos, rowNode, pivotMode);
+        // When suppressServerSideFullWidthLoadingRow is set, stub group rows (groupDisplayType='groupRows')
+        // fall through to Normal so they render per-cell skeletons, consistent with leaf row stubs.
+        const isSuppressedGroupStub =
+            suppressFullWidthLoading && rowNode.stub && isFullWidthGroup && !groupHideOpenParents;
 
         if (isStub) {
             this.rowType = 'FullWidthLoading';
@@ -429,159 +453,80 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             this.rowType = 'FullWidthDetail';
         } else if (isFullWidthCell) {
             this.rowType = 'FullWidth';
-        } else if (isFullWidthGroup) {
+        } else if (isFullWidthGroup && !isSuppressedGroupStub) {
             this.rowType = 'FullWidthGroup';
         } else {
             this.rowType = 'Normal';
         }
     }
 
-    private updateColumnLists(suppressAnimationFrame = false, useFlushSync = false): void {
-        if (this.isFullWidth()) {
-            return;
+    /**
+     * Overridden by SpannedRowCtrl
+     */
+    public getNewCellCtrl(col: AgColumn): CellCtrl | undefined {
+        const isCellSpan = this.beans.rowSpanSvc?.isCellSpanning(col, this.rowNode);
+        if (isCellSpan) {
+            return undefined;
         }
-
-        const { animationFrameSvc } = this.beans;
-        const noAnimation =
-            !animationFrameSvc || suppressAnimationFrame || this.gos.get('suppressAnimationFrame') || this.printLayout;
-
-        if (noAnimation) {
-            this.updateColumnListsImpl(useFlushSync);
-            return;
-        }
-
-        if (this.updateColumnListsPending) {
-            return;
-        }
-        animationFrameSvc.createTask(
-            () => {
-                if (!this.active) {
-                    return;
-                }
-                this.updateColumnListsImpl(true);
-            },
-            this.rowNode.rowIndex!,
-            'createTasksP1'
-        );
-        this.updateColumnListsPending = true;
+        return new CellCtrl(col, this.rowNode, this.beans, this);
     }
 
-    private createCellCtrls(
-        prev: CellCtrlListAndMap,
-        cols: AgColumn[],
-        pinned: ColumnPinnedType = null
-    ): CellCtrlListAndMap {
-        const res: CellCtrlListAndMap = {
-            list: [],
-            map: {},
+    /**
+     * Overridden by SpannedRowCtrl, if span context changes cell needs rebuilt
+     */
+    public isCorrectCtrlForSpan(cell: CellCtrl): boolean {
+        return !this.beans.rowSpanSvc?.isCellSpanning(cell.column, this.rowNode);
+    }
+
+    public setEmbeddedSectionHasContent(section: HorizontalSection, hasContent: boolean): void {
+        this.embeddedSectionHasContent[section] = hasContent;
+    }
+
+    public refreshPinnedCellGroupWidths(): void {
+        const rowGui = this.rowGui;
+        if (!rowGui) {
+            return;
+        }
+        rowGui.rowComp.refreshPinnedSections();
+    }
+
+    public getMappedPinnedCellGroupWidths(): MappedPinnedCellGroupWidths {
+        let { leftWidth, centerWidth, rightWidth } = this.getPinnedCellGroupWidths();
+
+        if (this.isEmbeddedFullWidth) {
+            const hasLeft = this.embeddedSectionHasContent.left;
+            const hasRight = this.embeddedSectionHasContent.right;
+
+            centerWidth = centerWidth + (hasLeft ? 0 : leftWidth) + (hasRight ? 0 : rightWidth);
+            leftWidth = hasLeft ? leftWidth : 0;
+            rightWidth = hasRight ? rightWidth : 0;
+        }
+
+        const isFullWidth = this.isFullWidth();
+
+        return {
+            leftWidth,
+            centerWidth,
+            rightWidth,
+            // Pinned lanes are omitted from the DOM when they have no width to
+            // improve rendering performance. Full width rows always render the
+            // lanes, because the row renderer requires a reference to them even
+            // when they are empty.
+            renderLeft: leftWidth > 0 || isFullWidth,
+            renderRight: rightWidth > 0 || isFullWidth,
         };
-
-        const addCell = (colInstanceId: ColumnInstanceId, cellCtrl: CellCtrl) => {
-            res.list.push(cellCtrl);
-            res.map[colInstanceId] = cellCtrl;
-        };
-
-        cols.forEach((col) => {
-            // we use instanceId's rather than colId as it's possible there is a Column with same Id,
-            // but it's referring to a different column instance. Happens a lot with pivot, as pivot col id's are
-            // reused eg pivot_0, pivot_1 etc
-            const colInstanceId = col.getInstanceId();
-            let cellCtrl = prev.map[colInstanceId];
-            if (!cellCtrl) {
-                cellCtrl = new CellCtrl(col, this.rowNode, this.beans, this);
-            }
-            addCell(colInstanceId, cellCtrl);
-        });
-
-        prev.list.forEach((prevCellCtrl) => {
-            const colInstanceId = prevCellCtrl.column.getInstanceId();
-            const cellInResult = res.map[colInstanceId] != null;
-            if (cellInResult) {
-                return;
-            }
-
-            const keepCell = !this.isCellEligibleToBeRemoved(prevCellCtrl, pinned);
-            if (keepCell) {
-                addCell(colInstanceId, prevCellCtrl);
-                return;
-            }
-
-            prevCellCtrl.destroy();
-        });
-
-        return res;
     }
 
-    private updateColumnListsImpl(useFlushSync: boolean): void {
-        this.updateColumnListsPending = false;
-        this.createAllCellCtrls();
-
-        this.setCellCtrls(useFlushSync);
+    public getPinnedCellGroupWidths(): PinnedCellGroupWidths {
+        return getPinnedSectionWidths(this.beans.visibleCols, this.printLayout);
     }
 
-    private setCellCtrls(useFlushSync: boolean) {
-        this.allRowGuis.forEach((item) => {
-            const cellControls = this.getCellCtrlsForContainer(item.containerType);
-            item.rowComp.setCellCtrls(cellControls, useFlushSync);
-        });
-    }
-
-    private getCellCtrlsForContainer(containerType: RowContainerType) {
-        switch (containerType) {
-            case 'left':
-                return this.leftCellCtrls.list;
-            case 'right':
-                return this.rightCellCtrls.list;
-            case 'fullWidth':
-                return [];
-            case 'center':
-                return this.centerCellCtrls.list;
-        }
-    }
-
-    private createAllCellCtrls() {
-        const colViewport = this.beans.colViewport;
-        const presentedColsService = this.beans.visibleCols;
-        if (this.printLayout) {
-            this.centerCellCtrls = this.createCellCtrls(this.centerCellCtrls, presentedColsService.allCols);
-            this.leftCellCtrls = { list: [], map: {} };
-            this.rightCellCtrls = { list: [], map: {} };
-        } else {
-            const centerCols = colViewport.getColsWithinViewport(this.rowNode);
-            this.centerCellCtrls = this.createCellCtrls(this.centerCellCtrls, centerCols);
-
-            const leftCols = presentedColsService.getLeftColsForRow(this.rowNode);
-            this.leftCellCtrls = this.createCellCtrls(this.leftCellCtrls, leftCols, 'left');
-
-            const rightCols = presentedColsService.getRightColsForRow(this.rowNode);
-            this.rightCellCtrls = this.createCellCtrls(this.rightCellCtrls, rightCols, 'right');
-        }
-    }
-
-    private isCellEligibleToBeRemoved(cellCtrl: CellCtrl, nextContainerPinned: ColumnPinnedType): boolean {
-        const REMOVE_CELL = true;
-        const KEEP_CELL = false;
-
-        // always remove the cell if it's not rendered or if it's in the wrong pinned location
-        const { column } = cellCtrl;
-        if (column.getPinned() != nextContainerPinned) {
-            return REMOVE_CELL;
-        }
-
-        // we want to try and keep editing and focused cells
-        const { editing, cellPosition } = cellCtrl;
-        const { focusSvc, visibleCols } = this.beans;
-        const focused = focusSvc.isCellFocused(cellPosition);
-
-        const mightWantToKeepCell = editing || focused;
-
-        if (mightWantToKeepCell) {
-            const displayedColumns = visibleCols.allCols;
-            const cellStillDisplayed = displayedColumns.indexOf(column as AgColumn) >= 0;
-            return cellStillDisplayed ? KEEP_CELL : REMOVE_CELL;
-        }
-
-        return REMOVE_CELL;
+    /**
+     * CellCtrls for rows whose normal-mode feature eagerly created cells in the constructor.
+     * React uses this to seed first render and avoid an empty row flash on bulk add.
+     */
+    public getInitialCellCtrls(containerType: RowContainerType): CellCtrl[] | null {
+        return this.rowModeFeature.getInitialCellCtrls?.(containerType) ?? null;
     }
 
     public getDomOrder(): boolean {
@@ -602,33 +547,10 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             return;
         }
 
-        const oldRowTopExists = _exists(this.rowNode.oldRowTop);
-        const { visibleCols } = this.beans;
-        const pinningLeft = visibleCols.isPinningLeft();
-        const pinningRight = visibleCols.isPinningRight();
-
-        if (oldRowTopExists) {
-            const { slideInAnimation } = this;
-            if (this.isFullWidth() && !this.gos.get('embedFullWidthRows')) {
-                slideInAnimation.fullWidth = true;
-                return;
-            }
-
-            // if the row had a previous position, we slide it in
-            slideInAnimation.center = true;
-            slideInAnimation.left = pinningLeft;
-            slideInAnimation.right = pinningRight;
+        if (_exists(this.rowNode.oldRowTop)) {
+            this.slideInAnimation = true;
         } else {
-            const { fadeInAnimation } = this;
-            if (this.isFullWidth() && !this.gos.get('embedFullWidthRows')) {
-                fadeInAnimation.fullWidth = true;
-                return;
-            }
-
-            // if the row had no previous position, we fade it in
-            fadeInAnimation.center = true;
-            fadeInAnimation.left = pinningLeft;
-            fadeInAnimation.right = pinningRight;
+            this.fadeInAnimation = true;
         }
     }
 
@@ -636,66 +558,120 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         return this.rowType !== 'Normal';
     }
 
-    public refreshFullWidth(): boolean {
-        // returns 'true' if refresh succeeded
-        const tryRefresh = (gui: RowGui | undefined, pinned: ColumnPinnedType): boolean => {
-            if (!gui) {
-                return true;
-            } // no refresh needed
+    /** Called by NormalRowFeature after refreshing cells */
+    public onNormalRowRefreshed(): void {
+        this.setRowCompRowId();
+        this.updateRowBusinessKey();
+        this.setRowCompRowBusinessKey();
 
-            return gui.rowComp.refreshFullWidth(() => {
-                const compDetails = this.createFullWidthCompDetails(gui.element, pinned);
-                return compDetails.params;
-            });
-        };
+        this.onRowSelected();
+        this.postProcessCss();
+    }
 
-        const fullWidthSuccess = tryRefresh(this.fullWidthGui, null);
-        const centerSuccess = tryRefresh(this.centerGui, null);
-        const leftSuccess = tryRefresh(this.leftGui, 'left');
-        const rightSuccess = tryRefresh(this.rightGui, 'right');
+    public getCurrentRowComp(): IRowComp | undefined {
+        return this.rowGui?.rowComp;
+    }
 
-        const allFullWidthRowsRefreshed = fullWidthSuccess && centerSuccess && leftSuccess && rightSuccess;
+    public getCurrentRowElement(): HTMLElement | undefined {
+        return this.rowGui?.element;
+    }
 
-        return allFullWidthRowsRefreshed;
+    public redrawThisRow(): void {
+        this.beans.rowRenderer.redrawRow(this.rowNode);
+    }
+
+    public getRowType(): RowType {
+        return this.rowType;
+    }
+
+    /**
+     * A loading row holds a placeholder rather than real cell content, so the anchor stands in as the
+     * cell child that `role="row"` requires — the renderer is replaceable and cannot be relied on for it.
+     */
+    public getFullWidthAnchorRole(): 'gridcell' | 'presentation' {
+        return this.rowType === 'FullWidthLoading' ? 'gridcell' : 'presentation';
+    }
+
+    public getContainerType(): RowContainerType | undefined {
+        return this.rowGui?.containerType;
+    }
+
+    public shouldCreateCellSections(): boolean {
+        return this.rowModeFeature.shouldCreateCellSections();
+    }
+
+    public getNotesFeature() {
+        return this.rowModeFeature.getNotesFeature?.();
     }
 
     private addListeners(): void {
+        const { beans, gos, rowNode } = this;
+        const { expansionSvc, eventSvc, context, rowSpanSvc } = beans;
+
         this.addManagedListeners(this.rowNode, {
             heightChanged: () => this.onRowHeightChanged(),
             rowSelected: () => this.onRowSelected(),
             rowIndexChanged: this.onRowIndexChanged.bind(this),
             topChanged: this.onTopChanged.bind(this),
-            ...(this.beans.expansionSvc?.getRowExpandedListeners(this) ?? {}),
+            ...(expansionSvc?.getRowExpandedListeners(this) ?? {}),
         });
 
-        if (this.rowNode.detail) {
+        if (rowNode.detail) {
             // if the master row node has updated data, we also want to try to refresh the detail row
-            this.addManagedListeners(this.rowNode.parent!, { dataChanged: this.onRowNodeDataChanged.bind(this) });
+            this.addManagedListeners(rowNode.parent!, { dataChanged: this.onRowNodeDataChanged.bind(this) });
         }
 
-        this.addManagedListeners(this.rowNode, {
+        this.addManagedListeners(rowNode, {
             dataChanged: this.onRowNodeDataChanged.bind(this),
             cellChanged: this.postProcessCss.bind(this),
             rowHighlightChanged: this.onRowNodeHighlightChanged.bind(this),
             draggingChanged: this.postProcessRowDragging.bind(this),
             uiLevelChanged: this.onUiLevelChanged.bind(this),
+            rowPinned: this.onRowPinned.bind(this),
         });
 
-        this.addManagedListeners(this.beans.eventSvc, {
+        this.addManagedListeners(eventSvc, {
             paginationPixelOffsetChanged: this.onPaginationPixelOffsetChanged.bind(this),
             heightScaleChanged: this.onTopChanged.bind(this),
+            headerHeightChanged: this.onTopChanged.bind(this),
+            headerRowsChanged: this.updateRowIndexes.bind(this),
+            advancedFilterEnabledChanged: this.updateRowIndexes.bind(this),
+            // Manual row pinning (`isRowPinned`) can change pinned row counts without changing a body row's rowIndex.
+            // Recompute aria row index whenever pinned rows change so absolute row order stays correct.
+            pinnedRowsChanged: this.onPinnedRowsChanged.bind(this),
+            pinnedRowDataChanged: this.onPinnedRowsChanged.bind(this),
+            stickyBottomOffsetChanged: this.onStickyBottomOffsetChanged.bind(this),
             displayedColumnsChanged: this.onDisplayedColumnsChanged.bind(this),
+            displayedColumnsWidthChanged: this.refreshPinnedCellGroupWidths.bind(this),
+            leftPinnedWidthChanged: this.refreshPinnedCellGroupWidths.bind(this),
+            rightPinnedWidthChanged: this.refreshPinnedCellGroupWidths.bind(this),
             virtualColumnsChanged: this.onVirtualColumnsChanged.bind(this),
             cellFocused: this.onCellFocusChanged.bind(this),
             cellFocusCleared: this.onCellFocusChanged.bind(this),
             paginationChanged: this.onPaginationChanged.bind(this),
-            modelUpdated: this.refreshFirstAndLastRowStyles.bind(this),
-            columnMoved: () => this.updateColumnLists(),
+            modelUpdated: () => {
+                // Pinned bottom rows depend on displayed row count for absolute aria row index.
+                if (this.rowNode.rowPinned === 'bottom') {
+                    this.updateRowIndexes();
+                }
+                this.refreshFirstAndLastRowStyles();
+            },
+            columnMoved: () => {
+                this.rowModeFeature.onColumnMoved();
+            },
         });
 
+        if (rowSpanSvc?.active) {
+            // when spans change, need to verify that cells are correctly skipped/rendered
+            this.addManagedListeners(rowSpanSvc, {
+                spannedCellsUpdated: ({ pinned }) => {
+                    this.rowModeFeature.onSpannedCellsUpdated(pinned);
+                },
+            });
+        }
+
         this.addDestroyFunc(() => {
-            this.rowDragComps = this.destroyBeans(this.rowDragComps, this.beans.context);
-            this.tooltipFeature = this.destroyBean(this.tooltipFeature, this.beans.context);
+            this.rowDragComps = this.destroyBeans(this.rowDragComps, context);
         });
 
         this.addManagedPropertyListeners(
@@ -704,31 +680,28 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         );
 
         this.addManagedPropertyListener('rowDragEntireRow', () => {
-            const useRowDragEntireRow = this.gos.get('rowDragEntireRow');
+            const useRowDragEntireRow = gos.get('rowDragEntireRow');
             if (useRowDragEntireRow) {
-                this.allRowGuis.forEach((gui) => {
-                    this.addRowDraggerToRow(gui);
-                });
+                this.addRowDraggerToRow();
                 return;
             }
-            this.rowDragComps = this.destroyBeans(this.rowDragComps, this.beans.context);
+            this.rowDragComps = this.destroyBeans(this.rowDragComps, context);
         });
-
-        this.addListenersForCellComps();
     }
 
-    private addListenersForCellComps(): void {
-        this.addManagedListeners(this.rowNode, {
-            rowIndexChanged: () => {
-                this.getAllCellCtrls().forEach((cellCtrl) => cellCtrl.onRowIndexChanged());
-            },
-            cellChanged: (event) => {
-                this.getAllCellCtrls().forEach((cellCtrl) => cellCtrl.onCellChanged(event));
-            },
-        });
+    /** Should only ever be triggered on source rows (i.e. not on pinned siblings) */
+    private onRowPinned(): void {
+        this.rowGui?.rowComp.toggleCss('ag-row-pinned-source', !!this.rowNode.pinnedSibling);
     }
 
     private onRowNodeDataChanged(event: DataChangedEvent): void {
+        this.refreshRow({
+            suppressFlash: !event.update,
+            newData: !event.update,
+        });
+    }
+
+    public refreshRow(params?: RefreshRowsParams & { newData?: boolean }): void {
         // if the row is rendered incorrectly, as the requirements for whether this is a FW row have changed, we force re-render this row.
         const fullWidthChanged = this.isFullWidth() !== !!this.isNodeFullWidthCell();
         if (fullWidthChanged) {
@@ -736,76 +709,59 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             return;
         }
 
-        // this bit of logic handles trying to refresh the FW row ctrl, or delegating to removing/recreating it if unsupported.
-        if (this.isFullWidth()) {
-            const refresh = this.refreshFullWidth();
-            if (!refresh) {
-                this.beans.rowRenderer.redrawRow(this.rowNode);
-            }
-            return;
-        }
-
-        // if this is an update, we want to refresh, as this will allow the user to put in a transition
-        // into the cellRenderer refresh method. otherwise this might be completely new data, in which case
-        // we will want to completely replace the cells
-        this.getAllCellCtrls().forEach((cellCtrl) =>
-            cellCtrl.refreshCell({
-                suppressFlash: !event.update,
-                newData: !event.update,
-            })
-        );
-
-        // as data has changed update the dom row id attributes
-        this.allRowGuis.forEach((gui) => {
-            this.setRowCompRowId(gui.rowComp);
-            this.updateRowBusinessKey();
-            this.setRowCompRowBusinessKey(gui.rowComp);
-        });
-
-        // check for selected also, as this could be after lazy loading of the row data, in which case
-        // the id might of just gotten set inside the row and the row selected state may of changed
-        // as a result. this is what happens when selected rows are loaded in virtual pagination.
-        // - niall note - since moving to the stub component, this may no longer be true, as replacing
-        // the stub component now replaces the entire row
-        this.onRowSelected();
-
-        // as data has changed, then the style and class needs to be recomputed
-        this.postProcessCss();
+        this.rowModeFeature.refreshRow(params ?? {});
     }
 
     private postProcessCss(): void {
+        if (this.isClientSideLoadingRow()) {
+            return;
+        }
         this.setStylesFromGridOptions(true);
         this.postProcessClassesFromGridOptions();
         this.postProcessRowClassRules();
+        this.beans.editSvc?.applyRowEditStyles(this);
         this.postProcessRowDragging();
     }
 
     private onRowNodeHighlightChanged(): void {
-        const highlighted = this.rowNode.highlighted;
+        const {
+            rowGui,
+            beans: { rowDropHighlightSvc },
+        } = this;
+        const highlighted = rowDropHighlightSvc?.row === this.rowNode ? rowDropHighlightSvc.position : 'none';
 
-        this.allRowGuis.forEach((gui) => {
-            const aboveOn = highlighted === 'Above';
-            const belowOn = highlighted === 'Below';
-            gui.rowComp.addOrRemoveCssClass('ag-row-highlight-above', aboveOn);
-            gui.rowComp.addOrRemoveCssClass('ag-row-highlight-below', belowOn);
-        });
+        const aboveOn = highlighted === 'above';
+        const insideOn = highlighted === 'inside';
+        const belowOn = highlighted === 'below';
+        const highlightActive = highlighted !== 'none';
+        const dropEdge = aboveOn || belowOn;
+        const uiLevel = this.rowNode.uiLevel;
+        const shouldIndent = dropEdge && uiLevel > 0;
+        const highlightLevel = shouldIndent ? uiLevel.toString() : '0';
+
+        rowGui?.rowComp.toggleCss('ag-row-highlight-above', aboveOn);
+        rowGui?.rowComp.toggleCss('ag-row-highlight-inside', insideOn);
+        rowGui?.rowComp.toggleCss('ag-row-highlight-below', belowOn);
+        rowGui?.rowComp.toggleCss('ag-row-highlight-indent', shouldIndent);
+        if (highlightActive) {
+            rowGui?.element.style.setProperty('--ag-row-highlight-level', highlightLevel);
+        } else {
+            rowGui?.element.style.removeProperty('--ag-row-highlight-level');
+        }
     }
 
     private postProcessRowDragging(): void {
-        const dragging = this.rowNode.dragging;
-        this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass('ag-row-dragging', dragging));
+        const { rowNode, rowGui } = this;
+        const dragging = rowNode.dragging;
+        rowGui?.rowComp.toggleCss('ag-row-dragging', dragging);
     }
 
     private onDisplayedColumnsChanged(): void {
-        // we skip animations for onDisplayedColumnChanged, as otherwise the client could remove columns and
-        // then set data, and any old valueGetter's (ie from cols that were removed) would still get called.
-        this.updateColumnLists(true);
-
-        this.beans.rowAutoHeight?.checkAutoHeights(this.rowNode);
+        this.rowModeFeature.onDisplayedColumnsChanged();
     }
 
     private onVirtualColumnsChanged(): void {
-        this.updateColumnLists(false, true);
+        this.rowModeFeature.onVirtualColumnsChanged();
     }
 
     public getRowPosition(): RowPosition {
@@ -815,71 +771,26 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         };
     }
 
-    private findFullWidthRowGui(target: HTMLElement): RowGui | undefined {
-        return this.allRowGuis.find((c) => c.element.contains(target));
-    }
-
     public onKeyboardNavigate(keyboardEvent: KeyboardEvent) {
-        const currentFullWidthComp = this.findFullWidthRowGui(keyboardEvent.target as HTMLElement);
-        const currentFullWidthContainer = currentFullWidthComp ? currentFullWidthComp.element : null;
-        const isFullWidthContainerFocused = currentFullWidthContainer === keyboardEvent.target;
-
-        if (!isFullWidthContainerFocused) {
-            return;
-        }
-
-        const node = this.rowNode;
-        const { focusSvc, navigation } = this.beans;
-        const lastFocusedCell = focusSvc.getFocusedCell();
-        const cellPosition: CellPosition = {
-            rowIndex: node.rowIndex!,
-            rowPinned: node.rowPinned,
-            column: (lastFocusedCell?.column as AgColumn) ?? this.getColumnForFullWidth(currentFullWidthComp),
-        };
-
-        navigation?.navigateToNextCell(keyboardEvent, keyboardEvent.key, cellPosition, true);
-        keyboardEvent.preventDefault();
+        this.rowModeFeature.onKeyboardNavigate?.(keyboardEvent);
     }
 
     public onTabKeyDown(keyboardEvent: KeyboardEvent) {
-        if (keyboardEvent.defaultPrevented || _isStopPropagationForAgGrid(keyboardEvent)) {
-            return;
-        }
-        const currentFullWidthComp = this.allRowGuis.find((c) =>
-            c.element.contains(keyboardEvent.target as HTMLElement)
-        );
-        const currentFullWidthContainer = currentFullWidthComp ? currentFullWidthComp.element : null;
-        const isFullWidthContainerFocused = currentFullWidthContainer === keyboardEvent.target;
-        const activeEl = _getActiveDomElement(this.beans);
-        let isDetailGridCellFocused = false;
-
-        if (currentFullWidthContainer && activeEl) {
-            isDetailGridCellFocused =
-                currentFullWidthContainer.contains(activeEl) && activeEl.classList.contains('ag-cell');
-        }
-
-        let nextEl: HTMLElement | null = null;
-
-        if (!isFullWidthContainerFocused && !isDetailGridCellFocused) {
-            nextEl = _findNextFocusableElement(this.beans, currentFullWidthContainer!, false, keyboardEvent.shiftKey);
-        }
-
-        if ((this.isFullWidth() && isFullWidthContainerFocused) || !nextEl) {
-            this.beans.navigation?.onTabKeyDown(this, keyboardEvent);
-        }
+        this.rowModeFeature.onTabKeyDown?.(keyboardEvent);
     }
 
-    public getFullWidthElement(): HTMLElement | null {
-        if (this.fullWidthGui) {
-            return this.fullWidthGui.element;
-        }
-        return null;
+    public getRowContentElement(): HTMLElement | null {
+        return this.rowModeFeature.getRowContentElement?.() ?? null;
+    }
+
+    public getNavigationColumn(): AgColumn {
+        return this.rowModeFeature.getNavigationColumn!();
     }
 
     public getRowYPosition(): number {
-        const displayedEl = this.allRowGuis.find((el) => _isVisible(el.element))?.element;
+        const displayedEl = this.rowGui?.element;
 
-        if (displayedEl) {
+        if (displayedEl && _isVisible(displayedEl)) {
             return displayedEl.getBoundingClientRect().top;
         }
 
@@ -887,53 +798,18 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     }
 
     public onSuppressCellFocusChanged(suppressCellFocus: boolean): void {
-        const tabIndex = this.isFullWidth() && suppressCellFocus ? undefined : -1;
-        this.allRowGuis.forEach((gui) => {
-            _addOrRemoveAttribute(gui.element, 'tabindex', tabIndex);
-        });
-    }
-
-    public onFullWidthRowFocused(event?: CellFocusedEvent) {
-        const node = this.rowNode;
-        const isFocused = !event
-            ? false
-            : this.isFullWidth() && event.rowIndex === node.rowIndex && event.rowPinned == node.rowPinned;
-
-        const element = this.fullWidthGui ? this.fullWidthGui.element : this.centerGui?.element;
-        if (!element) {
-            return;
-        } // can happen with react ui, comp not yet ready
-
-        element.classList.toggle('ag-full-width-focus', isFocused);
-
-        if (isFocused && event?.forceBrowserFocus) {
-            // we don't scroll normal rows into view when we focus them, so we don't want
-            // to scroll Full Width rows either.
-            element.focus({ preventScroll: true });
+        const tabIndex = this.isFullWidth() && suppressCellFocus ? undefined : this.gos.get('tabIndex');
+        if (this.rowGui) {
+            _addOrRemoveAttribute(this.rowGui.element, 'tabindex', tabIndex);
         }
     }
 
-    public recreateCell(cellCtrl: CellCtrl) {
-        this.centerCellCtrls = this.removeCellCtrl(this.centerCellCtrls, cellCtrl);
-        this.leftCellCtrls = this.removeCellCtrl(this.leftCellCtrls, cellCtrl);
-        this.rightCellCtrls = this.removeCellCtrl(this.rightCellCtrls, cellCtrl);
-        cellCtrl.destroy();
-        this.updateColumnLists();
+    public onRowFocused(event?: CellFocusedEvent) {
+        this.rowModeFeature.onRowFocused?.(event);
     }
 
-    private removeCellCtrl(prev: CellCtrlListAndMap, cellCtrlToRemove: CellCtrl): CellCtrlListAndMap {
-        const res: CellCtrlListAndMap = {
-            list: [],
-            map: {},
-        };
-        prev.list.forEach((cellCtrl) => {
-            if (cellCtrl === cellCtrlToRemove) {
-                return;
-            }
-            res.list.push(cellCtrl);
-            res.map[cellCtrl.column.getInstanceId()] = cellCtrl;
-        });
-        return res;
+    public recreateCell(cellCtrl: CellCtrl) {
+        this.rowModeFeature.recreateCell(cellCtrl);
     }
 
     public onMouseEvent(eventName: string, mouseEvent: MouseEvent): void {
@@ -944,6 +820,7 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             case 'click':
                 this.onRowClick(mouseEvent);
                 break;
+            case 'pointerdown':
             case 'touchstart':
             case 'mousedown':
                 this.onRowMouseDown(mouseEvent);
@@ -953,7 +830,7 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
 
     public createRowEvent<T extends AgEventType>(type: T, domEvent?: Event): RowEvent<T> {
         const { rowNode } = this;
-        return this.gos.addGridCommonParams({
+        return _addGridCommonParams(this.gos, {
             type: type,
             node: rowNode,
             data: rowNode.data,
@@ -980,51 +857,30 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             return;
         }
 
-        this.beans.eventSvc.dispatchEvent(this.createRowEventWithSource('rowDoubleClicked', mouseEvent));
+        const rowEvent = this.createRowEventWithSource('rowDoubleClicked', mouseEvent) as RowDoubleClickedEvent;
+        rowEvent.isEventHandlingSuppressed = this.isSuppressMouseEvent(mouseEvent);
+        this.beans.eventSvc.dispatchEvent(rowEvent);
     }
 
-    private getColumnForFullWidth(fullWidthRowGui?: RowGui): AgColumn {
-        const { visibleCols } = this.beans;
-        switch (fullWidthRowGui?.containerType) {
-            case 'center':
-                return visibleCols.centerCols[0];
-            case 'left':
-                return visibleCols.leftCols[0];
-            case 'right':
-                return visibleCols.rightCols[0];
-            default:
-                return visibleCols.allCols[0];
-        }
+    public findInfoForEvent(event?: Event): { column: AgColumn; pinned: ColumnPinnedType } | undefined {
+        return this.rowModeFeature.findInfoForEvent?.(event);
+    }
+
+    public getTargets(): FullWidthTarget[] {
+        return this.rowModeFeature.getTargets?.() ?? [];
+    }
+
+    public getTarget(element?: EventTarget | null): FullWidthTarget | undefined {
+        return this.rowModeFeature.getTarget?.(element);
     }
 
     private onRowMouseDown(mouseEvent: MouseEvent) {
         this.lastMouseDownOnDragger = _isElementChildOfClass(mouseEvent.target as HTMLElement, 'ag-row-drag', 3);
+        this.rowModeFeature.onRowMouseDown?.(mouseEvent);
+    }
 
-        if (!this.isFullWidth()) {
-            return;
-        }
-
-        const node = this.rowNode;
-
-        const { rangeSvc, focusSvc } = this.beans;
-        rangeSvc?.removeAllCellRanges();
-
-        const fullWidthRowGui = this.findFullWidthRowGui(mouseEvent.target as HTMLElement);
-        const element = fullWidthRowGui?.element;
-        const target = mouseEvent.target as HTMLElement;
-
-        let forceBrowserFocus = true;
-
-        if (element && element.contains(target as HTMLElement) && _isFocusableFormField(target)) {
-            forceBrowserFocus = false;
-        }
-
-        focusSvc.setFocusedCell({
-            rowIndex: node.rowIndex!,
-            column: this.getColumnForFullWidth(fullWidthRowGui),
-            rowPinned: node.rowPinned,
-            forceBrowserFocus,
-        });
+    public isSuppressMouseEvent(mouseEvent: MouseEvent): boolean {
+        return this.rowModeFeature.isSuppressMouseEvent(mouseEvent);
     }
 
     public onRowClick(mouseEvent: MouseEvent) {
@@ -1034,91 +890,22 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             return;
         }
 
+        const isSuppressMouseEvent = this.isSuppressMouseEvent(mouseEvent);
+
         const { eventSvc, selectionSvc } = this.beans;
-        eventSvc.dispatchEvent(this.createRowEventWithSource('rowClicked', mouseEvent));
+        const rowEvent = this.createRowEventWithSource('rowClicked', mouseEvent) as RowClickedEvent;
+        rowEvent.isEventHandlingSuppressed = isSuppressMouseEvent;
+        eventSvc.dispatchEvent(rowEvent);
+
+        if (isSuppressMouseEvent) {
+            return;
+        }
 
         selectionSvc?.handleSelectionEvent(mouseEvent, this.rowNode, 'rowClicked');
     }
 
     public setupDetailRowAutoHeight(eDetailGui: HTMLElement): void {
-        if (this.rowType !== 'FullWidthDetail') {
-            return;
-        }
-
-        this.beans.masterDetailSvc?.setupDetailRowAutoHeight(this, eDetailGui);
-    }
-
-    private createFullWidthCompDetails(eRow: HTMLElement, pinned: ColumnPinnedType): UserCompDetails {
-        const { gos, rowNode } = this;
-        const params = gos.addGridCommonParams({
-            fullWidth: true,
-            data: rowNode.data,
-            node: rowNode,
-            value: rowNode.key,
-            valueFormatted: rowNode.key,
-            // these need to be taken out, as part of 'afterAttached' now
-            eGridCell: eRow,
-            eParentOfValue: eRow,
-            pinned: pinned,
-            addRenderedRowListener: this.addEventListener.bind(this),
-            registerRowDragger: (rowDraggerElement, dragStartPixels, value, suppressVisibilityChange) =>
-                this.addFullWidthRowDragging(rowDraggerElement, dragStartPixels, value, suppressVisibilityChange),
-            setTooltip: (value, shouldDisplayTooltip) => {
-                gos.assertModuleRegistered('Tooltip', 3);
-                this.refreshRowTooltip(value, shouldDisplayTooltip);
-            },
-        } as WithoutGridCommon<ICellRendererParams>);
-
-        const compFactory = this.beans.userCompFactory;
-        switch (this.rowType) {
-            case 'FullWidthDetail':
-                return _getFullWidthDetailCellRendererDetails(compFactory, params)!;
-            case 'FullWidthGroup':
-                return _getFullWidthGroupCellRendererDetails(compFactory, params)!;
-            case 'FullWidthLoading':
-                return _getFullWidthLoadingCellRendererDetails(compFactory, params)!;
-            default:
-                return _getFullWidthCellRendererDetails(compFactory, params)!;
-        }
-    }
-
-    private refreshRowTooltip(value: string, shouldDisplayTooltip?: () => boolean) {
-        if (!this.fullWidthGui) {
-            return;
-        }
-
-        this.tooltipFeature = this.beans.tooltipSvc?.refreshRowTooltip(
-            this.tooltipFeature,
-            this,
-            value,
-            shouldDisplayTooltip
-        );
-    }
-
-    private addFullWidthRowDragging(
-        rowDraggerElement?: HTMLElement,
-        dragStartPixels?: number,
-        value: string = '',
-        suppressVisibilityChange?: boolean
-    ): void {
-        const { rowDragSvc, context } = this.beans;
-        if (!rowDragSvc || !this.isFullWidth()) {
-            return;
-        }
-
-        const rowDragComp = rowDragSvc.createRowDragComp(
-            () => value,
-            this.rowNode,
-            undefined,
-            rowDraggerElement,
-            dragStartPixels,
-            suppressVisibilityChange
-        );
-        this.createBean(rowDragComp, context);
-
-        this.addDestroyFunc(() => {
-            this.destroyBean(rowDragComp, context);
-        });
+        this.rowModeFeature.setupDetailRowAutoHeight?.(eDetailGui);
     }
 
     private onUiLevelChanged(): void {
@@ -1126,85 +913,95 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         if (this.rowLevel != newLevel) {
             const classToAdd = 'ag-row-level-' + newLevel;
             const classToRemove = 'ag-row-level-' + this.rowLevel;
-            this.allRowGuis.forEach((gui) => {
-                gui.rowComp.addOrRemoveCssClass(classToAdd, true);
-                gui.rowComp.addOrRemoveCssClass(classToRemove, false);
-            });
+            this.rowGui?.rowComp.toggleCss(classToAdd, true);
+            this.rowGui?.rowComp.toggleCss(classToRemove, false);
         }
         this.rowLevel = newLevel;
     }
 
     private isFirstRowOnPage(): boolean {
-        return this.rowNode.rowIndex === this.beans.pageBounds.getFirstRow();
+        const {
+            rowNode: { rowIndex, rowPinned },
+            beans: { pageBounds },
+        } = this;
+
+        if (rowPinned) {
+            return rowIndex === 0;
+        }
+        return rowIndex === pageBounds.getFirstRow();
     }
 
     private isLastRowOnPage(): boolean {
-        return this.rowNode.rowIndex === this.beans.pageBounds.getLastRow();
+        const {
+            rowNode: { rowIndex, rowPinned },
+            beans: { pageBounds, pinnedRowModel },
+        } = this;
+
+        if (rowPinned) {
+            const rowCount =
+                rowPinned === 'top'
+                    ? pinnedRowModel?.getPinnedTopRowCount()
+                    : pinnedRowModel?.getPinnedBottomRowCount();
+            if (rowCount == null) {
+                return false;
+            }
+            return rowIndex === rowCount - 1;
+        }
+        return rowIndex === pageBounds.getLastRow();
     }
 
-    private refreshFirstAndLastRowStyles(): void {
+    protected refreshFirstAndLastRowStyles(): void {
         const newFirst = this.isFirstRowOnPage();
         const newLast = this.isLastRowOnPage();
 
         if (this.firstRowOnPage !== newFirst) {
             this.firstRowOnPage = newFirst;
-            this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass('ag-row-first', newFirst));
+            this.rowGui?.rowComp.toggleCss('ag-row-first', newFirst);
         }
         if (this.lastRowOnPage !== newLast) {
             this.lastRowOnPage = newLast;
-            this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass('ag-row-last', newLast));
+            this.rowGui?.rowComp.toggleCss('ag-row-last', newLast);
         }
     }
 
     public getAllCellCtrls(): CellCtrl[] {
-        if (this.leftCellCtrls.list.length === 0 && this.rightCellCtrls.list.length === 0) {
-            return this.centerCellCtrls.list;
-        }
-        const res = [...this.centerCellCtrls.list, ...this.leftCellCtrls.list, ...this.rightCellCtrls.list];
-        return res;
+        return this.rowModeFeature.getAllCellCtrls();
     }
 
     private postProcessClassesFromGridOptions(): void {
+        if (this.isClientSideLoadingRow()) {
+            return;
+        }
         const cssClasses: string[] = [];
         this.beans.rowStyleSvc?.processClassesFromGridOptions(cssClasses, this.rowNode);
         if (!cssClasses.length) {
             return;
         }
 
-        cssClasses.forEach((classStr) => {
-            this.allRowGuis.forEach((c) => c.rowComp.addOrRemoveCssClass(classStr, true));
-        });
+        for (const classStr of cssClasses) {
+            this.rowGui?.rowComp.toggleCss(classStr, true);
+        }
     }
 
     private postProcessRowClassRules(): void {
+        if (this.isClientSideLoadingRow()) {
+            return;
+        }
         this.beans.rowStyleSvc?.processRowClassRules(
             this.rowNode,
-            (className: string) => {
-                this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass(className, true));
-            },
-            (className: string) => {
-                this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass(className, false));
-            }
+            (className: string) => this.rowGui?.rowComp.toggleCss(className, true),
+            (className: string) => this.rowGui?.rowComp.toggleCss(className, false)
         );
     }
 
-    private setStylesFromGridOptions(updateStyles: boolean, gui?: RowGui): void {
+    private setStylesFromGridOptions(updateStyles: boolean): void {
         if (updateStyles) {
             this.rowStyles = this.processStylesFromGridOptions();
         }
-        this.forEachGui(gui, (gui) => gui.rowComp.setUserStyles(this.rowStyles));
+        this.rowGui?.rowComp.setUserStyles(this.rowStyles);
     }
 
-    private getPinnedForContainer(rowContainerType: RowContainerType): ColumnPinnedType {
-        if (rowContainerType === 'left' || rowContainerType === 'right') {
-            return rowContainerType;
-        }
-        return null;
-    }
-
-    private getInitialRowClasses(rowContainerType: RowContainerType): string[] {
-        const pinned = this.getPinnedForContainer(rowContainerType);
-        const fullWidthRow = this.isFullWidth();
+    protected getInitialRowClasses(): string[] {
         const { rowNode, beans } = this;
 
         const classes: string[] = [];
@@ -1212,7 +1009,7 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         classes.push('ag-row');
         classes.push(this.rowFocused ? 'ag-row-focus' : 'ag-row-no-focus');
 
-        if (this.fadeInAnimation[rowContainerType]) {
+        if (this.fadeInAnimation) {
             classes.push('ag-opacity-zero');
         }
 
@@ -1220,6 +1017,14 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
 
         if (rowNode.isRowPinned()) {
             classes.push('ag-row-pinned');
+            if (beans.pinnedRowModel?.isManual()) {
+                classes.push('ag-row-pinned-manual');
+            }
+        }
+
+        // Only the source of the pinned row gets this class
+        if (!rowNode.isRowPinned() && rowNode.pinnedSibling) {
+            classes.push('ag-row-pinned-source');
         }
 
         if (rowNode.isSelected()) {
@@ -1236,9 +1041,7 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             classes.push('ag-row-loading');
         }
 
-        if (fullWidthRow) {
-            classes.push('ag-full-width-row');
-        }
+        this.rowModeFeature.addInitialRowClasses?.(classes);
 
         beans.expansionSvc?.addExpandedCss(classes, rowNode);
 
@@ -1247,7 +1050,7 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         }
 
         const { rowStyleSvc } = beans;
-        if (rowStyleSvc) {
+        if (rowStyleSvc && !this.isClientSideLoadingRow()) {
             rowStyleSvc.processClassesFromGridOptions(classes, rowNode);
             rowStyleSvc.preProcessRowClassRules(classes, rowNode);
         }
@@ -1263,40 +1066,44 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
             classes.push('ag-row-last');
         }
 
-        if (fullWidthRow) {
-            if (pinned === 'left') {
-                classes.push('ag-cell-last-left-pinned');
-            }
-            if (pinned === 'right') {
-                classes.push('ag-cell-first-right-pinned');
-            }
-        }
-
         return classes;
     }
 
     private processStylesFromGridOptions(): RowStyle {
         // Return constant reference for React
-        return this.beans.rowStyleSvc?.processStylesFromGridOptions(this.rowNode) ?? this.emptyStyle;
+        return this.isClientSideLoadingRow()
+            ? this.emptyStyle
+            : (this.beans.rowStyleSvc?.processStylesFromGridOptions(this.rowNode) ?? this.emptyStyle);
     }
 
-    private onRowSelected(gui?: RowGui): void {
-        this.beans.selectionSvc?.onRowCtrlSelected(
-            this,
-            (gui) => {
-                if (gui === this.centerGui || gui === this.fullWidthGui) {
-                    this.announceDescription();
-                }
-            },
-            gui
-        );
+    private onRowSelected(): void {
+        this.beans.selectionSvc?.onRowCtrlSelected(this, () => this.announceDescription());
     }
 
-    public announceDescription(): void {
+    public announceDescription(cellCtrl?: CellCtrl): void {
         this.beans.selectionSvc?.announceAriaRowSelection(this.rowNode);
+        this.announceNoteDescription(cellCtrl);
     }
 
-    public addHoverFunctionality(eGui: RowGui): void {
+    private announceNoteDescription(cellCtrl?: CellCtrl): void {
+        const { notesSvc, ariaAnnounce } = this.beans;
+        if (!notesSvc || !ariaAnnounce || (!cellCtrl && !this.isFullWidth())) {
+            return;
+        }
+
+        const baseParams = { rowNode: this.rowNode };
+        const suffixParams = cellCtrl ? { column: cellCtrl.column } : { location: 'fullWidthRow' };
+        const params = { ...baseParams, ...suffixParams } as GetNoteParams;
+
+        const access = notesSvc.getNoteAccess(params);
+
+        if (access?.canView) {
+            const translate = this.getLocaleTextFunc();
+            ariaAnnounce.announceValue(translate('ariaHasNote', 'This cell has a note.'), 'note');
+        }
+    }
+
+    protected addHoverFunctionality(eGui: RowGui): void {
         // because we use animation frames to do this, it's possible the row no longer exists
         // by the time we get to add it
         if (!this.active) {
@@ -1306,17 +1113,25 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         // because mouseenter and mouseleave do not propagate, we cannot listen on the gridPanel
         // like we do for all the other mouse events.
 
-        // because of the pinning, we cannot simply add / remove the class based on the eRow. we
-        // have to check all eRow's (body & pinned). so the trick is if any of the rows gets a
-        // mouse hover, it sets such in the rowNode, and then all three reflect the change as
-        // all are listening for event on the row node.
+        // hover state is tracked on the rowNode so the row stays consistent across re-renders.
 
         const { element, compBean } = eGui;
         const { rowNode, beans, gos } = this;
         // step 1 - add listener, to set flag on row node
         compBean.addManagedListeners(element, {
-            mouseenter: () => rowNode.dispatchRowEvent('mouseEnter'),
-            mouseleave: () => rowNode.dispatchRowEvent('mouseLeave'),
+            // We use pointer events here instead of mouse events, as pointer events
+            // are more reliable for hover detection, especially with touch devices
+            // or hybrid touch + mouse devices.
+            pointerenter: (e: PointerEvent) => {
+                if (e.pointerType === 'mouse') {
+                    rowNode.dispatchRowEvent('mouseEnter');
+                }
+            },
+            pointerleave: (e: PointerEvent) => {
+                if (e.pointerType === 'mouse') {
+                    rowNode.dispatchRowEvent('mouseLeave');
+                }
+            },
         });
 
         // step 2 - listen for changes on row node (which any element can trigger)
@@ -1331,10 +1146,20 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
                 }
             },
             mouseLeave: () => {
-                element.classList.remove('ag-row-hover');
-                rowNode.setHovered(false);
+                this.resetHoveredStatus(element);
             },
         });
+    }
+
+    public resetHoveredStatus(el?: HTMLElement): void {
+        const target = el ?? this.rowGui?.element;
+
+        target?.classList.remove('ag-row-hover');
+        this.rowNode.setHovered(false);
+    }
+
+    public getGui(): RowGui | undefined {
+        return this.rowGui;
     }
 
     // for animation, we don't want to animate entry or exit to a very far away pixel,
@@ -1346,18 +1171,14 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         const minPixel = this.applyPaginationOffset(range.top, true) - 100;
         const maxPixel = this.applyPaginationOffset(range.bottom, true) + 100;
 
-        return Math.min(Math.max(minPixel, rowTop), maxPixel);
+        return _clamp(rowTop, minPixel, maxPixel);
     }
 
-    public forEachGui(gui: RowGui | undefined, callback: (gui: RowGui) => void): void {
-        if (gui) {
-            callback(gui);
-        } else {
-            this.allRowGuis.forEach(callback);
-        }
+    public isRowRendered() {
+        return !!this.rowGui;
     }
 
-    private onRowHeightChanged(gui?: RowGui): void {
+    protected onRowHeightChanged(): void {
         // check for exists first - if the user is resetting the row height, then
         // it will be null (or undefined) momentarily until the next time the flatten
         // stage is called where the row will then update again with a new height
@@ -1368,27 +1189,25 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         const rowHeight = this.rowNode.rowHeight;
 
         const defaultRowHeight = this.beans.environment.getDefaultRowHeight();
-        const isHeightFromFunc = _isGetRowHeightFunction(this.gos);
+        const isHeightFromFunc = _isGetRowHeightFunction(this.gos) && !this.isClientSideLoadingRow();
         const heightFromFunc = isHeightFromFunc ? _getRowHeightForNode(this.beans, this.rowNode).height : undefined;
         const lineHeight = heightFromFunc ? `${Math.min(defaultRowHeight, heightFromFunc) - 2}px` : undefined;
 
-        this.forEachGui(gui, (gui) => {
-            gui.element.style.height = `${rowHeight}px`;
+        this.rowGui?.element.style.setProperty('height', `${rowHeight}px`);
 
-            // If the row height is coming from a function, this means some rows can
-            // be smaller than the theme had intended. so we set --ag-line-height on
-            // the row, which is picked up by the theme CSS and is used in a calc
-            // for the CSS line-height property, which makes sure the line-height is
-            // not bigger than the row height, otherwise the row text would not fit.
-            // We do not use rowNode.rowHeight here, as this could be the result of autoHeight,
-            // and we found using the autoHeight result causes a loop, where changing the
-            // line-height them impacts the cell height, resulting in a new autoHeight,
-            // resulting in a new line-height and so on loop.
-            // const heightFromFunc = getRowHeightForNode(this.gos, this.rowNode).height;
-            if (lineHeight) {
-                gui.element.style.setProperty('--ag-line-height', lineHeight);
-            }
-        });
+        // If the row height is coming from a function, this means some rows can
+        // be smaller than the theme had intended. so we set --ag-line-height on
+        // the row, which is picked up by the theme CSS and is used in a calc
+        // for the CSS line-height property, which makes sure the line-height is
+        // not bigger than the row height, otherwise the row text would not fit.
+        // We do not use rowNode.rowHeight here, as this could be the result of autoHeight,
+        // and we found using the autoHeight result causes a loop, where changing the
+        // line-height them impacts the cell height, resulting in a new autoHeight,
+        // resulting in a new line-height and so on loop.
+        // const heightFromFunc = getRowHeightForNode(this.gos, this.rowNode).height;
+        if (lineHeight) {
+            this.rowGui?.element.style.setProperty('--ag-line-height', lineHeight);
+        }
     }
 
     // note - this is NOT called by context, as we don't wire / unwire the CellComp for performance reasons.
@@ -1410,8 +1229,13 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
                 const rowTop = this.roundRowTopToBounds(rowNode.rowTop!);
                 this.setRowTop(rowTop);
             } else {
-                this.allRowGuis.forEach((gui) => gui.rowComp.addOrRemoveCssClass('ag-opacity-zero', true));
+                this.rowGui?.rowComp.toggleCss('ag-opacity-zero', true);
             }
+        }
+
+        // if this was focused; focus will need recovered
+        if (this.isFullWidth() && this.rowGui?.element.contains(_getActiveDomElement(this.beans))) {
+            this.beans.focusSvc.attemptToRecoverFocus();
         }
 
         rowNode.setHovered(false);
@@ -1424,41 +1248,30 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     }
 
     public destroySecondPass(): void {
-        this.allRowGuis.length = 0;
-
-        // if we are editing, destroying the row will stop editing
-        this.beans.editSvc?.stopRowEditing(this);
-
-        const destroyCellCtrls = (ctrls: CellCtrlListAndMap): CellCtrlListAndMap => {
-            ctrls.list.forEach((c) => c.destroy());
-            return { list: [], map: {} };
-        };
-
-        this.centerCellCtrls = destroyCellCtrls(this.centerCellCtrls);
-        this.leftCellCtrls = destroyCellCtrls(this.leftCellCtrls);
-        this.rightCellCtrls = destroyCellCtrls(this.rightCellCtrls);
+        this.rowGui = undefined;
+        this.rowModeFeature.destroyCells();
     }
 
-    private setFocusedClasses(gui?: RowGui): void {
-        this.forEachGui(gui, (gui) => {
-            gui.rowComp.addOrRemoveCssClass('ag-row-focus', this.rowFocused);
-            gui.rowComp.addOrRemoveCssClass('ag-row-no-focus', !this.rowFocused);
-        });
+    private setFocusedClasses(): void {
+        const { rowGui } = this;
+
+        rowGui?.rowComp.toggleCss('ag-row-focus', this.rowFocused);
+        rowGui?.rowComp.toggleCss('ag-row-no-focus', !this.rowFocused);
     }
 
     private onCellFocusChanged(): void {
-        const { focusSvc, editSvc } = this.beans;
+        const { focusSvc } = this.beans;
         const rowFocused = focusSvc.isRowFocused(this.rowNode.rowIndex!, this.rowNode.rowPinned);
 
         if (rowFocused !== this.rowFocused) {
             this.rowFocused = rowFocused;
             this.setFocusedClasses();
         }
+    }
 
-        // if we are editing, then moving the focus out of a row will stop editing
-        if (!rowFocused && this.editing) {
-            editSvc?.stopRowEditing(this, false);
-        }
+    private onPinnedRowsChanged(): void {
+        this.updateRowIndexes();
+        this.refreshFirstAndLastRowStyles();
     }
 
     private onPaginationChanged(): void {
@@ -1474,7 +1287,11 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     }
 
     private onTopChanged(): void {
-        this.setRowTop(this.rowNode.rowTop!);
+        const rowTop = this.getCalculatedRowTop();
+        if (!_exists(rowTop)) {
+            return;
+        }
+        this.setRowTop(rowTop);
     }
 
     private onPaginationPixelOffsetChanged(): void {
@@ -1482,9 +1299,18 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         this.onTopChanged();
     }
 
-    // applies pagination offset, eg if on second page, and page height is 500px, then removes
-    // 500px from the top position, so a row with rowTop 600px is displayed at location 100px.
-    // reverse will take the offset away rather than add.
+    private onStickyBottomOffsetChanged(): void {
+        if (this.rowNode.rowPinned !== 'bottom') {
+            return;
+        }
+        this.onTopChanged();
+    }
+
+    /**
+     * Applies pagination offset, eg if on second page, and page height is 500px, then removes
+     * 500px from the top position, so a row with rowTop 600px is displayed at location 100px.
+     * reverse will take the offset away rather than add.
+     */
     private applyPaginationOffset(topPx: number, reverse = false): number {
         if (this.rowNode.isRowPinned() || this.rowNode.sticky) {
             return topPx;
@@ -1497,76 +1323,92 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
     }
 
     public setRowTop(pixels: number): void {
-        // print layout uses normal flow layout for row positioning
         if (this.printLayout) {
             return;
         }
-
-        // need to make sure rowTop is not null, as this can happen if the node was once
-        // visible (ie parent group was expanded) but is now not visible
-        if (_exists(pixels)) {
-            const afterPaginationPixels = this.applyPaginationOffset(pixels);
-            const skipScaling = this.rowNode.isRowPinned() || this.rowNode.sticky;
-            const afterScalingPixels = skipScaling
-                ? afterPaginationPixels
-                : this.beans.rowContainerHeight.getRealPixelPosition(afterPaginationPixels);
-            const topPx = `${afterScalingPixels}px`;
-            this.setRowTopStyle(topPx);
+        if (!_exists(pixels)) {
+            return;
         }
+        this.setRowTopStyle(`${this.calculateRowTopPx(pixels)}px`);
     }
 
-    // the top needs to be set into the DOM element when the element is created, not updated afterwards.
-    // otherwise the transition would not work, as it would be transitioning from zero (the unset value).
-    // for example, suppose a row that is outside the viewport, then user does a filter to remove other rows
-    // and this row now appears in the viewport, and the row moves up (ie it was under the viewport and not rendered,
-    // but now is in the viewport) then a new RowComp is created, however it should have it's position initialised
-    // to below the viewport, so the row will appear to animate up. if we didn't set the initial position at creation
-    // time, the row would animate down (ie from position zero).
-    public getInitialRowTop(rowContainerType: RowContainerType): string | undefined {
-        return this.suppressRowTransform ? this.getInitialRowTopShared(rowContainerType) : undefined;
+    /**
+     * Applies pagination offset and pixel scaling to produce final top position.
+     * Rows are positioned relative to their container, not the section.
+     */
+    private calculateRowTopPx(pixels: number): number {
+        const {
+            rowNode,
+            beans: { rowContainerHeight },
+        } = this;
+        const afterPagination = this.applyPaginationOffset(pixels);
+        const skipScaling = rowNode.isRowPinned() || rowNode.sticky;
+        return skipScaling ? afterPagination : rowContainerHeight.getRealPixelPosition(afterPagination);
     }
-    public getInitialTransform(rowContainerType: RowContainerType): string | undefined {
-        return this.suppressRowTransform ? undefined : `translateY(${this.getInitialRowTopShared(rowContainerType)})`;
+
+    /**
+     * The top needs to be set into the DOM element when the element is created, not updated afterwards.
+     * otherwise the transition would not work, as it would be transitioning from zero (the unset value).
+     * for example, suppose a row that is outside the viewport, then user does a filter to remove other rows
+     * and this row now appears in the viewport, and the row moves up (ie it was under the viewport and not rendered,
+     * but now is in the viewport) then a new RowComp is created, however it should have it's position initialised
+     * to below the viewport, so the row will appear to animate up. if we didn't set the initial position at creation
+     * time, the row would animate down (ie from position zero).
+     */
+    public getInitialRowTop(): string | undefined {
+        return this.useTopPositioning ? this.getInitialRowTopShared() : undefined;
     }
-    private getInitialRowTopShared(rowContainerType: RowContainerType): string {
-        // print layout uses normal flow layout for row positioning
+    public getInitialTransform(): string | undefined {
+        return this.useTopPositioning ? undefined : `translateY(${this.getInitialRowTopShared()})`;
+    }
+    private getInitialRowTopShared(): string {
         if (this.printLayout) {
             return '';
         }
 
-        const rowNode = this.rowNode;
-        let rowTop: number;
+        const { rowNode } = this;
+        let pixels: number;
+
         if (rowNode.sticky) {
-            rowTop = rowNode.stickyRowTop;
+            const calculatedRowTop = this.getCalculatedRowTop();
+            pixels = _exists(calculatedRowTop) ? calculatedRowTop : rowNode.stickyRowTop;
         } else {
-            // if sliding in, we take the old row top. otherwise we just set the current row top.
-            const pixels = this.slideInAnimation[rowContainerType]
-                ? this.roundRowTopToBounds(rowNode.oldRowTop!)
-                : rowNode.rowTop;
-            const afterPaginationPixels = this.applyPaginationOffset(pixels!);
-            // we don't apply scaling if row is pinned
-            rowTop = rowNode.isRowPinned()
-                ? afterPaginationPixels
-                : this.beans.rowContainerHeight.getRealPixelPosition(afterPaginationPixels);
+            pixels = this.slideInAnimation ? this.roundRowTopToBounds(rowNode.oldRowTop!) : rowNode.rowTop!;
         }
 
-        return rowTop + 'px';
+        return `${this.calculateRowTopPx(pixels)}px`;
+    }
+
+    private getCalculatedRowTop(): number | null | undefined {
+        const { sticky, rowTop, stickyRowTop } = this.rowNode;
+        if (!sticky) {
+            return rowTop;
+        }
+        return stickyRowTop;
     }
 
     private setRowTopStyle(topPx: string): void {
-        this.allRowGuis.forEach((gui) =>
-            this.suppressRowTransform ? gui.rowComp.setTop(topPx) : gui.rowComp.setTransform(`translateY(${topPx})`)
-        );
+        const { rowGui, useTopPositioning } = this;
+
+        if (!rowGui) {
+            return;
+        }
+
+        if (useTopPositioning) {
+            rowGui.rowComp.setTop(topPx);
+        } else {
+            rowGui.rowComp.setTransform(`translateY(${topPx})`);
+        }
     }
 
     public getCellCtrl(column: AgColumn, skipColSpanSearch = false): CellCtrl | null {
         // first up, check for cell directly linked to this column
         let res: CellCtrl | null = null;
-        this.getAllCellCtrls().forEach((cellCtrl) => {
+        for (const cellCtrl of this.getAllCellCtrls()) {
             if (cellCtrl.column == column) {
                 res = cellCtrl;
             }
-        });
+        }
 
         if (res != null || skipColSpanSearch) {
             return res;
@@ -1577,16 +1419,16 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         // more expensive, as spanning cols is a
         // infrequently used feature so we don't need to do this most
         // of the time
-        this.getAllCellCtrls().forEach((cellCtrl) => {
-            if (cellCtrl.getColSpanningList().indexOf(column) >= 0) {
+        for (const cellCtrl of this.getAllCellCtrls()) {
+            if (cellCtrl?.getColSpanningList().indexOf(column) >= 0) {
                 res = cellCtrl;
             }
-        });
+        }
 
         return res;
     }
 
-    private onRowIndexChanged(): void {
+    protected onRowIndexChanged(): void {
         // we only bother updating if the rowIndex is present. if it is not present, it means this row
         // is child of a group node, and the group node was closed, it's the only way to have no row index.
         // when this happens, row is about to be de-rendered, so we don't care, rowComp is about to die!
@@ -1597,24 +1439,55 @@ export class RowCtrl extends BeanStub<RowCtrlEvent> {
         }
     }
 
-    private updateRowIndexes(gui?: RowGui): void {
-        const rowIndexStr = this.rowNode.getRowIndexString();
+    /**
+     * The 1-based, header- and pinned-lane-aware aria-rowindex for this row, derived on demand from the
+     * row node and beans. Independent of comp mount, so a cell can read it before the row's comp is set up
+     * (React mounts a child cell's effect before its parent row's).
+     */
+    public getAriaRowIndex(): number | null {
+        const { rowNode, beans } = this;
+
+        const { rowIndex } = rowNode;
+        if (rowIndex == null || rowNode.getRowIndexString() === null) {
+            return null;
+        }
+
+        return getAriaRowIndexForRow(beans, rowNode, rowIndex);
+    }
+
+    private updateRowIndexes(): void {
+        const { rowNode, rowGui, beans } = this;
+
+        const { rowIndex } = rowNode;
+        if (rowIndex == null) {
+            return;
+        }
+
+        const rowIndexStr = rowNode.getRowIndexString();
 
         if (rowIndexStr === null) {
             return;
         }
 
-        const headerRowCount =
-            (this.beans.ctrlsSvc.getHeaderRowContainerCtrl()?.getRowCount() ?? 0) +
-            (this.beans.filterManager?.getHeaderRowCount() ?? 0);
-        const rowIsEven = this.rowNode.rowIndex! % 2 === 0;
-        const ariaRowIndex = headerRowCount + this.rowNode.rowIndex! + 1;
+        const rowIsEven = rowIndex % 2 === 0;
+        const ariaRowIndex = (this.ariaRowIndex = getAriaRowIndexForRow(beans, rowNode, rowIndex));
 
-        this.forEachGui(gui, (c) => {
-            c.rowComp.setRowIndex(rowIndexStr);
-            c.rowComp.addOrRemoveCssClass('ag-row-even', rowIsEven);
-            c.rowComp.addOrRemoveCssClass('ag-row-odd', !rowIsEven);
-            _setAriaRowIndex(c.element, ariaRowIndex);
-        });
+        if (rowGui) {
+            rowGui.rowComp.setRowIndex(rowIndexStr);
+            rowGui.rowComp.toggleCss('ag-row-even', rowIsEven);
+            rowGui.rowComp.toggleCss('ag-row-odd', !rowIsEven);
+
+            _setAriaRowIndex(rowGui.element, ariaRowIndex);
+        }
     }
+}
+
+/** The 1-based, header- and pinned-lane-aware aria-rowindex for a row at the given index. */
+function getAriaRowIndexForRow(beans: BeanCollection, rowNode: RowNode, rowIndex: number): number {
+    const rowPosition: RowPosition = {
+        rowIndex,
+        rowPinned: rowNode.rowPinned ?? null,
+    };
+
+    return getAriaHeaderRowCount(beans) + _getAbsoluteRowIndex(beans, rowPosition) + 1;
 }

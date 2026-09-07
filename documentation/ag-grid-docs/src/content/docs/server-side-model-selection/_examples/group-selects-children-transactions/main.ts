@@ -5,18 +5,22 @@ import type {
     ServerSideTransaction,
     ServerSideTransactionResult,
 } from 'ag-grid-community';
-import { HighlightChangesModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { HighlightChangesModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule, ServerSideRowModelApiModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
 import { createRowOnServer, data } from './data';
 import { FakeServer } from './fakeServer';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     HighlightChangesModule,
     RowGroupingModule,
     ServerSideRowModelModule,
     ServerSideRowModelApiModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;

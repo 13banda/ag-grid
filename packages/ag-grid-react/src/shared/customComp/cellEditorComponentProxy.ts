@@ -8,7 +8,7 @@ export class CellEditorComponentProxy implements ICellEditor {
     private value: any;
     private componentInstance?: any;
     private resolveInstanceCreated?: () => void;
-    private instanceCreated: AgPromise<void> = new AgPromise((resolve) => {
+    private readonly instanceCreated: AgPromise<void> = new AgPromise((resolve) => {
         this.resolveInstanceCreated = resolve;
     });
     private readonly onValueChange = (value: any) => this.updateValue(value);
@@ -53,7 +53,15 @@ export class CellEditorComponentProxy implements ICellEditor {
     }
 
     private getOptionalMethods(): string[] {
-        return ['isCancelBeforeStart', 'isCancelAfterEnd', 'focusIn', 'focusOut', 'afterGuiAttached'];
+        return [
+            'isCancelBeforeStart',
+            'isCancelAfterEnd',
+            'focusIn',
+            'focusOut',
+            'afterGuiAttached',
+            'getValidationErrors',
+            'getValidationElement',
+        ];
     }
 
     private updateValue(value: any): void {

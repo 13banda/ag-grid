@@ -1,32 +1,39 @@
 import type { GridApi, GridOptions, IServerSideDatasource } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import {
     ColumnMenuModule,
     ColumnsToolPanelModule,
     ContextMenuModule,
     RowGroupingModule,
+    RowGroupingPanelModule,
     ServerSideRowModelModule,
 } from 'ag-grid-enterprise';
 
 import { FakeServer } from './fakeServer';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ColumnsToolPanelModule,
     ColumnMenuModule,
     ContextMenuModule,
     RowGroupingModule,
+    RowGroupingPanelModule,
     ServerSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: [
-        { field: 'country', rowGroup: true },
-        { field: 'year', pivot: true }, // pivot on 'year'
-        { field: 'gold', aggFunc: 'sum' },
-        { field: 'silver', aggFunc: 'sum' },
-        { field: 'bronze', aggFunc: 'sum' },
+        { field: 'country', rowGroup: true, enableRowGroup: true },
+        { field: 'sport', enableRowGroup: true },
+        { field: 'year', pivot: true, enablePivot: true }, // pivot on 'year'
+        { field: 'gold', aggFunc: 'sum', enableValue: true },
+        { field: 'silver', aggFunc: 'sum', enableValue: true },
+        { field: 'bronze', aggFunc: 'sum', enableValue: true },
     ],
     defaultColDef: {
         flex: 1,
@@ -41,6 +48,12 @@ const gridOptions: GridOptions<IOlympicData> = {
 
     // enable pivoting
     pivotMode: true,
+
+    sideBar: {
+        toolPanels: ['columns'],
+    },
+    rowGroupPanelShow: 'always',
+    pivotPanelShow: 'always',
 
     // specify the field separator, e.g. '2000_gold' should be '_' which is the default
     serverSidePivotResultFieldSeparator: '_',

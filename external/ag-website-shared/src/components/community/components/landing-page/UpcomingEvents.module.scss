@@ -31,10 +31,13 @@
 }
 
 .eventTilesContainer {
+    --event-tiles-gap: #{$spacing-size-8};
+    --num-event-links: 5;
+
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    gap: $spacing-size-8;
+    gap: var(--event-tiles-gap);
 
     @media screen and (max-width: $breakpoint-community-medium) {
         flex-direction: column;
@@ -44,8 +47,14 @@
 
 .linkWrapper {
     all: unset;
-    flex: 1;
     cursor: pointer;
+
+    @media screen and (min-width: $breakpoint-community-medium) {
+        width: calc(
+            100% / var(--num-event-links) - var(--event-tiles-gap) / var(--num-event-links) *
+                (var(--num-event-links) - 1)
+        );
+    }
 }
 
 .eventTile {
@@ -94,8 +103,8 @@
 }
 
 .organiserLogo {
-    width: 32px;
-    height: auto;
+    width: auto;
+    height: 32px;
 }
 
 .description {
@@ -105,12 +114,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
 .title {
     font-weight: var(--text-semibold);
     font-size: var(--text-fs-lg);
     margin-bottom: 4px;
     color: var(--color-fg-primary);
     padding-top: 8px;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .description {
@@ -136,7 +150,8 @@
     padding-top: 4px;
     padding-bottom: 4px;
     background-color: var(--color-util-brand-100);
-    display: flex;
+    white-space: nowrap;
+    display: inline-block;
     justify-content: center;
     gap: 8px;
     font-size: var(--text-fs-base);
@@ -148,9 +163,9 @@
 .conferenceIcon {
     margin-top: 16px;
     height: 32px;
-    width: 32px;
+    width: auto;
     display: flex;
-    justify-content: center;
+    justify-content: start;
     align-items: center;
 }
 

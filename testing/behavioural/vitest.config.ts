@@ -1,75 +1,166 @@
-import pluginReact from '@vitejs/plugin-react';
-import { existsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vitest/config';
+import type { ViteUserConfig } from 'vitest/config';
 
-const workspaceRootPath = path.resolve(fileURLToPath(import.meta.url), '../../../');
+import {
+    TEST_TIMEOUT_MS,
+    UNIT_TEST_ENVIRONMENT,
+    diffConfigFile,
+    packageSourceAliases,
+    sortAliases,
+    vitestReporters,
+} from '../shared/vitest/shared';
+import type { Alias } from '../shared/vitest/shared';
 
-/** Resolve aliases */
-const resolveAlias = {};
+// The timezone is pinned by the shared config imported above, which every unit project goes through.
 
-/**
- * This behavioural test project can both use the source code and the bundles of the modules.
- * So we can have a faster development cycle running tests before the compilation steps is done,
- * and, we can still run the tests using the compiled code if needed by setting the environment variable
- * `TESTS_USE_SOURCE_CODE=false`, will make the project use the bundled dist code.
- *
- * Note that at the moment vitest is not correctly loading the sourcemaps of the bundled code, so it is recommended to use the source code.
- */
-const TESTS_USE_ORIGINAL_SOURCE_CODE = process.env.TESTS_USE_ORIGINAL_SOURCE_CODE !== 'false';
+const thisDir = path.dirname(fileURLToPath(import.meta.url));
 
-if (TESTS_USE_ORIGINAL_SOURCE_CODE) {
-    await loadSourceCodeAliases(['packages']); // Load the projects source code
+/** Repo root — two levels up from testing/behavioural. Used to locate packages/ for source aliases. */
+const repoRoot = path.resolve(thisDir, '../..');
+
+// Set by bench-compare.mjs to another checkout's `packages/`, so one checkout's benches can measure
+// another's grid source. Its parent is that checkout's root, which holds the matching community-modules/.
+const benchPackages = process.env.AG_BENCH_PACKAGES;
+const benchRoot = benchPackages ? path.resolve(benchPackages, '..') : repoRoot;
+
+// Per-checkout dep cache: bench-compare points AG_BENCH_PACKAGES at base vs test, which changes the
+// source aliases. Sharing one cacheDir makes each side invalidate the other's optimized deps (Vite
+// re-optimizes on every side switch); a key per checkout keeps the two caches separate.
+const benchCacheKey = benchPackages ? path.basename(benchRoot) : 'self';
+
+// Flips the grid's FAST_TEST_TIMINGS flag to true for this suite: hard-coded UX delays (menu activation,
+// drag intervals, announcements) are wall-clock a headless test would otherwise sit through. Matched on the
+// relative specifier every importer of the flag writes, so nothing else named the same can be caught.
+const fastTestTimingsAlias: Alias = {
+    find: /^(\.\.?\/)+fastTestTimings$/,
+    replacement: path.resolve(thisDir, '../ag-test-utils/src/fastTestTimings.ts'),
+};
+
+// Pin react/react-dom to the versions installed in testing/behavioural/node_modules,
+// preventing Vite from resolving them from the repo-root node_modules instead.
+const aliases: Alias[] = [
+    { find: 'react', replacement: path.resolve(thisDir, 'node_modules/react') },
+    { find: 'react-dom', replacement: path.resolve(thisDir, 'node_modules/react-dom') },
+    fastTestTimingsAlias,
+];
+
+// Point package names at TypeScript source so tests run against uncompiled code, both halves of one
+// source tree (never a mix of two checkouts): packages/ for the grid, community-modules/ for the locales,
+// whose published `exports` point at a dist/ no test run builds.
+if (process.env.TESTS_USE_ORIGINAL_SOURCE_CODE !== 'false') {
+    aliases.push(...(await packageSourceAliases(benchRoot)));
 }
 
-export default defineConfig({
-    plugins: [pluginReact() as any],
-    test: {
-        globals: true,
-        environment: 'jsdom',
-        setupFiles: './vitest.setup.js',
-    },
-    resolve: {
-        alias: resolveAlias,
-    },
-    clearScreen: false,
-});
+sortAliases(aliases);
 
-async function loadSourceCodeAliases(modulesDirectories: string[]) {
-    const processedPaths = new Set();
-    const processSourceDirectory = async (name: string, level: number) => {
-        const promises: Promise<void>[] = [];
-        const modulePath = path.resolve(name);
-        if (!processedPaths.has(modulePath)) {
-            processedPaths.add(modulePath);
-            const content = await readdir(modulePath, { withFileTypes: true });
-            for (const dir of content) {
-                if (dir.isDirectory()) {
-                    const packageJsonPath = path.resolve(modulePath, dir.name, 'package.json');
-                    if (existsSync(packageJsonPath)) {
-                        const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
-                        if (!(packageJson.name in resolveAlias)) {
-                            const mainFiles = ['src/index.ts', 'src/index.tsx', 'src/main.ts', 'src/main.tsx'];
-                            for (const mainFile of mainFiles) {
-                                const mainTsPath = path.resolve(modulePath, dir.name, mainFile);
-                                if (existsSync(mainTsPath)) {
-                                    resolveAlias[packageJson.name] = mainTsPath;
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (level < 2) {
-                        promises.push(processSourceDirectory(path.resolve(modulePath, dir.name), level + 1));
-                    }
-                }
-            }
+// The grid's Theming API imports CSS as a default-exported string (e.g. inject.ts:
+// `import sharedCSS from './shared/shared.css'`) and injects it at runtime. Vite only produces that
+// string for `.css?inline`; a bare `.css` import resolves to a styles side-effect with no default
+// export. Route bare `.css` imports through `?inline` so theming works the same as a real build.
+const cssInlinePlugin = {
+    name: 'bench-css-inline',
+    enforce: 'pre' as const,
+    async resolveId(this: any, source: string, importer: string | undefined, options: any) {
+        if (!source.endsWith('.css') || source.includes('?') || !importer) {
+            return null;
         }
-        await Promise.all(promises);
-    };
+        const resolved = await this.resolve(`${source}?inline`, importer, { ...options, skipSelf: true });
+        return resolved?.id ?? null;
+    },
+};
 
-    await Promise.all(
-        modulesDirectories.map((name) => processSourceDirectory(path.resolve(workspaceRootPath, name), 0))
-    );
-}
+// Benchmarks default to a real Chromium (via Playwright) so layout-dependent work is measured
+// against a real layout engine; `BENCH_NODE=1` (`./benches.sh --node`) opts back into node/happy-dom.
+// Tests (mode 'test') always use happy-dom — only benchmark runs go to the browser.
+// `BENCH_BROWSER_HEADED=1` (`./benches.sh --headed`) opens a visible window to watch the run.
+export default defineConfig(async ({ mode }): Promise<ViteUserConfig> => {
+    const isBench = mode === 'benchmark';
+    const browserEnabled = isBench && !process.env.BENCH_NODE;
+    const browserHeadless = !process.env.BENCH_BROWSER_HEADED;
+
+    // Imported here rather than at module scope: it pulls in playwright, which every `./behave.sh`
+    // run would otherwise load for a browser it never starts.
+    const browserProvider = browserEnabled ? (await import('@vitest/browser-playwright')).playwright : undefined;
+
+    // `--profile` (BENCH_PROFILE, node-only — browser mode doesn't use the forks pool) emits a V8 CPU
+    // profile from the forked child. `--expose-gc` is always on so the harness can reclaim grids.
+    const benchExecArgv = ['--expose-gc'];
+    if (process.env.BENCH_PROFILE) {
+        const profileDir = process.env.BENCH_PROFILE_DIR || path.resolve(thisDir, 'profiles');
+        benchExecArgv.push('--cpu-prof', `--cpu-prof-dir=${profileDir}`);
+    }
+
+    return {
+        // No `esbuild`/`oxc` block: Vite 8 transforms with oxc, whose defaults are already `target: esnext`
+        // and `jsx: { runtime: 'automatic' }`, and an `esbuild` block alongside oxc is warned about and ignored.
+
+        // A benchmark measures the shipped grid, so it keeps the real delays; only tests get the fast ones.
+        resolve: { alias: isBench ? aliases.filter((alias) => alias !== fastTestTimingsAlias) : aliases },
+        cacheDir: path.resolve(thisDir, 'node_modules', `.vite-bench-${benchCacheKey}`),
+        plugins: browserEnabled ? [cssInlinePlugin] : [],
+        // Cross-origin isolation → `crossOriginIsolated`, dropping Chromium's `performance.now()` clamp
+        // from 100µs to 5µs (essential for fast micro-benches). Browser benches only; tests stay on happy-dom.
+        server: browserEnabled
+            ? {
+                  headers: {
+                      'Cross-Origin-Opener-Policy': 'same-origin',
+                      'Cross-Origin-Embedder-Policy': 'require-corp',
+                  },
+              }
+            : undefined,
+        test: {
+            name: 'behavioural',
+            globals: true,
+            environment: UNIT_TEST_ENVIRONMENT,
+            // Benchmarks measure rather than assert, so only tests carry the cap.
+            testTimeout: isBench ? undefined : TEST_TIMEOUT_MS,
+            setupFiles: [path.resolve(thisDir, 'vitest.setup.ts')],
+            diff: diffConfigFile,
+            reporters: vitestReporters(),
+            watch: false,
+            // Benchmarks run in a single forked child (clean process isolation, no file parallelism)
+            // so runs don't contend for cores or pay worker-migration noise. `--expose-gc` lives here
+            // (not in the shell wrappers) so `./benches.sh`, raw `vitest bench` and `bench-compare`
+            // all behave identically — the harness reclaims destroyed grids between benches when gc
+            // is present. Worker threads reject `--expose-gc`, hence forks. (Tests keep the defaults.)
+            pool: isBench ? 'forks' : 'threads',
+            fileParallelism: isBench ? false : undefined,
+            maxWorkers: isBench ? 1 : undefined,
+            execArgv: isBench ? benchExecArgv : undefined,
+            root: repoRoot,
+            dir: path.resolve(thisDir, 'src'),
+            include: ['**/*.test.ts', '**/*.test.tsx'],
+            benchmark: { include: ['**/*.bench.ts', '**/*.bench.tsx'] },
+            css: browserEnabled,
+            browser: {
+                enabled: browserEnabled,
+                // expose-gc: window.gc for the harness to reclaim grids between benches. max-semi-space-size:
+                // bigger young gen → fewer scavenge-GC spikes mid-measurement (the main residual noise).
+                // vsync flags drop frame-rate jitter. NB: don't add a `--disable-features` — Chromium keeps
+                // only the last occurrence, clobbering Playwright's noise-reduction defaults.
+                provider: browserProvider?.({
+                    launchOptions: {
+                        args: [
+                            '--js-flags=--expose-gc --max-semi-space-size=256',
+                            '--enable-benchmarking',
+                            '--disable-frame-rate-limit',
+                            '--disable-gpu-vsync',
+                        ],
+                    },
+                }),
+                instances: [{ browser: 'chromium' }],
+                headless: browserHeadless,
+                // No in-browser overlay — `--headed` shows the grid full-window, and `--ui` serves the
+                // separate Vitest dashboard (the bench picker) at a localhost URL, not this overlay.
+                ui: false,
+                screenshotFailures: false,
+                // Large, fixed viewport so the grid (sized 100vw×100vh) renders a representative number
+                // of rows consistently across machines, and fills the window when headed.
+                viewport: { width: 1600, height: 1200 },
+            },
+        },
+        clearScreen: false,
+    };
+});

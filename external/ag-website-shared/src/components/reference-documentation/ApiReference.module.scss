@@ -46,6 +46,13 @@
     :global(.docPage) & {
         margin-bottom: $spacing-size-4;
     }
+
+    // Hack to get around <astro-island/> sibling selector issues
+    [component-export='ApiReferenceWithContext'] + [component-export='ApiReferenceWithContext'] & {
+        margin-top: $spacing-size-8;
+        padding-top: $spacing-size-6;
+        border-top: 1px solid var(--color-border-secondary);
+    }
 }
 
 .propertyDescription {
@@ -62,6 +69,12 @@
 
     @container (max-width: #{$breakpoint-table-small}) {
         display: block;
+
+        tbody,
+        tr,
+        td {
+            display: block;
+        }
     }
 
     @container (min-width: #{$breakpoint-table-small}) {
@@ -97,7 +110,7 @@
         border-bottom-color: var(--color-util-gray-400);
     }
 
-    :global(.tabs-outer) & {
+    :global(.tabs-outer) .apiReference > & {
         &:first-child {
             border-top: none;
         }
@@ -125,7 +138,20 @@
         min-width: calc(50% - $spacing-size-2);
     }
 
-    &.expandedChildProps::after {
+    > .expandedContent {
+        flex-basis: 100%;
+        min-width: 100%;
+    }
+
+    &.expandedUnionTypes > .expandedContent {
+        margin-left: $spacing-size-6;
+        // Account for the left margin so the code block stays within the row's bounds.
+        flex-basis: calc(100% - #{$spacing-size-6});
+        min-width: calc(100% - #{$spacing-size-6});
+    }
+
+    &.expandedChildProps::after,
+    &.expandedUnionTypes::after {
         content: '';
         position: absolute;
         top: $spacing-size-10;
@@ -156,9 +182,18 @@
         margin-top: $spacing-size-3;
         width: 100%;
 
-        .expandedChildProps & {
+        // When the row stacks, the right column drops onto its own line beneath the side-line that
+        // marks the expansion. Indent it past the line so the description and toggle button clear it,
+        // matching the type meta above. Both expanded variants draw the line, so both need the indent.
+        .expandedChildProps &,
+        .expandedUnionTypes & {
             padding-left: $spacing-size-6;
         }
+    }
+
+    :global(.param) {
+        display: block;
+        margin: $spacing-size-2 0;
     }
 }
 
@@ -171,34 +206,21 @@
 
     display: flex;
     align-items: center;
-    gap: $spacing-size-2;
+    gap: $spacing-size-1;
     position: relative;
     padding-right: $spacing-size-2;
     font-family: var(--text-monospace-font-family);
-    font-size: 15px;
     line-height: var(--text-lh-xs);
     font-weight: 700;
     color: var(--color-fg-primary);
 
+    > span {
+        flex-grow: 0;
+        line-height: 1;
+    }
+
     &:hover .linkIcon {
-        opacity: 0.5;
-    }
-
-    .linkIcon {
-        margin-left: 0;
-
-        &:hover {
-            opacity: 1;
-        }
-
-        svg {
-            width: $spacing-size-4;
-            height: $spacing-size-4;
-        }
-    }
-
-    @container (min-width: #{$breakpoint-table-small}) {
-        font-size: 15px;
+        opacity: 1;
     }
 }
 
@@ -206,11 +228,13 @@
     --icon-size: 15px;
 
     position: absolute;
-    top: 4px;
+    top: 2px;
     left: 2px;
     transition: transform 0.33s ease-in-out;
 
-    .expandedChildProps & {
+    .expandedChildProps &,
+    .expandedUnionTypes &,
+    .expandedUnionTypes > * > & {
         transform: rotate(90deg);
     }
 }
@@ -234,7 +258,8 @@
     align-items: center;
     flex-wrap: wrap;
 
-    .expandedChildProps & {
+    .expandedChildProps &,
+    .expandedUnionTypes > * > & {
         margin-left: $spacing-size-6;
     }
 }
@@ -262,10 +287,15 @@
     padding-left: 8px;
     padding-right: 8px;
     border-radius: var(--radius-sm);
+    word-break: break-word;
 
     #{$selector-darkmode} & {
         background-color: color-mix(in srgb, var(--color-fg-code), var(--color-bg-primary) 90%);
     }
+}
+
+.metaValue.isClickable {
+    cursor: pointer;
 }
 
 .defaultValue {
@@ -303,6 +333,10 @@ a.metaValue {
     &:hover {
         color: var(--color-link-hover);
     }
+
+    #{$selector-darkmode} & {
+        background-color: color-mix(in srgb, var(--color-link), var(--color-bg-primary) 90%);
+    }
 }
 
 .actions {
@@ -317,6 +351,7 @@ a.metaValue {
 
 .childButton {
     font-weight: var(--text-semibold);
+    cursor: pointer;
 
     svg {
         transition: transform 0.33s ease-in-out;
@@ -337,12 +372,31 @@ a.metaValue {
     fill: var(--color-link) !important;
 }
 
+.unionTypesButton {
+    font-weight: var(--text-semibold);
+    cursor: pointer;
+
+    svg {
+        transition: transform 0.33s ease-in-out;
+    }
+
+    &:hover svg {
+        fill: var(--color-link-hover) !important;
+    }
+
+    &.isExpanded svg {
+        transform: rotate(90deg);
+    }
+}
+
 button.seeMore {
     color: var(--color-link);
+    cursor: pointer;
     justify-content: center;
     align-items: center;
     display: flex;
     gap: $spacing-size-2;
+    padding: unset;
     color: var(--color-link);
     font-weight: 600;
     border: 1px solid color-mix(in srgb, var(--color-link), var(--color-bg-primary) 80%);
@@ -467,6 +521,7 @@ button.seeMore {
     position: relative;
     border-top: 1px dashed var(--color-util-gray-200) !important;
 
+    &::before,
     &::before,
     &::after {
         content: '';

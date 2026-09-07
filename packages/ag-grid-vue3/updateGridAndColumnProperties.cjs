@@ -1,16 +1,16 @@
-const replace = require('replace-in-file');
+const { replaceInFile: replace } = require('replace-in-file');
 const fs = require('fs');
 const { EOL } = require('os');
 const ts = require('typescript');
 const { _getCallbackForEvent, _PUBLIC_EVENTS } = require('ag-grid-community');
 const { getFormatterForTS } = require('./../../scripts/formatAST');
-const { _ALL_GRID_OPTIONS } = require('ag-grid-community');
+const { _GET_ALL_GRID_OPTIONS } = require('ag-grid-community');
 
 const { formatNode, findNode, getFullJsDoc } = getFormatterForTS(ts);
 
 const AG_CHART_TYPES = ['AgChartTheme', 'AgChartThemeOverrides'];
 
-const skippableProperties = ['gridOptions', 'reactiveCustomComponents'];
+const skippableProperties = ['gridOptions', 'reactiveCustomComponents', 'renderingMode'];
 const skippableEvents = [];
 const skippableEventTypes = [];
 
@@ -63,7 +63,7 @@ function generatePropsAndEmits({ typeLookup, eventTypeLookup, docLookup }) {
     let propDefaultsToWrite = [];
     const typeKeysOrder = Object.keys(typeLookup);
 
-    _ALL_GRID_OPTIONS.forEach((property) => {
+    _GET_ALL_GRID_OPTIONS().forEach((property) => {
         if (skippableProperties.includes(property)) return;
 
         const typeName = typeLookup[property];
@@ -130,29 +130,7 @@ function generatePropsAndEmits({ typeLookup, eventTypeLookup, docLookup }) {
 }
 
 function getSafeType(typeName) {
-    let inputType = 'any';
-    if (typeName) {
-        inputType = applyUndefinedUnionType(typeName);
-    }
-    return inputType;
-}
-
-/**
- * Ensure that we correctly apply the undefined as a separate union type for complex type
- *  e.g isExternalFilterPresent: (() => boolean) | undefined = undefined;
- *  Without the brackets this changes the return type!
- */
-function applyUndefinedUnionType(typeName) {
-    const trimmed = typeName.trim();
-    if (trimmed === 'any') {
-        // Don't union type with any
-        return trimmed;
-    }
-    if (trimmed.includes('=>')) {
-        return `(${trimmed}) | undefined`;
-    } else {
-        return `${trimmed} | undefined`;
-    }
+    return typeName?.trim() ?? 'any';
 }
 
 function addDocLine(docLookup, property, result) {
@@ -180,7 +158,7 @@ function extractType(allTypes, typesToSkip) {
     });
     let expandedTypes = propertyTypes.flatMap((m) => m);
 
-    const nonAgTypes = ['Partial', 'Document', 'HTMLElement', 'Function', 'TData'];
+    const nonAgTypes = ['Partial', 'Document', 'HTMLElement', 'Function', 'TData', 'Iterable'];
     expandedTypes = [...new Set(expandedTypes)]
         .filter((t) => !nonAgTypes.includes(t) && !AG_CHART_TYPES.includes(t))
         .sort();

@@ -1,157 +1,106 @@
-import { _setAriaRole } from '../../../utils/aria';
-import { _makeNull } from '../../../utils/generic';
-import { AgInputNumberField } from '../../../widgets/agInputNumberField';
-import { AgInputTextField } from '../../../widgets/agInputTextField';
-import type { Comparator } from '../iScalarFilter';
-import type { ISimpleFilterModel, Tuple } from '../iSimpleFilter';
-import { ScalarFilter } from '../scalarFilter';
-import type { SimpleFilterModelFormatter } from '../simpleFilterModelFormatter';
-import type { NumberFilterModel, NumberFilterParams } from './iNumberFilter';
+import { AgInputNumberField } from '../../../agWidgets/agInputNumberField';
+import type { FilterDisplayParams } from '../../../interfaces/iFilter';
+import type { GridInputNumberField, GridInputTextField } from '../../../widgets/gridWidgetTypes';
+import type { ICombinedSimpleModel } from '../iSimpleFilter';
+import { _bindFilterCallback, getValidityMessageKey } from '../simpleFilterUtils';
+import type { RenderChange } from '../textInputSimpleFilter';
+import { TextInputSimpleFilter } from '../textInputSimpleFilter';
+import type { INumberFilterParams, NumberFilterModel } from './iNumberFilter';
 import { DEFAULT_NUMBER_FILTER_OPTIONS } from './numberFilterConstants';
-import { NumberFilterModelFormatter } from './numberFilterModelFormatter';
-import { getAllowedCharPattern } from './numberFilterUtils';
+import {
+    getAllowedCharPattern,
+    mapValuesFromNumberFilterModel,
+    processNumberFilterValue,
+    stringToFloat,
+    usesTextInput,
+} from './numberFilterUtils';
 
-export class NumberFilter extends ScalarFilter<NumberFilterModel, number> {
-    private readonly eValuesFrom: (AgInputTextField | AgInputNumberField)[] = [];
-    private readonly eValuesTo: (AgInputTextField | AgInputNumberField)[] = [];
+/** temporary type until `NumberFilterParams` is updated as breaking change */
+type NumberFilterDisplayParams = INumberFilterParams &
+    FilterDisplayParams<any, any, NumberFilterModel | ICombinedSimpleModel<NumberFilterModel>>;
 
-    private numberFilterParams: NumberFilterParams;
-    private filterModelFormatter: SimpleFilterModelFormatter;
+type NumberInput = GridInputTextField | GridInputNumberField;
 
-    protected filterType = 'number' as const;
+export class NumberFilter extends TextInputSimpleFilter<
+    NumberFilterModel,
+    number,
+    NumberInput,
+    NumberFilterDisplayParams
+> {
+    public readonly filterType = 'number' as const;
 
     constructor() {
-        super('numberFilter');
+        super('numberFilter', mapValuesFromNumberFilterModel, DEFAULT_NUMBER_FILTER_OPTIONS);
     }
 
-    override refresh(params: NumberFilterParams): boolean {
-        if (this.numberFilterParams.allowedCharPattern !== params.allowedCharPattern) {
-            return false;
+    protected override getRenderChange(
+        params: NumberFilterDisplayParams,
+        previous: NumberFilterDisplayParams | undefined
+    ): RenderChange | undefined {
+        // The element type and its pattern are fixed at build time, so only a replacement can change them.
+        if (
+            usesTextInput(params) !== usesTextInput(previous) ||
+            getAllowedCharPattern(params) !== getAllowedCharPattern(previous)
+        ) {
+            return 'rebuild';
         }
-
-        return super.refresh(params);
+        // What an input shows is rendered through these, so its text stops being readable when they change.
+        if (params.numberParser !== previous?.numberParser || params.numberFormatter !== previous?.numberFormatter) {
+            return 'rerender';
+        }
+        return undefined;
     }
 
-    protected mapValuesFromModel(filterModel: NumberFilterModel | null): Tuple<number> {
-        const { filter, filterTo, type } = filterModel || {};
-        return [this.processValue(filter), this.processValue(filterTo)].slice(0, this.getNumberOfInputs(type));
+    protected override parseText(
+        text: string | null | undefined,
+        params: NumberFilterDisplayParams | undefined
+    ): number | null {
+        return processNumberFilterValue(stringToFloat(params?.numberParser, text, this.gos, this.params.column));
     }
 
-    protected override defaultDebounceMs: number = 500;
-
-    protected comparator(): Comparator<number> {
-        return (left: number, right: number): number => {
-            if (left === right) {
-                return 0;
-            }
-
-            return left < right ? 1 : -1;
-        };
+    protected override getValueFormatter(): ((value: number | null) => string | null) | undefined {
+        return _bindFilterCallback(this.params.numberFormatter, this.gos, this.params.column);
     }
 
-    protected override setParams(params: NumberFilterParams): void {
-        this.numberFilterParams = params;
-
-        super.setParams(params);
-        this.filterModelFormatter = new NumberFilterModelFormatter(
-            this.getLocaleTextFunc.bind(this),
-            this.optionsFactory,
-            this.numberFilterParams.numberFormatter
+    protected override createInputWidget(): NumberInput {
+        const params = this.params;
+        if (usesTextInput(params)) {
+            return this.createTextInput();
+        }
+        return this.createBean(
+            new AgInputNumberField({
+                clearButton: true,
+                searchIcon: true,
+                autoComplete: params.browserAutoComplete,
+            })
         );
     }
 
-    protected getDefaultFilterOptions(): string[] {
-        return DEFAULT_NUMBER_FILTER_OPTIONS;
-    }
-
-    protected override setElementValue(
-        element: AgInputTextField | AgInputNumberField,
-        value: number | null,
-        fromFloatingFilter?: boolean
+    protected override refreshInputPairValidation(
+        from: NumberInput,
+        to: NumberInput,
+        isFrom: boolean,
+        numberOfInputs: number
     ): void {
-        // values from floating filter are directly from the input, not from the model
-        const { numberFormatter } = this.numberFilterParams;
-        const valueToSet = !fromFloatingFilter && numberFormatter ? numberFormatter(value ?? null) : value;
-        super.setElementValue(element, valueToSet as any);
-    }
-
-    protected createValueElement(): HTMLElement {
-        const allowedCharPattern = getAllowedCharPattern(this.numberFilterParams);
-
-        const eCondition = document.createElement('div');
-        eCondition.classList.add('ag-filter-body');
-        _setAriaRole(eCondition, 'presentation');
-
-        this.createFromToElement(eCondition, this.eValuesFrom, 'from', allowedCharPattern);
-        this.createFromToElement(eCondition, this.eValuesTo, 'to', allowedCharPattern);
-
-        return eCondition;
-    }
-
-    private createFromToElement(
-        eCondition: HTMLElement,
-        eValues: (AgInputTextField | AgInputNumberField)[],
-        fromTo: string,
-        allowedCharPattern: string | null
-    ): void {
-        const eValue = this.createManagedBean(
-            allowedCharPattern ? new AgInputTextField({ allowedCharPattern }) : new AgInputNumberField()
-        );
-        eValue.addCssClass(`ag-filter-${fromTo}`);
-        eValue.addCssClass('ag-filter-filter');
-        eValues.push(eValue);
-        eCondition.appendChild(eValue.getGui());
-    }
-
-    protected removeValueElements(startPosition: number, deleteCount?: number): void {
-        const removeComps = (eGui: (AgInputTextField | AgInputNumberField)[]) =>
-            this.removeComponents(eGui, startPosition, deleteCount);
-
-        removeComps(this.eValuesFrom);
-        removeComps(this.eValuesTo);
-    }
-
-    protected getValues(position: number): Tuple<number> {
-        const result: Tuple<number> = [];
-        this.forEachPositionInput(position, (element, index, _elPosition, numberOfInputs) => {
-            if (index < numberOfInputs) {
-                result.push(this.processValue(this.stringToFloat(element.getValue())));
-            }
-        });
-
-        return result;
+        // Only a two-value option has an order to be out of, and reading a value runs the column's own parser.
+        let validityMessage = '';
+        if (numberOfInputs >= 2) {
+            const fromValue = this.readValue(from, true);
+            const toValue = this.readValue(to, true);
+            const localeKey = getValidityMessageKey(fromValue, toValue, isFrom, this.params.inRangeInclusive);
+            validityMessage = localeKey ? this.translate(localeKey, [String(isFrom ? toValue : fromValue)]) : '';
+        }
+        (isFrom ? from : to).setCustomValidity(validityMessage); // Set validity error state for target input
+        (isFrom ? to : from).setCustomValidity(''); // Reset validity error state for other input
+        if (validityMessage.length > 0) {
+            this.beans.ariaAnnounce.announceValue(validityMessage, 'filterValidation');
+        }
     }
 
     protected areSimpleModelsEqual(aSimple: NumberFilterModel, bSimple: NumberFilterModel): boolean {
         return (
             aSimple.filter === bSimple.filter && aSimple.filterTo === bSimple.filterTo && aSimple.type === bSimple.type
         );
-    }
-
-    private processValue(value?: number | null): number | null {
-        if (value == null) {
-            return null;
-        }
-        return isNaN(value) ? null : value;
-    }
-
-    private stringToFloat(value?: string | number | null): number | null {
-        if (typeof value === 'number') {
-            return value;
-        }
-
-        let filterText = _makeNull(value);
-
-        if (filterText != null && filterText.trim() === '') {
-            filterText = null;
-        }
-
-        const numberParser = this.numberFilterParams.numberParser;
-        if (numberParser) {
-            return numberParser(filterText);
-        }
-
-        return filterText == null || filterText.trim() === '-' ? null : parseFloat(filterText);
     }
 
     protected createCondition(position: number): NumberFilterModel {
@@ -170,28 +119,5 @@ export class NumberFilter extends ScalarFilter<NumberFilterModel, number> {
         }
 
         return model;
-    }
-
-    protected getInputs(position: number): Tuple<AgInputTextField | AgInputNumberField> {
-        const { eValuesFrom, eValuesTo } = this;
-        if (position >= eValuesFrom.length) {
-            return [null, null];
-        }
-        return [eValuesFrom[position], eValuesTo[position]];
-    }
-
-    public getModelAsString(model: ISimpleFilterModel): string {
-        return this.filterModelFormatter.getModelAsString(model) ?? '';
-    }
-
-    protected override hasInvalidInputs(): boolean {
-        let invalidInputs = false;
-        this.forEachInput((element) => {
-            if (!element.getInputElement().validity.valid) {
-                invalidInputs = true;
-                return;
-            }
-        });
-        return invalidInputs;
     }
 }

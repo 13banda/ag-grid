@@ -1,0 +1,33 @@
+import { ensureGridReady, expect, test, waitForGridContent } from '@utils/grid/test-utils';
+
+test.agExample(import.meta, () => {
+    test.eachFramework('age column appends custom items to the default menu', async ({ agIdFor, page }) => {
+        // `sport` is row-grouped, so the top displayed rows are group rows without leaf cells;
+        // just wait for the grid to render rather than asserting a specific leaf cell.
+        await ensureGridReady(page);
+        await waitForGridContent(page);
+
+        await agIdFor.headerCell('age').hover();
+        await agIdFor.headerCellMenuButton('age').click();
+        await expect(agIdFor.menu()).toBeVisible();
+        // default item still present
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'Choose Columns' })).toBeVisible();
+        // appended custom items
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'A Custom Item' })).toBeVisible();
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'Custom Sub Menu' })).toBeVisible();
+        await page.keyboard.press('Escape');
+    });
+
+    test.eachFramework('country column shows only custom items plus resetColumns', async ({ agIdFor, page }) => {
+        await agIdFor.headerCell('country').hover();
+        await agIdFor.headerCellMenuButton('country').click();
+        await expect(agIdFor.menu()).toBeVisible();
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'A Custom Item' })).toBeVisible();
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'Another Custom Item' })).toBeVisible();
+        // the single built-in item that was included
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'Reset Columns' })).toBeVisible();
+        // a default item that was NOT included is absent
+        await expect(page.locator('.ag-menu-option-text', { hasText: 'Choose Columns' })).toHaveCount(0);
+        await page.keyboard.press('Escape');
+    });
+});

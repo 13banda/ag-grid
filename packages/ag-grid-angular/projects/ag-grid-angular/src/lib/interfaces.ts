@@ -1,13 +1,21 @@
 import type {
+    FilterDisplay,
+    FilterDisplayParams,
+    FloatingFilterDisplay,
+    FloatingFilterDisplayParams,
     ICellEditor,
     ICellEditorParams,
     ICellEditorRendererParams,
     ICellRenderer,
     ICellRendererParams,
+    IColumnSelectionLabelRenderer,
+    IColumnSelectionLabelRendererParams,
     IDate,
     IDateParams,
     IDragAndDropImage,
     IDragAndDropImageParams,
+    IExportingOverlay,
+    IExportingOverlayParams,
     IFilter,
     IFilterParams,
     IFloatingFilter,
@@ -21,12 +29,18 @@ import type {
     ILoadingOverlayParams,
     IMenuItem,
     IMenuItemParams,
+    INoMatchingRowsOverlay,
+    INoMatchingRowsOverlayParams,
     INoRowsOverlay,
     INoRowsOverlayParams,
+    IOverlay,
+    IOverlayParams,
     IStatusPanel,
     IStatusPanelParams,
     IToolPanel,
     IToolPanelParams,
+    IToolbarItem,
+    IToolbarItemParams,
     ITooltipParams,
 } from 'ag-grid-community';
 
@@ -37,21 +51,36 @@ export interface AgFrameworkComponent<T> {
 
 export interface IHeaderGroupAngularComp extends AgFrameworkComponent<IHeaderGroupParams>, IHeaderGroup {}
 
+export interface IInnerHeaderGroupAngularComp extends AgFrameworkComponent<IHeaderGroupParams>, IHeaderGroup {}
+
 export interface IHeaderAngularComp extends AgFrameworkComponent<IHeaderParams>, IHeader {}
 
+export interface IInnerHeaderAngularComp extends AgFrameworkComponent<IHeaderParams>, IHeader {}
+
 export interface IFloatingFilterAngularComp<P = any>
-    extends AgFrameworkComponent<IFloatingFilterParams<P>>,
-        IFloatingFilter {}
+    extends AgFrameworkComponent<IFloatingFilterParams<P>>, IFloatingFilter {}
+
+export interface IFloatingFilterDisplayAngularComp<TData = any, TContext = any, TModel = any, TCustomParams = object>
+    extends
+        AgFrameworkComponent<FloatingFilterDisplayParams<TData, TContext, TModel, TCustomParams>>,
+        FloatingFilterDisplay<TData, TContext, TModel, TCustomParams> {}
 
 export interface IDateAngularComp extends AgFrameworkComponent<IDateParams>, IDate {}
 
 export interface IDragAndDropImageAngularComponent
-    extends AgFrameworkComponent<IDragAndDropImageParams>,
-        IDragAndDropImage {}
+    extends AgFrameworkComponent<IDragAndDropImageParams>, IDragAndDropImage {}
 
 export interface IFilterAngularComp extends AgFrameworkComponent<IFilterParams>, IFilter {}
 
+export interface IFilterDisplayAngularComp<TData = any, TContext = any, TModel = any, TState = any>
+    extends
+        AgFrameworkComponent<FilterDisplayParams<TData, TContext, TModel, TState>>,
+        FilterDisplay<TData, TContext, TModel, TState> {}
+
 export interface ICellRendererAngularComp extends AgFrameworkComponent<ICellRendererParams>, ICellRenderer {}
+
+export interface IColumnSelectionLabelRendererAngularComp
+    extends AgFrameworkComponent<IColumnSelectionLabelRendererParams>, IColumnSelectionLabelRenderer {}
 
 export interface ICellEditorRendererAngularComp extends AgFrameworkComponent<ICellEditorRendererParams> {}
 
@@ -67,13 +96,21 @@ export interface AgFloatingFilterComponent extends IFloatingFilterAngularComp {}
 
 export interface ILoadingCellRendererAngularComp extends AgFrameworkComponent<ILoadingCellRendererParams> {}
 
+export interface IOverlayAngularComp extends AgFrameworkComponent<IOverlayParams>, IOverlay {}
+
 export interface ILoadingOverlayAngularComp extends AgFrameworkComponent<ILoadingOverlayParams>, ILoadingOverlay {}
+export interface IExportingOverlayAngularComp
+    extends AgFrameworkComponent<IExportingOverlayParams>, IExportingOverlay {}
 
 export interface INoRowsOverlayAngularComp extends AgFrameworkComponent<INoRowsOverlayParams>, INoRowsOverlay {}
+export interface INoMatchingRowsOverlayAngularComp
+    extends AgFrameworkComponent<INoMatchingRowsOverlayParams>, INoMatchingRowsOverlay {}
 
 export interface IStatusPanelAngularComp extends AgFrameworkComponent<IStatusPanelParams>, IStatusPanel {}
 
 export interface IToolPanelAngularComp extends AgFrameworkComponent<IToolPanelParams>, IToolPanel {}
+
+export interface IToolbarItemAngularComp extends AgFrameworkComponent<IToolbarItemParams>, IToolbarItem {}
 
 export interface ITooltipAngularComp extends AgFrameworkComponent<ITooltipParams> {}
 

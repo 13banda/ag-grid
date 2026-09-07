@@ -1,13 +1,24 @@
+import { _focusInto, _missing } from 'ag-stack';
+
 import type {
+    AgEventTypeParams,
+    AgModuleName,
+    BeanCollection,
     DetailGridInfo,
+    Environment,
     FullWidthRowFocusedEvent,
     GridApi,
+    GridOptions,
     IDetailCellRenderer,
     IDetailCellRendererCtrl,
     IDetailCellRendererParams,
+    MasterChangedEvent,
+    ModuleName,
     RowNode,
+    RowSelectedEvent,
+    SelectionChangedEvent,
 } from 'ag-grid-community';
-import { BeanStub, _focusInto, _isSameRow, _missing, _warn } from 'ag-grid-community';
+import { BeanStub, _addGridCommonParams, _isSameRow } from 'ag-grid-community';
 
 export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRendererCtrl {
     private params: IDetailCellRendererParams;
@@ -17,6 +28,12 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
     private loadRowDataVersion = 0;
 
     private refreshStrategy: 'rows' | 'everything' | 'nothing';
+
+    private environment: Environment;
+
+    public wireBeans(beans: BeanCollection): void {
+        this.environment = beans.environment;
+    }
 
     public init(comp: IDetailCellRenderer, params: IDetailCellRendererParams): void {
         this.params = params;
@@ -55,8 +72,8 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
         const detailClass = autoHeight ? 'ag-details-grid-auto-height' : 'ag-details-grid-fixed-height';
 
         const comp = this.comp;
-        comp.addOrRemoveCssClass(parentClass, true);
-        comp.addOrRemoveDetailGridCssClass(detailClass, true);
+        comp.toggleCss(parentClass, true);
+        comp.toggleDetailGridCss(detailClass, true);
     }
 
     private setupRefreshStrategy(): void {
@@ -70,7 +87,7 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
         }
 
         if (providedStrategy != null) {
-            _warn(170, { providedStrategy });
+            this.warn(170, { providedStrategy });
         }
 
         this.refreshStrategy = 'rows';
@@ -79,33 +96,41 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
     private createDetailGrid(): void {
         const { params, gos } = this;
         if (_missing(params.detailGridOptions)) {
-            _warn(171);
+            this.warn(171);
             return;
         }
 
-        // we clone the detail grid options, as otherwise it would be shared
-        // across many instances, and that would be a problem because we set
-        // api into gridOptions
-        const gridOptions = { ...params.detailGridOptions };
+        const masterTheme = gos.get('theme');
+        const detailTheme = params.detailGridOptions.theme;
+        if (detailTheme && detailTheme !== masterTheme) {
+            this.warn(267);
+        }
+
+        const gridOptions: GridOptions = {
+            themeStyleContainer: this.environment.eStyleContainer,
+            ...params.detailGridOptions,
+            theme: masterTheme,
+        };
 
         const autoHeight = gos.get('detailRowAutoHeight');
         if (autoHeight) {
             gridOptions.domLayout = 'autoHeight';
         }
 
-        gridOptions.theme ||= gos.get('theme');
-
         this.comp.setDetailGrid(gridOptions);
     }
 
     public registerDetailWithMaster(api: GridApi): void {
-        const params = this.params;
+        const {
+            params,
+            beans: { selectionSvc, findSvc, expansionSvc },
+        } = this;
         const rowId = params.node.id!;
         const masterGridApi = params.api;
 
         const gridInfo: DetailGridInfo = {
             id: rowId,
-            api: api,
+            api,
         };
 
         const rowNode = params.node as RowNode;
@@ -119,17 +144,83 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
         // register with node
         rowNode.detailGridInfo = gridInfo;
 
-        this.addDestroyFunc(() => {
-            // the gridInfo can be stale if a refresh happens and
-            // a new row is created before the old one is destroyed.
-            if (rowNode.detailGridInfo !== gridInfo) {
+        const masterNode = rowNode.parent!;
+
+        const syncDetailSelectionState = () => {
+            selectionSvc?.setDetailSelectionState(masterNode, params.detailGridOptions, api);
+        };
+
+        findSvc?.registerDetailGrid(rowNode, api);
+
+        function onDetailSelectionChanged(event: SelectionChangedEvent) {
+            if (event.source === 'rowDataChanged' || !masterNode) {
                 return;
             }
-            if (!masterGridApi.isDestroyed()) {
-                masterGridApi.removeDetailGridInfo(rowId); // unregister from api
+            selectionSvc?.refreshMasterNodeState(masterNode);
+        }
+
+        function adjustDetailsOnExpandOrCollapseAll({ source }: AgEventTypeParams['expandOrCollapseAll']) {
+            if (source === 'expandAll') {
+                return api.expandAll();
             }
-            rowNode.detailGridInfo = null; // unregister from node
+            if (source === 'collapseAll') {
+                return api.collapseAll();
+            }
+        }
+
+        function onMasterRowSelected({ node, source }: RowSelectedEvent) {
+            if (node !== masterNode || source === 'masterDetail' || api.isDestroyed()) {
+                return;
+            }
+
+            syncDetailSelectionState();
+        }
+
+        // initialise selection and expandAll state
+        api.addEventListener('firstDataRendered', () => {
+            if (api.isDestroyed() || masterGridApi.isDestroyed()) {
+                return;
+            }
+
+            syncDetailSelectionState();
+
+            api.addEventListener('selectionChanged', onDetailSelectionChanged);
+            masterGridApi.addEventListener('rowSelected', onMasterRowSelected);
+            const sharedApiModuleName = 'CsrmSsrmSharedApi' satisfies ModuleName;
+            const asAgModuleName = `${sharedApiModuleName}Module` as AgModuleName;
+            if (api.isModuleRegistered(asAgModuleName)) {
+                masterGridApi.addEventListener('expandOrCollapseAll', adjustDetailsOnExpandOrCollapseAll);
+                expansionSvc?.setDetailsExpansionState(api);
+            }
         });
+
+        // the place for these destructors is looking for a new home, so if you have a better idea where to put them - feel free
+        // we are undecided if they should live on detailCellRenderer or here in the ctrl
+        this.addManagedListeners(masterNode, {
+            masterChanged: (event: MasterChangedEvent) => {
+                if (!event.node.master) {
+                    this.onDestroy(gridInfo);
+                }
+            },
+        });
+
+        this.addDestroyFunc(() => this.onDestroy(gridInfo));
+    }
+
+    private onDestroy(gridInfo: DetailGridInfo) {
+        const { params } = this;
+        const rowNode = params.node as RowNode;
+        const masterGridApi = params.api;
+
+        // the gridInfo can be stale if a refresh happens and
+        // a new row is created before the old one is destroyed.
+        if (rowNode.detailGridInfo !== gridInfo) {
+            return;
+        }
+        if (!masterGridApi.isDestroyed()) {
+            masterGridApi.removeDetailGridInfo(rowNode.id!); // unregister from api
+        }
+        rowNode.detailGridInfo = null; // unregister from node
     }
 
     private loadRowData(): void {
@@ -147,7 +238,7 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
 
         const userFunc = params.getDetailRowData;
         if (!userFunc) {
-            _warn(172);
+            this.warn(172);
             return;
         }
 
@@ -155,16 +246,29 @@ export class DetailCellRendererCtrl extends BeanStub implements IDetailCellRende
             const mostRecentCall = this.loadRowDataVersion === versionThisCall;
             if (mostRecentCall) {
                 this.comp.setRowData(rowData);
+
+                // firstDataRendered can fire before detail row data is applied. Re-apply
+                // tracked detail selection immediately after rowData is set to avoid losing
+                // master-detail selection restoration on re-expand.
+                const detailNode = params.node as RowNode;
+                const detailApi = detailNode.detailGridInfo?.api;
+                const masterNode = detailNode.parent;
+                const rowSelection = this.gos.get('rowSelection');
+                const masterSelectsDetail =
+                    !!rowSelection && typeof rowSelection === 'object' && rowSelection.masterSelects === 'detail';
+                if (detailApi && masterNode && masterSelectsDetail) {
+                    this.beans.selectionSvc?.setDetailSelectionState(masterNode, params.detailGridOptions, detailApi);
+                }
             }
         };
 
-        const funcParams: any = {
+        const funcParams = {
             node: params.node,
             // we take data from node, rather than params.data
             // as the data could have been updated with new instance
             data: params.node.data,
             successCallback: successCallback,
-            context: this.gos.getGridCommonParams().context,
+            context: _addGridCommonParams(this.gos, {}).context,
         };
         userFunc(funcParams);
     }

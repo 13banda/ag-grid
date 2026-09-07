@@ -1,14 +1,7 @@
-import type { AgCheckbox, AgInputTextField, ComponentSelector } from 'ag-grid-community';
-import {
-    AgCheckboxSelector,
-    AgInputTextFieldSelector,
-    Component,
-    KeyCode,
-    RefPlaceholder,
-    _createIconNoSpan,
-    _debounce,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { RefPlaceholder, _debounce, _setDisplayed } from 'ag-stack';
+
+import type { ComponentSelector, ElementParams, GridCheckbox, GridInputTextField } from 'ag-grid-community';
+import { AgCheckboxSelector, AgInputTextFieldSelector, Component, KeyCode, _createIconNoSpan } from 'ag-grid-community';
 
 import type { ToolPanelColumnCompParams } from './columnToolPanel';
 
@@ -19,11 +12,22 @@ export enum ExpandState {
 }
 
 const DEBOUNCE_DELAY = 300;
-export type AgPrimaryColsHeaderEvent = 'unselectAll' | 'selectAll' | 'collapseAll' | 'expandAll' | 'filterChanged';
+type AgPrimaryColsHeaderEvent = 'unselectAll' | 'selectAll' | 'collapseAll' | 'expandAll' | 'filterChanged';
+
+const AgPrimaryColsHeaderElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-column-select-header',
+    role: 'presentation',
+    children: [
+        { tag: 'div', ref: 'eExpand', cls: 'ag-column-select-header-icon' },
+        { tag: 'ag-checkbox', ref: 'eSelect', cls: 'ag-column-select-header-checkbox' },
+        { tag: 'ag-input-text-field', ref: 'eFilterTextField', cls: 'ag-column-select-header-filter-wrapper' },
+    ],
+};
 export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
     private readonly eExpand: Element = RefPlaceholder;
-    private readonly eSelect: AgCheckbox = RefPlaceholder;
-    private readonly eFilterTextField: AgInputTextField = RefPlaceholder;
+    private readonly eSelect: GridCheckbox = RefPlaceholder;
+    private readonly eFilterTextField: GridInputTextField = RefPlaceholder;
 
     private eExpandChecked: Element;
     private eExpandUnchecked: Element;
@@ -32,19 +36,13 @@ export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
     private expandState: ExpandState;
     private selectState?: boolean;
 
-    private onFilterTextChangedDebounced: () => void;
+    private onFilterTextChangedDebounced: () => number;
+    private filterTextChangedTimeout: number | undefined;
 
     private params: ToolPanelColumnCompParams;
 
     constructor() {
-        super(
-            /* html */ `<div class="ag-column-select-header" role="presentation">
-            <div data-ref="eExpand" class="ag-column-select-header-icon"></div>
-            <ag-checkbox data-ref="eSelect" class="ag-column-select-header-checkbox"></ag-checkbox>
-            <ag-input-text-field class="ag-column-select-header-filter-wrapper" data-ref="eFilterTextField"></ag-input-text-field>
-        </div>`,
-            [AgCheckboxSelector, AgInputTextFieldSelector]
-        );
+        super(AgPrimaryColsHeaderElement, [AgCheckboxSelector, AgInputTextFieldSelector]);
     }
 
     public postConstruct(): void {
@@ -63,7 +61,11 @@ export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
         this.addManagedElementListeners(this.eSelect.getInputElement(), { click: this.onSelectClicked.bind(this) });
         this.addManagedPropertyListener('functionsReadOnly', () => this.onFunctionsReadOnlyPropChanged());
 
-        this.eFilterTextField.setAutoComplete(false).onValueChange(() => this.onFilterTextChanged());
+        this.eFilterTextField
+            .setClearButtonEnabled(true)
+            .setSearchIcon(true)
+            .onValueChange(() => this.onFilterTextChanged())
+            .onValueClear(() => this.onFilterTextCleared());
 
         this.addManagedEventListeners({ newColumnsLoaded: this.showOrHideOptions.bind(this) });
 
@@ -78,15 +80,16 @@ export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
     private onFunctionsReadOnlyPropChanged(): void {
         const readOnly = this.gos.get('functionsReadOnly');
         this.eSelect.setReadOnly(readOnly);
-        this.eSelect.addOrRemoveCssClass('ag-column-select-column-readonly', readOnly);
+        this.eSelect.toggleCss('ag-column-select-column-readonly', readOnly);
     }
 
     public init(params: ToolPanelColumnCompParams): void {
         this.params = params;
+        this.eFilterTextField.setAutoComplete(params.browserAutoComplete);
 
         const readOnly = this.gos.get('functionsReadOnly');
         this.eSelect.setReadOnly(readOnly);
-        this.eSelect.addOrRemoveCssClass('ag-column-select-column-readonly', readOnly);
+        this.eSelect.toggleCss('ag-column-select-column-readonly', readOnly);
 
         if (this.beans.colModel.ready) {
             this.showOrHideOptions();
@@ -110,7 +113,7 @@ export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
         const showFilter = !params.suppressColumnFilter;
         const showSelect = !params.suppressColumnSelectAll;
         const showExpand = !params.suppressColumnExpandAll;
-        const groupsPresent = !!this.beans.colModel.colDefCols?.treeDepth;
+        const groupsPresent = !!this.beans.colModel.colDefTreeDepth;
         const translate = this.getLocaleTextFunc();
 
         this.eFilterTextField.setInputPlaceholder(translate('searchOoo', 'Search...'));
@@ -132,7 +135,12 @@ export class AgPrimaryColsHeader extends Component<AgPrimaryColsHeaderEvent> {
             );
         }
 
-        this.onFilterTextChangedDebounced();
+        this.filterTextChangedTimeout = this.onFilterTextChangedDebounced();
+    }
+
+    private onFilterTextCleared(): void {
+        clearTimeout(this.filterTextChangedTimeout);
+        this.dispatchLocalEvent({ type: 'filterChanged', filterText: this.eFilterTextField.getValue() });
     }
 
     private onSelectClicked(): void {

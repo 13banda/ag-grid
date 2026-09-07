@@ -1,11 +1,9 @@
+import { GridColumns, GridRows, TestGridsManager, applyTransactionChecked, setRowDataChecked } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
-import type { GridOptions } from 'ag-grid-community';
+import type { GetDetailRowDataParams, GetRowIdParams, GridOptions } from 'ag-grid-community';
 import { ClientSideRowModelModule } from 'ag-grid-community';
 import { MasterDetailModule } from 'ag-grid-enterprise';
-
-import type { GridRowsOptions } from '../test-utils';
-import { GridRows, TestGridsManager } from '../test-utils';
 
 describe('ag-grid master detail', () => {
     const gridsManager = new TestGridsManager({
@@ -31,7 +29,7 @@ describe('ag-grid master detail', () => {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -39,12 +37,15 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRows = new GridRows(api, 'data', {
-            columns: ['k'],
-        });
+        const gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └── master collapsed id:0 k:"1"
+        `);
+
+        await new GridColumns(api, 'columns').checkColumns(`
+            CENTER
+            └── k "K" width:200
         `);
     });
 
@@ -62,7 +63,7 @@ describe('ag-grid master detail', () => {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -70,9 +71,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRows = new GridRows(api, 'data', {
-            columns: ['k'],
-        });
+        const gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             ├─┬ master id:0 k:"1"
@@ -91,6 +90,11 @@ describe('ag-grid master detail', () => {
             · · · ├── LEAF id:0 x:"x"
             · · · └── LEAF id:1 x:"y"
         `);
+
+        await new GridColumns(api, 'columns').checkColumns(`
+            CENTER
+            └── k "K" width:200
+        `);
     });
 
     test('masterDetail property is reactive', async () => {
@@ -102,7 +106,7 @@ describe('ag-grid master detail', () => {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -110,12 +114,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: ['k'],
-            printHiddenRows: true,
-        };
-
-        let gridRows = new GridRows(api, 'data', gridRowsOptions);
+        let gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └── LEAF id:0 k:"1"
@@ -125,7 +124,7 @@ describe('ag-grid master detail', () => {
         api.setGridOption('masterDetail', true);
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:0 k:"1"
@@ -139,7 +138,7 @@ describe('ag-grid master detail', () => {
         api.setGridOption('masterDetail', false);
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └── LEAF id:0 k:"1"
@@ -156,7 +155,7 @@ describe('ag-grid master detail', () => {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -164,11 +163,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: ['k'],
-        };
-
-        let gridRows = new GridRows(api, 'data', gridRowsOptions);
+        let gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:0 k:"1"
@@ -179,11 +174,11 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy = vitest.spyOn(console, 'error').mockImplementation(() => {});
 
-        api.setGridOption('rowData', [{ k: '2', records: [{ x: 'a' }, { x: 'b' }] }]);
+        setRowDataChecked(api, [{ k: '2', records: [{ x: 'a' }, { x: 'b' }] }]);
 
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:0 k:"2"
@@ -212,9 +207,9 @@ describe('ag-grid master detail', () => {
             detailCellRendererParams: {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
-                    getRowId: ({ data }) => data.id,
+                    getRowId: ({ data }: GetRowIdParams) => data.id,
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -223,11 +218,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: ['k'],
-        };
-
-        let gridRows = new GridRows(api, 'data', gridRowsOptions);
+        let gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:master k:"1"
@@ -239,7 +230,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy = vitest.spyOn(console, 'error').mockImplementation(() => {});
 
-        api.setGridOption('rowData', [
+        setRowDataChecked(api, [
             {
                 id: 'master',
                 k: '2',
@@ -249,7 +240,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:master k:"2"
@@ -285,9 +276,9 @@ describe('ag-grid master detail', () => {
             detailCellRendererParams: {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
-                    getRowId: ({ data }) => data.id,
+                    getRowId: ({ data }: GetRowIdParams) => data.id,
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -296,11 +287,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: ['k'],
-        };
-
-        let gridRows = new GridRows(api, 'data', gridRowsOptions);
+        let gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             ├─┬ master id:x0 k:"a0"
@@ -317,7 +304,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy = vitest.spyOn(console, 'error').mockImplementation(() => {});
 
-        api.applyTransaction({
+        applyTransactionChecked(api, {
             remove: [{ id: 'x0' }],
             add: [{ id: 'x2', k: 'a2', records: [{ id: 's', x: 't' }] }],
             update: [{ id: 'x1', k: 'a1', records: [{ id: 'y1', x: 'a1' }] }],
@@ -325,7 +312,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             ├─┬ master id:x1 k:"a1"
@@ -349,7 +336,7 @@ describe('ag-grid master detail', () => {
                 detailGridOptions: {
                     columnDefs: [{ field: 'x' }],
                 },
-                getDetailRowData: (params) => {
+                getDetailRowData: (params: GetDetailRowDataParams) => {
                     params.successCallback(params.data.records);
                 },
             },
@@ -357,11 +344,7 @@ describe('ag-grid master detail', () => {
 
         const api = gridsManager.createGrid('myGrid', gridOptions);
 
-        const gridRowsOptions: GridRowsOptions = {
-            columns: ['k'],
-        };
-
-        let gridRows = new GridRows(api, 'data', gridRowsOptions);
+        let gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:0 k:"1"
@@ -378,7 +361,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └── master collapsed id:0 k:"1"
@@ -392,7 +375,7 @@ describe('ag-grid master detail', () => {
 
         consoleErrorSpy.mockRestore();
 
-        gridRows = new GridRows(api, 'data', gridRowsOptions);
+        gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
             └─┬ master id:0 k:"1"

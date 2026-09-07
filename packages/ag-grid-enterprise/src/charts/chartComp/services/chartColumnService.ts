@@ -4,26 +4,20 @@ import type {
     BeanCollection,
     ColumnModel,
     ColumnNameService,
-    NamedBean,
     RowNode,
-    ValueService,
 } from 'ag-grid-community';
-import { BeanStub, _getRowNode, _warn } from 'ag-grid-community';
+import { BeanStub, _getRowNode } from 'ag-grid-community';
 
-export class ChartColumnService extends BeanStub implements NamedBean {
-    beanName = 'chartColSvc' as const;
-
+export class ChartColumnService extends BeanStub {
     private colModel: ColumnModel;
     private colNames: ColumnNameService;
-    private valueSvc: ValueService;
 
     public wireBeans(beans: BeanCollection): void {
         this.colModel = beans.colModel;
         this.colNames = beans.colNames;
-        this.valueSvc = beans.valueSvc;
     }
 
-    private valueColsWithoutSeriesType: Set<string> = new Set();
+    private readonly valueColsWithoutSeriesType: Set<string> = new Set();
 
     public postConstruct(): void {
         const clearValueCols = () => this.valueColsWithoutSeriesType.clear();
@@ -34,32 +28,19 @@ export class ChartColumnService extends BeanStub implements NamedBean {
     }
 
     public getColumn(colId: string): AgColumn | null {
-        return this.colModel.getColDefCol(colId);
+        return this.colModel.colsById[colId] ?? null;
     }
 
     public getAllDisplayedColumns(): AgColumn[] {
         return this.beans.visibleCols.allCols;
     }
 
-    public getColDisplayName(col: AgColumn, includePath?: boolean): string | null {
-        const headerLocation = 'chart';
-        const columnDisplayName = this.colNames.getDisplayNameForColumn(col, headerLocation);
-        if (includePath) {
-            const displayNames = [columnDisplayName];
-            const getDisplayName = (colGroup: AgColumnGroup | null) => {
-                if (!colGroup) {
-                    return;
-                }
-                const colGroupName = this.colNames.getDisplayNameForColumnGroup(colGroup, headerLocation);
-                if (colGroupName?.length) {
-                    displayNames.unshift(colGroupName);
-                    getDisplayName(colGroup.getParent());
-                }
-            };
-            getDisplayName(col.getParent());
-            return displayNames.join(' - ');
-        }
-        return columnDisplayName;
+    public getColDisplayName(col: AgColumn): string | null {
+        return this.colNames.getDisplayNameForColumn(col, 'chart');
+    }
+
+    public getColGroupDisplayName(colGroup: AgColumnGroup): string | null {
+        return this.colNames.getDisplayNameForColumnGroup(colGroup, 'chart');
     }
 
     public getRowGroupColumns(): AgColumn[] {
@@ -67,11 +48,11 @@ export class ChartColumnService extends BeanStub implements NamedBean {
     }
 
     public getGroupDisplayColumns(): AgColumn[] {
-        return this.beans.showRowGroupCols?.getShowRowGroupCols() ?? [];
+        return this.beans.showRowGroupCols?.columns ?? [];
     }
 
     public isPivotMode(): boolean {
-        return this.colModel.isPivotMode();
+        return this.colModel.pivotMode;
     }
 
     public isPivotActive(): boolean {
@@ -79,13 +60,13 @@ export class ChartColumnService extends BeanStub implements NamedBean {
     }
 
     public getChartColumns(): { dimensionCols: Set<AgColumn>; valueCols: Set<AgColumn> } {
-        const gridCols = this.colModel.getCols();
+        const gridCols = this.colModel.colsList;
 
         const dimensionCols = new Set<AgColumn>();
         const valueCols = new Set<AgColumn>();
 
-        gridCols.forEach((col) => {
-            const colDef = col.getColDef();
+        for (const col of gridCols) {
+            const colDef = col.colDef;
             const chartDataType = colDef.chartDataType;
 
             if (chartDataType) {
@@ -94,37 +75,37 @@ export class ChartColumnService extends BeanStub implements NamedBean {
                     case 'category':
                     case 'time':
                         dimensionCols.add(col);
-                        return;
+                        continue;
                     case 'series':
                         valueCols.add(col);
-                        return;
+                        continue;
                     case 'excluded':
-                        return;
+                        continue;
                     default:
-                        _warn(153, { chartDataType });
+                        this.warn(153, { chartDataType });
                         break;
                 }
             }
 
             if (colDef.colId === 'ag-Grid-AutoColumn') {
                 dimensionCols.add(col);
-                return;
+                continue;
             }
 
-            if (!col.isPrimary()) {
+            if (!col.primary) {
                 valueCols.add(col);
-                return;
+                continue;
             }
 
             // if 'chartDataType' is not provided then infer type based data contained in first row
             (this.isInferredValueCol(col) ? valueCols : dimensionCols).add(col);
-        });
+        }
 
         return { dimensionCols, valueCols };
     }
 
     private isInferredValueCol(col: AgColumn): boolean {
-        const colId = col.getColId();
+        const colId = col.colId;
         if (colId === 'ag-Grid-AutoColumn') {
             return false;
         }
@@ -135,39 +116,50 @@ export class ChartColumnService extends BeanStub implements NamedBean {
             return this.valueColsWithoutSeriesType.has(colId);
         }
 
-        let cellValue = this.valueSvc.getValue(col, row);
+        let cellValue = row.getDataValue(col, 'data');
 
         if (cellValue == null) {
             cellValue = this.extractLeafData(row, col);
         }
 
-        if (cellValue != null && typeof cellValue.toNumber === 'function') {
-            cellValue = cellValue.toNumber();
+        if (cellValue != null) {
+            // unwrap value objects if present
+            if (typeof cellValue.toNumber === 'function') {
+                cellValue = cellValue.toNumber();
+            } else if (typeof cellValue.value === 'number') {
+                cellValue = cellValue.value;
+            }
         }
 
-        const isNumber = typeof cellValue === 'number';
+        const isNumber =
+            typeof cellValue === 'number' ||
+            col.colDef.cellDataType === 'number' ||
+            ['series', 'time'].includes(col.colDef.chartDataType as string);
 
         if (isNumber) {
             this.valueColsWithoutSeriesType.add(colId);
+        } else if (cellValue == null && col.colDef.cellDataType !== 'number') {
+            this.warn(265, { colId });
         }
 
         return isNumber;
     }
 
     private extractLeafData(row: RowNode, col: AgColumn): any {
-        if (!row.allLeafChildren) {
-            return null;
+        const value = row.data && row.getDataValue(col, 'data');
+        if (value != null) {
+            return value;
         }
-
-        for (let i = 0; i < row.allLeafChildren.length; i++) {
-            const childRow = row.allLeafChildren[i];
-            const value = this.valueSvc.getValue(col, childRow);
-
-            if (value != null) {
-                return value;
+        const childrenAfterGroup = row.childrenAfterGroup;
+        if (childrenAfterGroup) {
+            for (let i = 0, len = childrenAfterGroup.length; i < len; ++i) {
+                const child = childrenAfterGroup[i];
+                const result = this.extractLeafData(child, col);
+                if (result != null) {
+                    return result;
+                }
             }
         }
-
         return null;
     }
 

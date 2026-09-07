@@ -1,8 +1,13 @@
 import type { ColDef, GridApi, GridOptions, IViewportDatasource, IViewportDatasourceParams } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ViewportRowModelModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([ViewportRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ViewportRowModelModule]);
 
 const columnDefs: ColDef[] = [
     {
@@ -33,6 +38,9 @@ const gridOptions: GridOptions = {
     columnDefs: columnDefs,
     rowModelType: 'viewport',
     viewportDatasource: createViewportDatasource(),
+    defaultColDef: {
+        sortable: false,
+    },
 };
 
 // setup the grid after the page has finished loading

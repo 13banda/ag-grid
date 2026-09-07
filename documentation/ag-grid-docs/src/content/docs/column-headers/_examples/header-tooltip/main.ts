@@ -3,20 +3,25 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     TooltipModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([TooltipModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([TooltipModule, ClientSideRowModelModule]);
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', headerTooltip: "The athlete's name" },
     { field: 'age', headerTooltip: "The athlete's age" },
     { field: 'date', headerTooltip: 'The date of the Olympics' },
     { field: 'sport', headerTooltip: 'The sport the medal was for' },
-    { field: 'gold', headerTooltip: 'How many gold medals' },
-    { field: 'silver', headerTooltip: 'How many silver medals' },
-    { field: 'bronze', headerTooltip: 'How many bronze medals' },
+    { field: 'gold', headerTooltip: (p) => `How many ${String(p.value).toLowerCase()} medals` },
+    { field: 'silver', headerTooltip: (p) => `How many ${String(p.value).toLowerCase()} medals` },
+    { field: 'bronze', headerTooltip: (p) => `How many ${String(p.value).toLowerCase()} medals` },
     { field: 'total', headerTooltip: 'The total number of medals' },
 ];
 

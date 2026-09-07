@@ -1,32 +1,44 @@
+import { RefPlaceholder, _setAriaLabel, _setDisplayed } from 'ag-stack';
+
 import type {
     AgEvent,
     ComponentSelector,
     DragAndDropIcon,
     DragItem,
-    DragSource,
     DragSourceType,
     DropTarget,
-    ITooltipCtrl,
+    ElementParams,
+    GridDragSource,
     TooltipFeature,
+    TooltipLocation,
+    TooltipSourceParams,
 } from 'ag-grid-community';
-import {
-    Component,
-    KeyCode,
-    RefPlaceholder,
-    TouchListener,
-    _createIconNoSpan,
-    _escapeString,
-    _setAriaLabel,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { Component, KeyCode, TouchListener, _createIconNoSpan } from 'ag-grid-community';
 
-export type PillDragCompEvent = 'columnRemove';
+type PillDragCompEvent = 'columnRemove';
+
+const PillDragCompElement: ElementParams = {
+    tag: 'span',
+    role: 'option',
+    children: [
+        {
+            tag: 'span',
+            ref: 'eDragHandle',
+            cls: 'ag-drag-handle ag-column-drop-cell-drag-handle',
+            role: 'presentation',
+        },
+        { tag: 'span', ref: 'eText', cls: 'ag-column-drop-cell-text', attrs: { 'aria-hidden': 'true' } },
+        { tag: 'span', ref: 'eButton', cls: 'ag-column-drop-cell-button', role: 'presentation' },
+    ],
+};
 export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
     private readonly eText: HTMLElement = RefPlaceholder;
-    private readonly eDragHandle: HTMLElement = RefPlaceholder;
+    protected readonly eDragHandle: HTMLElement = RefPlaceholder;
     private readonly eButton: HTMLElement = RefPlaceholder;
 
     public abstract getItem(): TItem;
+    public abstract isMovable(): boolean;
+
     protected abstract getDisplayName(): string;
     protected abstract getAriaDisplayName(): string;
     protected abstract getTooltip(): string | null | undefined;
@@ -35,26 +47,17 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
     private tooltipFeature?: TooltipFeature;
 
     constructor(
-        private dragSourceDropTarget: DropTarget,
-        private ghost: boolean,
-        private horizontal: boolean,
-        protected template?: string,
+        private readonly dragSourceDropTarget: DropTarget,
+        private readonly ghost: boolean,
+        private readonly horizontal: boolean,
+        protected template?: ElementParams,
         protected agComponents?: ComponentSelector[]
     ) {
         super();
     }
 
     public postConstruct(): void {
-        this.setTemplate(
-            this.template ??
-                /* html */ `
-            <span role="option">
-              <span data-ref="eDragHandle" class="ag-drag-handle ag-column-drop-cell-drag-handle" role="presentation"></span>
-              <span data-ref="eText" class="ag-column-drop-cell-text" aria-hidden="true"></span>
-              <span data-ref="eButton" class="ag-column-drop-cell-button" role="presentation"></span>
-            </span>`,
-            this.agComponents
-        );
+        this.setTemplate(this.template ?? PillDragCompElement, this.agComponents);
         const eGui = this.getGui();
 
         const { beans, eDragHandle, eText, eButton } = this;
@@ -69,9 +72,13 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
         eButton.appendChild(_createIconNoSpan('cancel', beans)!);
 
         this.tooltipFeature = this.createOptionalManagedBean(
-            beans.registry.createDynamicBean<TooltipFeature>('tooltipFeature', false, {
+            beans.tooltipSvc?.createTooltip({
                 getGui: () => this.getGui(),
-            } as ITooltipCtrl)
+                getTooltipComponentDefinition: () => this.getTooltipComponentDefinition(),
+                getTooltipValue: () => this.getTooltip(),
+                getLocation: () => this.getTooltipLocation(),
+                getAdditionalParams: () => this.getTooltipParams(),
+            })
         );
 
         this.setupComponents();
@@ -117,11 +124,23 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
     }
 
     private setupTooltip(): void {
-        const refresh = () => this.tooltipFeature?.setTooltipAndRefresh(this.getTooltip());
+        const refresh = () => this.tooltipFeature?.refreshTooltip();
 
         refresh();
 
         this.addManagedEventListeners({ newColumnsLoaded: refresh });
+    }
+
+    protected getTooltipLocation(): TooltipLocation {
+        return 'UNKNOWN';
+    }
+
+    protected getTooltipParams(): TooltipSourceParams {
+        return {};
+    }
+
+    protected getTooltipComponentDefinition(): TooltipSourceParams['colDef'] {
+        return undefined;
     }
 
     protected getDragSourceId(): string | undefined {
@@ -139,7 +158,7 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
         } = this;
         const getDragItem = this.createGetDragItem();
         const defaultIconName = this.getDefaultIconName();
-        const dragSource: DragSource = {
+        const dragSource: GridDragSource = {
             type: this.getDragSourceType(),
             sourceId: this.getDragSourceId(),
             eElement: eDragHandle,
@@ -153,11 +172,11 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
     }
 
     protected setupComponents(): void {
-        this.setTextValue();
+        this.eText.textContent = this.getDisplayValue();
         this.setupRemove();
 
         if (this.ghost) {
-            this.addCssClass('ag-column-drop-cell-ghost');
+            this.addCss('ag-column-drop-cell-ghost');
         }
     }
 
@@ -203,13 +222,6 @@ export abstract class PillDragComp<TItem> extends Component<PillDragCompEvent> {
 
     protected getDisplayValue(): string {
         return this.getDisplayName();
-    }
-
-    private setTextValue(): void {
-        const displayValue = this.getDisplayValue();
-        const displayValueSanitised: any = _escapeString(displayValue);
-
-        this.eText.innerHTML = displayValueSanitised;
     }
 
     private addElementClasses(el: HTMLElement, suffix?: string) {

@@ -1,0 +1,32 @@
+import { TestGridsManager } from 'ag-test-utils';
+
+import { CellStyleModule } from 'ag-grid-community';
+import { RowGroupingModule, TreeDataModule } from 'ag-grid-enterprise';
+
+import { getTestGenerator } from '../../util';
+import { rowModelGridOptions } from '../grid-config';
+import {
+    getGridOptions_correctRenderer,
+    getTestConcerns_correctRenderer,
+    treeDataSnapshotter,
+} from '../tree-data-test-utils';
+
+describe('ag-grid tree data groupCellRenderer', () => {
+    const gridsManager = new TestGridsManager({
+        modules: [CellStyleModule, RowGroupingModule, TreeDataModule],
+    });
+    const createTests = getTestGenerator(gridsManager, treeDataSnapshotter);
+
+    beforeEach(() => {
+        gridsManager.reset();
+    });
+
+    afterEach(() => {
+        gridsManager.reset();
+    });
+
+    const gridOptions = rowModelGridOptions.csrm;
+    describe('with rowModelType=clientSide - correct renderer is used', () => {
+        createTests(getTestConcerns_correctRenderer(), getGridOptions_correctRenderer(gridOptions));
+    });
+});

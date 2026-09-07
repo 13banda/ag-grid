@@ -1,0 +1,61 @@
+---
+import Layout from '@layouts/Layout.astro';
+import { Icon } from '@ag-website-shared/components/icon/Icon';
+import { ContactForm } from '@ag-website-shared/components/contact-form/ContactForm';
+import PageHero from '@ag-website-shared/components/page-hero/PageHero.astro';
+import { getEntry, type CollectionEntry } from 'astro:content';
+import { buildContactPage } from '@ag-website-shared/utils/structuredData';
+import { LIBRARY } from '@constants';
+import { CONTACT_CONTENT, contactSocialLinks } from './contactContent';
+import styles from './ContactPage.module.scss';
+
+// Copy and links are shared with the /contact.md twin so the two cannot drift.
+const socialLinks = contactSocialLinks(LIBRARY);
+
+const { data: metadata } = (await getEntry('metadata', 'metadata')) as CollectionEntry<'metadata'>;
+const contactPageStructuredData = buildContactPage({
+    canonicalUrlBase: metadata.canonicalUrlBase,
+    pageUrl: new URL(Astro.url.pathname, metadata.canonicalUrlBase).href,
+    name: CONTACT_CONTENT.structuredDataName,
+});
+---
+
+<Layout
+    title={CONTACT_CONTENT.title}
+    description={CONTACT_CONTENT.description}
+    showSearchBar={true}
+    showDocsNav={false}
+    pageStructuredData={[contactPageStructuredData]}
+>
+    <div class={styles.contactPage}>
+        <PageHero
+            eyebrow={CONTACT_CONTENT.eyebrow}
+            headline={CONTACT_CONTENT.headline}
+            subhead={CONTACT_CONTENT.subhead}
+        />
+        <div class="layout-max-width-small">
+            <section id="contact-section" class={styles.contactSection}>
+                <div class={styles.formContainer}>
+                    <ContactForm client:load formLocation="Contact page" />
+                </div>
+
+                <div class={styles.socialLinks}>
+                    {
+                        socialLinks.map(({ label, ariaLabel, icon, url }) => (
+                            <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={ariaLabel ?? label}
+                                class={styles.socialLinkRow}
+                            >
+                                <Icon name={icon} />
+                                <span>{label}</span>
+                            </a>
+                        ))
+                    }
+                </div>
+            </section>
+        </div>
+    </div>
+</Layout>

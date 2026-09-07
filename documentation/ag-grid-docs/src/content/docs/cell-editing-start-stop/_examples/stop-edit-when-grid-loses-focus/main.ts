@@ -7,9 +7,14 @@ import {
     NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberEditorModule,
@@ -18,7 +23,6 @@ ModuleRegistry.registerModules([
     NumberFilterModule,
     CustomEditorModule,
     ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
 ]);
 
 class YearCellEditor implements ICellEditorComp {

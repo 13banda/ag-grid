@@ -15,6 +15,8 @@
         height: 100%;
     }
 
+    // the box fill and its icon are background colours/images, which must be preserved when printing
+    print-color-adjust: exact;
     background-color: var(--ag-checkbox-background-color);
     border-radius: var(--ag-checkbox-border-radius);
     display: inline-block;
@@ -25,6 +27,9 @@
     &:active {
         outline: none;
         box-shadow: var(--ag-input-focus-box-shadow);
+        .ag-cell-editing-error & {
+            box-shadow: var(--ag-input-error-focus-box-shadow);
+        }
     }
 
     &.ag-disabled {
@@ -198,7 +203,7 @@
         }
     }
 
-    input[class^='ag-'][type='range'] {
+    .ag-range-field-input {
         -webkit-appearance: none;
         width: 100%;
         height: 100%;

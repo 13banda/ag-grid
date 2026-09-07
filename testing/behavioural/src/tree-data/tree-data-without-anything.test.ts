@@ -1,11 +1,9 @@
+import { GridRows, TestGridsManager } from 'ag-test-utils';
 import type { MockInstance } from 'vitest';
 
 import type { GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule } from 'ag-grid-community';
+import { ClientSideRowModelModule, enableDevValidations } from 'ag-grid-community';
 import { TreeDataModule } from 'ag-grid-enterprise';
-
-import type { GridRowsOptions } from '../test-utils';
-import { GridRows, TestGridsManager } from '../test-utils';
 
 describe('ag-grid tree data without hierarchical and without data path', () => {
     const gridsManager = new TestGridsManager({
@@ -16,6 +14,8 @@ describe('ag-grid tree data without hierarchical and without data path', () => {
     let consoleErrorSpy: MockInstance;
 
     beforeEach(() => {
+        // This file deliberately triggers validation/missing-module diagnostics; the global throw-on-validation must be off here.
+        enableDevValidations({ throwOn: [] });
         gridsManager.reset();
     });
 
@@ -25,7 +25,7 @@ describe('ag-grid tree data without hierarchical and without data path', () => {
         consoleErrorSpy?.mockRestore();
     });
 
-    test('ag-grid tree data without getDataPath and without treeDataChildrenField still works properly and raises warnings', async () => {
+    test('ag-grid tree data without getDataPath and without treeDataChildrenField and without treeDataParentIdField still works properly and raises warnings', async () => {
         const rowData = [{ x: 1 }, { x: 2, children: [{ x: 3 }] }];
 
         const gridOptions: GridOptions = {
@@ -48,16 +48,11 @@ describe('ag-grid tree data without hierarchical and without data path', () => {
         consoleWarnSpy?.mockRestore();
         consoleErrorSpy?.mockRestore();
 
-        const gridRowsOptions: GridRowsOptions = {
-            checkDom: true,
-            columns: true,
-        };
-
-        const gridRows = new GridRows(api, 'data', gridRowsOptions);
+        const gridRows = new GridRows(api, 'data');
         await gridRows.check(`
             ROOT id:ROOT_NODE_ID
-            ├── 0 LEAF id:0 ag-Grid-AutoColumn:undefined x:1
-            └── 1 LEAF id:1 ag-Grid-AutoColumn:undefined x:2
+            ├── 0 LEAF id:0 ag-Grid-AutoColumn:"0" x:1
+            └── 1 LEAF id:1 ag-Grid-AutoColumn:"1" x:2
         `);
     });
 });

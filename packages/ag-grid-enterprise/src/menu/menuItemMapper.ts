@@ -1,52 +1,66 @@
+import type { LocaleTextFunc } from 'ag-stack';
+import { _exists } from 'ag-stack';
+
 import type {
     AgColumn,
+    AgProvidedColumnGroup,
     ColumnEventType,
+    DefaultColumnMenuItem,
     DefaultMenuItem,
+    GetNoteParams,
     IAggFuncService,
-    IColsService,
-    LocaleTextFunc,
+    IMenuActionParams,
+    INoteAccess,
+    INotesService,
+    IValueColsService,
     MenuItemDef,
     NamedBean,
+    RowNode,
+    SortDef,
 } from 'ag-grid-community';
-import {
-    BeanStub,
-    _createIconNoSpan,
-    _escapeString,
-    _exists,
-    _getRowNode,
-    _resetColumnState,
-    _warn,
-} from 'ag-grid-community';
+import { BeanStub, _createIconNoSpan, _getRowNode, _normalizeSortType, _resetColumnState } from 'ag-grid-community';
 
-import { isRowGroupColLocked } from '../rowGrouping/rowGroupingUtils';
+import { getGroupingLocaleText, isRowGroupColLocked } from '../rowGrouping/rowGroupingUtils';
 import type { ChartMenuItemMapper } from './chartMenuItemMapper';
 import type { ColumnChooserFactory } from './columnChooserFactory';
+import { PIVOT_TOKEN, SCROLL_INTO_VIEW_TOKEN, VALUE_TOKEN, columnMenuTokenLabel } from './columnMenuTokenLabels';
+import { validateMenuItem } from './menuItemValidations';
+import { MENU_ITEM_SEPARATOR, _normaliseSeparators } from './menuSeparators';
 
-export const MENU_ITEM_SEPARATOR = 'separator';
-
-export function _removeRepeatsFromArray<T>(array: T[], object: T) {
-    if (!array) {
-        return;
-    }
-
-    for (let index = array.length - 2; index >= 0; index--) {
-        const thisOneMatches = array[index] === object;
-        const nextOneMatches = array[index + 1] === object;
-
-        if (thisOneMatches && nextOneMatches) {
-            array.splice(index + 1, 1);
-        }
-    }
-}
+const SORT_MENU_ITEM_TO_MENU_ACTION_PARAMS: Record<
+    string,
+    { fallback: string; getSortDef: (col?: AgColumn) => SortDef }
+> = {
+    sortAscending: { fallback: 'Sort Ascending', getSortDef: () => ({ type: 'default', direction: 'asc' }) },
+    sortDescending: {
+        fallback: 'Sort Descending',
+        getSortDef: () => ({ type: 'default', direction: 'desc' }),
+    },
+    sortAbsoluteAscending: {
+        fallback: 'Sort Absolute Ascending',
+        getSortDef: () => ({ type: 'absolute', direction: 'asc' }),
+    },
+    sortAbsoluteDescending: {
+        fallback: 'Sort Absolute Descending',
+        getSortDef: () => ({ type: 'absolute', direction: 'desc' }),
+    },
+    sortUnSort: {
+        fallback: 'Clear Sort',
+        getSortDef: (column: AgColumn) => ({ type: _normalizeSortType(column.getSortDef()?.type), direction: null }),
+    },
+};
 
 export class MenuItemMapper extends BeanStub implements NamedBean {
     beanName = 'menuItemMapper' as const;
 
     public mapWithStockItems(
-        originalList: (MenuItemDef | DefaultMenuItem)[],
+        originalList: (DefaultColumnMenuItem | MenuItemDef)[],
         column: AgColumn | null,
+        node: RowNode | null,
+        noteParams: GetNoteParams | undefined,
         sourceElement: () => HTMLElement,
-        source: ColumnEventType
+        source: ColumnEventType,
+        columnGroup: AgProvidedColumnGroup | null = null
     ): (MenuItemDef | 'separator')[] {
         if (!originalList) {
             return [];
@@ -56,33 +70,60 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
 
         const localeTextFunc = this.getLocaleTextFunc();
         const { beans, gos } = this;
+
         const {
-            validation,
-            pinnedCols,
-            colAutosize,
             aggFuncSvc,
-            rowGroupColsSvc,
-            colNames,
-            colModel,
+            chartMenuItemMapper,
             clipboardSvc,
-            expansionSvc,
-            focusSvc,
+            colAutosize,
+            colChooserFactory,
+            colHeaderEditSvc,
+            colModel,
+            colNames,
+            ctrlsSvc,
             csvCreator,
             excelCreator,
+            expansionSvc,
+            focusSvc,
             menuSvc,
-            colChooserFactory,
+            notesSvc,
+            calculatedColsSvc,
+            pdfCreator,
+            pinnedCols,
+            pinnedRowModel,
+            pivotColsSvc,
+            rangeSvc,
+            rowGroupColsSvc,
+            showValuesAsSvc,
             sortSvc,
-            chartMenuItemMapper,
             valueColsSvc,
         } = beans;
 
+        const getPinActionHandler =
+            (sideOrRemove: 'top' | 'bottom' | null) =>
+            ({ node, column }: IMenuActionParams) => {
+                if (node) {
+                    pinnedRowModel!.pinRow(node as RowNode, sideOrRemove ?? null, column as AgColumn);
+                    return;
+                }
+                // pick selected cells / rows / columns
+                rangeSvc?.getCellRanges()?.forEach((cellRange) => {
+                    rangeSvc.forEachRowInRange(cellRange, (row) => {
+                        const nodeFromSelection = _getRowNode(beans, row);
+                        if (nodeFromSelection) {
+                            pinnedRowModel!.pinRow(nodeFromSelection, sideOrRemove ?? null, null);
+                        }
+                    });
+                });
+            };
+
         const getStockMenuItem = (
-            key: DefaultMenuItem,
+            key: DefaultColumnMenuItem,
             column: AgColumn | null,
             sourceElement: () => HTMLElement,
             source: ColumnEventType
         ): MenuItemDef | 'separator' | null => {
-            validation?.validateMenuItem(key);
+            validateMenuItem(gos, key);
 
             switch (key) {
                 case 'pinSubMenu':
@@ -117,13 +158,72 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                               checked: !!column && !column.isPinned(),
                           }
                         : null;
+                case 'pinRowSubMenu': {
+                    const enableRowPinning = gos.get('enableRowPinning');
+                    const subMenu: string[] = [];
+                    const pinned = node?.rowPinned ?? node?.pinnedSibling?.rowPinned;
+
+                    if (pinned) {
+                        subMenu.push('unpinRow');
+                    }
+
+                    if (enableRowPinning && enableRowPinning !== 'bottom' && pinned != 'top') {
+                        subMenu.push('pinTop');
+                    }
+
+                    if (enableRowPinning && enableRowPinning !== 'top' && pinned != 'bottom') {
+                        subMenu.push('pinBottom');
+                    }
+
+                    return pinnedRowModel?.isManual()
+                        ? {
+                              name: localeTextFunc('pinRow', 'Pin Row'),
+                              icon: _createIconNoSpan('rowPin', beans, column),
+                              subMenu,
+                          }
+                        : null;
+                }
+                case 'pinTop':
+                    return pinnedRowModel?.isManual()
+                        ? {
+                              name: localeTextFunc('pinTop', 'Pin to Top'),
+                              icon: _createIconNoSpan('rowPinTop', beans, column),
+                              action: getPinActionHandler('top'),
+                          }
+                        : null;
+                case 'pinBottom':
+                    return pinnedRowModel?.isManual()
+                        ? {
+                              name: localeTextFunc('pinBottom', 'Pin to Bottom'),
+                              icon: _createIconNoSpan('rowPinBottom', beans, column),
+                              action: getPinActionHandler('bottom'),
+                          }
+                        : null;
+                case 'unpinRow':
+                    return pinnedRowModel?.isManual()
+                        ? {
+                              name: localeTextFunc('unpinRow', 'Unpin Row'),
+                              icon: _createIconNoSpan('rowUnpin', beans, column),
+                              action: getPinActionHandler(null),
+                          }
+                        : null;
                 case 'valueAggSubMenu':
-                    if (aggFuncSvc && valueColsSvc && (column?.isPrimary() || column?.getColDef().pivotValueColumn)) {
+                    if (aggFuncSvc && valueColsSvc && (column?.primary || column?.pivotValueColumn)) {
                         return {
                             name: localeTextFunc('valueAggregation', 'Value Aggregation'),
                             icon: _createIconNoSpan('menuValue', beans, null),
-                            subMenu: createAggregationSubMenu(column!, aggFuncSvc, valueColsSvc, localeTextFunc),
+                            subMenu: createAggregationSubMenu(column, aggFuncSvc, valueColsSvc, localeTextFunc),
                             disabled: gos.get('functionsReadOnly'),
+                        };
+                    } else {
+                        return null;
+                    }
+                case 'showValuesAsSubMenu':
+                    if (showValuesAsSvc && column && showValuesAsSvc.isMenuEligible(column)) {
+                        return {
+                            name: localeTextFunc('showValuesAs', 'Show Values As'),
+                            icon: _createIconNoSpan('showValuesAs', beans, null),
+                            subMenu: showValuesAsSvc.getMenuItems(column, localeTextFunc),
                         };
                     } else {
                         return null;
@@ -132,34 +232,40 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                     return colAutosize
                         ? {
                               name: localeTextFunc('autosizeThisColumn', 'Autosize This Column'),
-                              action: () => colAutosize.autoSizeColumn(column, source, gos.get('skipHeaderOnAutoSize')),
+                              action: () =>
+                                  column && colAutosize.autoSizeColumn(column, source, gos.get('skipHeaderOnAutoSize')),
                           }
                         : null;
                 case 'autoSizeAll':
                     return colAutosize
                         ? {
                               name: localeTextFunc('autosizeAllColumns', 'Autosize All Columns'),
-                              action: () => colAutosize.autoSizeAllColumns(source, gos.get('skipHeaderOnAutoSize')),
+                              action: () =>
+                                  colAutosize.autoSizeAllColumns({
+                                      source,
+                                      skipHeader: gos.get('skipHeaderOnAutoSize'),
+                                  }),
                           }
                         : null;
                 case 'rowGroup':
                     return rowGroupColsSvc
                         ? {
-                              name:
-                                  localeTextFunc('groupBy', 'Group by') +
-                                  ' ' +
-                                  _escapeString(colNames.getDisplayNameForColumn(column, 'header')),
+                              name: getGroupingLocaleText(
+                                  localeTextFunc,
+                                  'groupBy',
+                                  colNames.getDisplayNameForColumn(column, 'header')!
+                              ),
                               disabled:
                                   gos.get('functionsReadOnly') ||
                                   column?.isRowGroupActive() ||
-                                  !column?.getColDef().enableRowGroup,
+                                  !column?.colDef.enableRowGroup,
                               action: () => rowGroupColsSvc.addColumns([column], source),
                               icon: _createIconNoSpan('menuAddRowGroup', beans, null),
                           }
                         : null;
                 case 'rowUnGroup': {
                     if (rowGroupColsSvc && gos.isModuleRegistered('SharedRowGrouping')) {
-                        const showRowGroup = column?.getColDef().showRowGroup;
+                        const showRowGroup = column?.showRowGroup;
                         const lockedGroups = gos.get('groupLockGroupColumns');
                         let name: string;
                         let disabled: boolean;
@@ -175,26 +281,27 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                                 rowGroupColsSvc.setColumns(rowGroupColsSvc.columns.slice(0, lockedGroups), source);
                         } else if (typeof showRowGroup === 'string') {
                             // Handle multiple auto group columns
-                            const underlyingColumn = colModel.getColDefCol(showRowGroup);
+                            const underlyingColumn = colModel.getNonPivotCol(showRowGroup);
                             const ungroupByName =
                                 underlyingColumn != null
-                                    ? _escapeString(colNames.getDisplayNameForColumn(underlyingColumn, 'header'))
+                                    ? colNames.getDisplayNameForColumn(underlyingColumn, 'header')
                                     : showRowGroup;
-                            name = localeTextFunc('ungroupBy', 'Un-Group by') + ' ' + ungroupByName;
+                            name = getGroupingLocaleText(localeTextFunc, 'ungroupBy', ungroupByName!);
                             disabled = gos.get('functionsReadOnly') || isRowGroupColLocked(underlyingColumn, beans);
                             action = () => {
                                 rowGroupColsSvc.removeColumns([showRowGroup], source);
                             };
                         } else {
                             // Handle primary column
-                            name =
-                                localeTextFunc('ungroupBy', 'Un-Group by') +
-                                ' ' +
-                                _escapeString(colNames.getDisplayNameForColumn(column, 'header'));
+                            name = getGroupingLocaleText(
+                                localeTextFunc,
+                                'ungroupBy',
+                                colNames.getDisplayNameForColumn(column, 'header')!
+                            );
                             disabled =
                                 gos.get('functionsReadOnly') ||
                                 !column?.isRowGroupActive() ||
-                                !column?.getColDef().enableRowGroup ||
+                                !column?.colDef.enableRowGroup ||
                                 isRowGroupColLocked(column, beans);
                             action = () => rowGroupColsSvc.removeColumns([column], source);
                         }
@@ -207,6 +314,78 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                     } else {
                         return null;
                     }
+                }
+                case 'scrollIntoView': {
+                    if (!ctrlsSvc || !column || column.isPinned()) {
+                        return null;
+                    }
+                    const displayName = colNames.getDisplayNameForColumn(column, 'header')!;
+                    return {
+                        name: columnMenuTokenLabel(
+                            localeTextFunc,
+                            SCROLL_INTO_VIEW_TOKEN.key,
+                            SCROLL_INTO_VIEW_TOKEN.default,
+                            displayName
+                        ),
+                        icon: _createIconNoSpan(SCROLL_INTO_VIEW_TOKEN.icon, beans, null),
+                        action: () => ctrlsSvc.getScrollFeature().ensureColumnVisible(column),
+                    };
+                }
+                case 'value': {
+                    if (!valueColsSvc || !column?.primary || !column.isAllowValue()) {
+                        return null;
+                    }
+                    const active = column.isValueActive();
+                    const displayName = colNames.getDisplayNameForColumn(column, 'header')!;
+                    return {
+                        name: active
+                            ? columnMenuTokenLabel(
+                                  localeTextFunc,
+                                  VALUE_TOKEN.removeKey,
+                                  VALUE_TOKEN.removeDefault,
+                                  displayName
+                              )
+                            : columnMenuTokenLabel(
+                                  localeTextFunc,
+                                  VALUE_TOKEN.addKey,
+                                  VALUE_TOKEN.addDefault,
+                                  displayName
+                              ),
+                        icon: _createIconNoSpan(VALUE_TOKEN.icon, beans, null),
+                        disabled: gos.get('functionsReadOnly'),
+                        action: () =>
+                            active
+                                ? valueColsSvc.removeColumns([column], source)
+                                : valueColsSvc.addColumns([column], source),
+                    };
+                }
+                case 'pivot': {
+                    if (!pivotColsSvc || !colModel.pivotMode || !column?.primary || !column.isAllowPivot()) {
+                        return null;
+                    }
+                    const active = column.isPivotActive();
+                    const displayName = colNames.getDisplayNameForColumn(column, 'header')!;
+                    return {
+                        name: active
+                            ? columnMenuTokenLabel(
+                                  localeTextFunc,
+                                  PIVOT_TOKEN.removeKey,
+                                  PIVOT_TOKEN.removeDefault,
+                                  displayName
+                              )
+                            : columnMenuTokenLabel(
+                                  localeTextFunc,
+                                  PIVOT_TOKEN.addKey,
+                                  PIVOT_TOKEN.addDefault,
+                                  displayName
+                              ),
+                        icon: _createIconNoSpan(PIVOT_TOKEN.icon, beans, null),
+                        disabled: gos.get('functionsReadOnly'),
+                        action: () =>
+                            active
+                                ? pivotColsSvc.removeColumns([column], source)
+                                : pivotColsSvc.addColumns([column], source),
+                    };
                 }
                 case 'resetColumns':
                     return {
@@ -271,15 +450,25 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                         return null;
                     }
                 case 'paste':
-                    return clipboardSvc
-                        ? {
-                              name: localeTextFunc('paste', 'Paste'),
-                              shortcut: localeTextFunc('ctrlV', 'Ctrl+V'),
-                              disabled: true,
-                              icon: _createIconNoSpan('clipboardPaste', beans, null),
-                              action: () => clipboardSvc.pasteFromClipboard(),
-                          }
-                        : null;
+                    if (clipboardSvc) {
+                        const isPasteBlocked =
+                            gos.get('suppressClipboardApi') ||
+                            gos.get('suppressClipboardPaste') ||
+                            !column ||
+                            !node ||
+                            !column.isCellEditable(node) ||
+                            column.isSuppressPaste(node);
+
+                        return {
+                            name: localeTextFunc('paste', 'Paste'),
+                            shortcut: localeTextFunc('ctrlV', 'Ctrl+V'),
+                            icon: _createIconNoSpan('clipboardPaste', beans, null),
+                            disabled: isPasteBlocked,
+                            action: () => clipboardSvc.pasteFromClipboard(),
+                        };
+                    } else {
+                        return null;
+                    }
                 case 'export': {
                     const exportSubMenuItems: string[] = [];
 
@@ -288,6 +477,9 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                     }
                     if (!gos.get('suppressExcelExport') && excelCreator) {
                         exportSubMenuItems.push('excelExport');
+                    }
+                    if (!gos.get('suppressPdfExport') && pdfCreator) {
+                        exportSubMenuItems.push('pdfExport');
                     }
                     return exportSubMenuItems.length
                         ? {
@@ -298,7 +490,7 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                         : null;
                 }
                 case 'csvExport':
-                    return csvCreator
+                    return csvCreator && !gos.get('suppressCsvExport')
                         ? {
                               name: localeTextFunc('csvExport', 'CSV Export'),
                               icon: _createIconNoSpan('csvExport', beans, null),
@@ -306,15 +498,23 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                           }
                         : null;
                 case 'excelExport':
-                    return excelCreator
+                    return excelCreator && !gos.get('suppressExcelExport')
                         ? {
                               name: localeTextFunc('excelExport', 'Excel Export'),
                               icon: _createIconNoSpan('excelExport', beans, null),
                               action: () => excelCreator.exportDataAsExcel(),
                           }
                         : null;
+                case 'pdfExport':
+                    return pdfCreator && !gos.get('suppressPdfExport')
+                        ? {
+                              name: localeTextFunc('pdfExport', 'PDF Export'),
+                              icon: _createIconNoSpan('pdfExport', beans, null),
+                              action: () => pdfCreator.exportDataAsPdf(),
+                          }
+                        : null;
                 case 'separator':
-                    return 'separator';
+                    return key;
                 case 'pivotChart':
                 case 'chartRange':
                     return (chartMenuItemMapper as ChartMenuItemMapper).getChartItems(key);
@@ -332,7 +532,8 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                                   }),
                           }
                         : null;
-                case 'columnChooser':
+                case 'columnChooser': {
+                    const headerPosition = focusSvc.focusedHeader;
                     return colChooserFactory
                         ? {
                               name: localeTextFunc('columnChooser', 'Choose Columns'),
@@ -341,52 +542,111 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                                   (colChooserFactory as ColumnChooserFactory).showColumnChooser({
                                       column,
                                       eventSource: sourceElement(),
+                                      headerPosition,
                                   }),
                           }
                         : null;
-                case 'sortAscending':
-                    return sortSvc
+                }
+
+                case 'calculatedColumn': {
+                    if (!calculatedColsSvc?.isEnabled()) {
+                        return null;
+                    }
+
+                    const headerPosition = focusSvc.focusedHeader ?? (column ? { headerRowIndex: 0, column } : null);
+
+                    return {
+                        name: localeTextFunc('calculatedColumnAdd', 'Add Calculated Column'),
+                        icon: _createIconNoSpan('calculatedColumnAdd', beans, null),
+                        action: () =>
+                            calculatedColsSvc.openCalculatedColumnDialog(column, 'add', true, {
+                                eventSource: sourceElement(),
+                                headerPosition,
+                            }),
+                    };
+                }
+                case 'editCalculatedColumn': {
+                    if (!calculatedColsSvc?.isEnabled() || !column?.isCalculatedCol) {
+                        return null;
+                    }
+                    const headerPosition = focusSvc.focusedHeader ?? { headerRowIndex: 0, column };
+
+                    return {
+                        name: localeTextFunc('calculatedColumnEdit', 'Edit Calculated Column'),
+                        icon: _createIconNoSpan('calculatedColumnEdit', beans, null),
+                        action: () =>
+                            calculatedColsSvc.openCalculatedColumnDialog(column, 'edit', true, {
+                                eventSource: sourceElement(),
+                                headerPosition,
+                            }),
+                    };
+                }
+
+                case 'removeCalculatedColumn':
+                    return calculatedColsSvc?.isEnabled() && column?.isCalculatedCol
                         ? {
-                              name: localeTextFunc('sortAscending', 'Sort Ascending'),
-                              icon: _createIconNoSpan('sortAscending', beans, null),
-                              action: () => sortSvc.setSortForColumn(column!, 'asc', false, source),
+                              name: localeTextFunc('calculatedColumnRemove', 'Remove Calculated Column'),
+                              icon: _createIconNoSpan('calculatedColumnRemove', beans, null),
+                              action: () => calculatedColsSvc.removeCalculatedColumn(column),
                           }
                         : null;
-                case 'sortDescending':
-                    return sortSvc
-                        ? {
-                              name: localeTextFunc('sortDescending', 'Sort Descending'),
-                              icon: _createIconNoSpan('sortDescending', beans, null),
-                              action: () => sortSvc.setSortForColumn(column!, 'desc', false, source),
-                          }
-                        : null;
+                case 'editColumnName': {
+                    const editTarget = column ?? columnGroup;
+                    return editTarget ? (colHeaderEditSvc?.getEditColumnNameMenuItem(editTarget) ?? null) : null;
+                }
                 case 'sortUnSort':
-                    return sortSvc
-                        ? {
-                              name: localeTextFunc('sortUnSort', 'Clear Sort'),
-                              icon: _createIconNoSpan('sortUnSort', beans, null),
-                              action: () => sortSvc.setSortForColumn(column!, null, false, source),
-                          }
-                        : null;
+                case 'sortAscending':
+                case 'sortDescending':
+                case 'sortAbsoluteAscending':
+                case 'sortAbsoluteDescending': {
+                    if (!sortSvc || !column) {
+                        return null;
+                    }
+
+                    const { fallback, getSortDef } = SORT_MENU_ITEM_TO_MENU_ACTION_PARAMS[key];
+
+                    return {
+                        name: localeTextFunc(key, fallback),
+                        icon: _createIconNoSpan(key, beans, null),
+                        action: () => sortSvc.setSortForColumn(column, getSortDef(column), false, source),
+                    };
+                }
+
                 default: {
-                    _warn(176, { key });
+                    this.warn(176, { key });
                     return null;
                 }
             }
         };
 
-        originalList.forEach((menuItemOrString) => {
+        for (const menuItemOrString of originalList) {
             let result: MenuItemDef | 'separator' | null;
 
             if (typeof menuItemOrString === 'string') {
-                result = getStockMenuItem(menuItemOrString as DefaultMenuItem, column, sourceElement, source);
+                if (menuItemOrString === 'note') {
+                    const noteItems = createNoteMenuItems({
+                        notesSvc,
+                        column,
+                        node,
+                        noteParams,
+                        localeTextFunc,
+                    });
+
+                    if (noteItems.length) {
+                        resultList.push(MENU_ITEM_SEPARATOR, ...noteItems, MENU_ITEM_SEPARATOR);
+                    }
+
+                    continue;
+                }
+
+                result = getStockMenuItem(menuItemOrString, column, sourceElement, source);
             } else {
                 // Spread to prevent leaking mapped subMenus back into the original menuItem
                 result = { ...menuItemOrString };
             }
             // if no mapping, can happen when module is not loaded but user tries to use module anyway
             if (!result) {
-                return;
+                continue;
             }
 
             const resultDef = result as MenuItemDef;
@@ -396,33 +656,107 @@ export class MenuItemMapper extends BeanStub implements NamedBean {
                 resultDef.subMenu = this.mapWithStockItems(
                     subMenu as (DefaultMenuItem | MenuItemDef)[],
                     column,
+                    node,
+                    noteParams,
                     sourceElement,
-                    source
+                    source,
+                    columnGroup
                 );
             }
 
             if (result != null) {
                 resultList.push(result);
             }
-        });
+        }
 
         // items could have been removed due to missing modules
-        _removeRepeatsFromArray(resultList, MENU_ITEM_SEPARATOR);
+        _normaliseSeparators(resultList, MENU_ITEM_SEPARATOR);
 
         return resultList;
     }
 }
+
+function createNoteMenuItems({
+    notesSvc,
+    column,
+    node,
+    noteParams,
+    localeTextFunc,
+}: {
+    notesSvc: Pick<INotesService, 'hasDataSource' | 'getNoteAccess' | 'showNote' | 'setNote'> | undefined;
+    column: AgColumn | null;
+    node: RowNode | null;
+    noteParams: GetNoteParams | undefined;
+    localeTextFunc: LocaleTextFunc;
+}): MenuItemDef[] {
+    const access: INoteAccess | undefined = notesSvc?.hasDataSource()
+        ? noteParams
+            ? notesSvc.getNoteAccess(noteParams)
+            : column && node
+              ? notesSvc.getNoteAccess({ rowNode: node, column })
+              : undefined
+        : undefined;
+
+    if (!access) {
+        return [];
+    }
+
+    const result: MenuItemDef[] = [];
+
+    if (!access.note) {
+        result.push({
+            name: localeTextFunc('addNote', 'Add Note'),
+            shortcut: localeTextFunc('shiftF2', 'Shift+F2'),
+            disabled: !access.canCreate,
+            action: access.canCreate ? () => notesSvc!.showNote(access.params, true) : undefined,
+        });
+
+        return result;
+    }
+
+    if (access.canView && (access.isReadOnly || access.isSuppressed)) {
+        result.push({
+            name: localeTextFunc('viewNote', 'View Note'),
+            shortcut: localeTextFunc('shiftF2', 'Shift+F2'),
+            action: () => notesSvc!.showNote(access.params, true),
+        });
+    }
+
+    if (!access.isReadOnly && !access.isSuppressed) {
+        result.push({
+            name: localeTextFunc('editNote', 'Edit Note'),
+            shortcut: localeTextFunc('shiftF2', 'Shift+F2'),
+            disabled: !access.canEdit,
+            action: access.canEdit ? () => notesSvc!.showNote(access.params, true) : undefined,
+        });
+    }
+
+    result.push({
+        name: localeTextFunc('deleteNote', 'Remove Note'),
+        disabled: !access.canDelete,
+        action: access.canDelete
+            ? () =>
+                  notesSvc!.setNote({
+                      ...access.params,
+                      note: undefined,
+                  })
+            : undefined,
+    });
+
+    return result;
+}
+
 function createAggregationSubMenu(
     column: AgColumn,
     aggFuncSvc: IAggFuncService,
-    valueColsSvc: IColsService,
+    valueColsSvc: IValueColsService,
     localeTextFunc: LocaleTextFunc
 ): MenuItemDef[] {
     let columnToUse: AgColumn | undefined;
-    if (column.isPrimary()) {
+    if (column.primary) {
         columnToUse = column;
     } else {
-        const pivotValueColumn = column.getColDef().pivotValueColumn as AgColumn;
+        const pivotValueColumn = column.pivotValueColumn as AgColumn;
         columnToUse = _exists(pivotValueColumn) ? pivotValueColumn : undefined;
     }
 
@@ -440,16 +774,16 @@ function createAggregationSubMenu(
             checked: !columnIsAlreadyAggValue,
         });
 
-        funcNames.forEach((funcName) => {
+        for (const funcName of funcNames) {
             result.push({
                 name: localeTextFunc(funcName, aggFuncSvc.getDefaultFuncLabel(funcName)),
                 action: () => {
                     valueColsSvc.setColumnAggFunc!(columnToUse, funcName, 'contextMenu');
                     valueColsSvc.addColumns([columnToUse!], 'contextMenu');
                 },
-                checked: columnIsAlreadyAggValue && columnToUse!.getAggFunc() === funcName,
+                checked: columnIsAlreadyAggValue && columnToUse.aggFunc === funcName,
             });
-        });
+        }
     }
 
     return result;

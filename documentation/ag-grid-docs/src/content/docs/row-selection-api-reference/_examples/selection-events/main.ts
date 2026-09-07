@@ -3,11 +3,16 @@ import {
     ClientSideRowModelModule,
     ModuleRegistry,
     RowSelectionModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([RowSelectionModule, ClientSideRowModelModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -38,7 +43,8 @@ function onRowSelected(event: RowSelectedEvent) {
 }
 
 function onSelectionChanged(event: SelectionChangedEvent) {
-    const rowCount = event.api.getSelectedNodes().length;
+    const rowCount = event.selectedNodes?.length;
+
     console.log('selection changed, ' + rowCount + ' rows selected');
 }
 

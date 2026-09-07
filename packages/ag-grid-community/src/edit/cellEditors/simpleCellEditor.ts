@@ -1,40 +1,39 @@
-import { KeyCode } from '../../constants/keyCode';
-import type { DefaultProvidedCellEditorParams, ICellEditorComp, ICellEditorParams } from '../../interfaces/iCellEditor';
-import { _isBrowserSafari } from '../../utils/browser';
-import type { AgInputTextField } from '../../widgets/agInputTextField';
-import { RefPlaceholder } from '../../widgets/component';
-import { PopupComponent } from '../../widgets/popupComponent';
+import { KeyCode, RefPlaceholder, _isBrowserSafari } from 'ag-stack';
+
+import type { DefaultProvidedCellEditorParams, ICellEditorParams } from '../../interfaces/iCellEditor';
+import type { GridInputTextField } from '../../widgets/gridWidgetTypes';
+import { AgAbstractCellEditor } from './agAbstractCellEditor';
 import type { CellEditorInput } from './iCellEditorInput';
 
 export class SimpleCellEditor<
-        TValue,
-        P extends ICellEditorParams & DefaultProvidedCellEditorParams,
-        I extends AgInputTextField,
-    >
-    extends PopupComponent
-    implements ICellEditorComp
-{
+    TValue,
+    P extends ICellEditorParams & DefaultProvidedCellEditorParams,
+    I extends GridInputTextField,
+> extends AgAbstractCellEditor<ICellEditorParams, TValue, string> {
     private highlightAllOnFocus: boolean;
     private focusAfterAttached: boolean;
-    protected params: ICellEditorParams;
-    protected readonly eInput: I = RefPlaceholder;
+    protected readonly eEditor: I = RefPlaceholder;
 
     constructor(protected cellEditorInput: CellEditorInput<TValue, P, I>) {
-        super(
-            /* html */ `
-            <div class="ag-cell-edit-wrapper">
-                ${cellEditorInput.getTemplate()}
-            </div>`,
-            cellEditorInput.getAgComponents()
-        );
+        super();
     }
 
-    public init(params: P): void {
-        this.params = params;
+    public initialiseEditor(params: P): void {
+        const { cellEditorInput } = this;
+
+        this.setTemplate(
+            { tag: 'div', cls: 'ag-cell-edit-wrapper', children: [cellEditorInput.getTemplate()] },
+            cellEditorInput.getAgComponents()
+        );
+
+        const { eEditor } = this;
         const { cellStartedEdit, eventKey, suppressPreventDefault } = params;
 
-        const eInput = this.eInput;
-        this.cellEditorInput.init(eInput, params);
+        // disable initial tooltips added to the input field
+        // let the validation handle tooltips.
+        eEditor.getInputElement().setAttribute('title', '');
+
+        cellEditorInput.init(eEditor, params);
         let startValue: string | null | undefined;
         let shouldSetStartValue = true;
 
@@ -44,14 +43,14 @@ export class SimpleCellEditor<
 
             if (eventKey === KeyCode.BACKSPACE || eventKey === KeyCode.DELETE) {
                 startValue = '';
-            } else if (eventKey && eventKey.length === 1) {
+            } else if (eventKey?.length === 1) {
                 if (suppressPreventDefault) {
                     shouldSetStartValue = false;
                 } else {
                     startValue = eventKey;
                 }
             } else {
-                startValue = this.cellEditorInput.getStartValue();
+                startValue = cellEditorInput.getStartValue();
 
                 if (eventKey !== KeyCode.F2) {
                     this.highlightAllOnFocus = true;
@@ -59,27 +58,25 @@ export class SimpleCellEditor<
             }
         } else {
             this.focusAfterAttached = false;
-            startValue = this.cellEditorInput.getStartValue();
+            startValue = cellEditorInput.getStartValue();
         }
 
         if (shouldSetStartValue && startValue != null) {
-            eInput.setStartValue(startValue);
+            eEditor.setStartValue(startValue);
         }
 
-        this.addManagedElementListeners(eInput.getGui(), {
-            keydown: (event: KeyboardEvent) => {
-                const { key } = event;
+        this.addGuiEventListener('keydown', (event: KeyboardEvent) => {
+            const { key } = event;
 
-                if (key === KeyCode.PAGE_UP || key === KeyCode.PAGE_DOWN) {
-                    event.preventDefault();
-                }
-            },
+            if (key === KeyCode.PAGE_UP || key === KeyCode.PAGE_DOWN) {
+                event.preventDefault();
+            }
         });
     }
 
     public afterGuiAttached(): void {
         const translate = this.getLocaleTextFunc();
-        const eInput = this.eInput;
+        const eInput = this.eEditor;
 
         eInput.setInputAriaLabel(translate('ariaInputEditor', 'Input Editor'));
 
@@ -104,19 +101,37 @@ export class SimpleCellEditor<
 
     // gets called when tabbing through cells and in full row edit mode
     public focusIn(): void {
-        const eInput = this.eInput;
-        const focusEl = eInput.getFocusableElement();
-        const inputEl = eInput.getInputElement();
+        const { eEditor } = this;
+        const focusEl = eEditor.getFocusableElement();
+        const inputEl = eEditor.getInputElement();
 
         focusEl.focus();
         inputEl.select();
+    }
+
+    public agFlushInput(): void {
+        this.cellEditorInput.flushInput?.();
     }
 
     public getValue(): TValue | null | undefined {
         return this.cellEditorInput.getValue();
     }
 
+    public override agSetEditValue(value: TValue | null | undefined): void {
+        this.params.value = value;
+        const startValue = this.cellEditorInput.getStartValue();
+        this.eEditor.setStartValue(startValue ?? null);
+    }
+
     public override isPopup() {
         return false;
+    }
+
+    public getValidationElement(): HTMLInputElement {
+        return this.eEditor.getInputElement();
+    }
+
+    public getValidationErrors(): string[] | null {
+        return this.cellEditorInput.getValidationErrors();
     }
 }

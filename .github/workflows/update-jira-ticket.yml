@@ -1,0 +1,214 @@
+name: Update JIRA Ticket on PR Merge
+
+on:
+  pull_request:
+    types: [ closed ]
+  workflow_dispatch:
+    inputs:
+      debug_pr_id:
+        description: 'PR id to work with (used for debugging this workflow)'
+        type: number
+        required: false
+      debug_jira_ticket:
+        description: 'JIRA ticket to update (used for debugging this workflow)'
+        type: string
+        default: ''
+        required: false
+      debug_skip_merge_check:
+        description: 'Skip the merged check (used for debugging this workflow)'
+        type: string
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  move-jira:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout:
+            'scripts/ci/_utils.mjs'
+      - name: Check if PR is merged
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR_ID: ${{ github.event.inputs.debug_pr_id || github.event.pull_request.number }}
+          DEBUG_JIRA_TICKET: ${{ github.event.inputs.debug_jira_ticket }}
+          DEBUG_SKIP_MERGE_CHECK: ${{ github.event.inputs.debug_skip_merge_check }}
+          JIRA_API_AUTH: ${{ secrets.JIRA_API_AUTH }}
+          GH_USER_JIRA_MAPPING: ${{ secrets.GH_USER_JIRA_MAPPING }}
+          JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          result-encoding: string
+          script: |
+            async function exec() {
+                const {
+                    addJiraComment,
+                    getJiraTransitions,
+                    getJiraIssue,
+                    transitionJiraIssue,
+                    unwatchJiraIssue,
+                    getCurrentJiraUser
+                } = require('./scripts/ci/_utils.mjs');
+                
+                const gh_user_jira_mapping = JSON.parse(process.env.GH_USER_JIRA_MAPPING || '{}');
+                const regex = /(fix(es)?)? \[?((AG|RTI)-\d{3,})/gi;
+                const paragraph = content => ({"type": "paragraph",
+                    "content": Array.isArray(content) ? content : [content]});
+                const txt = (text) => ({text, type: 'text'});
+                const link = (text, url) => ({type: 'text',
+                    text: text,
+                    marks: [{type: 'link', attrs: {href: url, title: text}}]});
+                const mention = (gh_user) => {
+                    if (!gh_user_jira_mapping[gh_user]) {
+                        console.warn(`No JIRA mapping found for GitHub user: ${gh_user}`);
+                    }
+                    return ({
+                        "type": "mention",
+                        "attrs": {
+                            "id": gh_user_jira_mapping[gh_user]?.[0],
+                            "text": gh_user_jira_mapping[gh_user]?.[1],
+                            "userType": "APP"
+                        }
+                    });
+                };
+                const owner = context.repo.owner;
+                const repo = context.repo.repo;
+                const getReviewers = async (pr) => {
+                    const author = pr.user?.login || '';
+                    const reviewers = [...new Set((await github.rest.pulls.listReviews({
+                        owner,
+                        repo,
+                        pull_number
+                    })).data?.map(r => r.user.login) || [])].filter((r) => r !== author);
+                    const mergedBy = pr.merged_by?.login || '';
+                    return {reviewers, mergedBy}
+                };
+                const pull_number = process.env.PR_ID;
+                const runUrl = process.env.JOB_URL || '#';
+                const issue_keys = {}; 
+                const knownQaColumns = new Set(['QA', 'REVIEWED']);
+                const readOnlyTransitions = new Set(['DONE', 'PENDING RC', 'POST RELEASE', 'READY TO VERIFY', 'ARCHIVE', 'TESTS PASSED', ...knownQaColumns]);
+                if (!pull_number && !process.env.DEBUG_JIRA_TICKET) {
+                    throw new Error('Must provide a PR ID or a JIRA ticket.');
+                }
+                if (process.env.DEBUG_JIRA_TICKET) {
+                    issue_keys[process.env.DEBUG_JIRA_TICKET] = 'move';
+                }
+                const pr = pull_number ? (await github.rest.pulls.get({owner, repo, pull_number})).data : {};
+                const is_merged = !!pr.merged_at;
+                if (!is_merged && !process.env.DEBUG_SKIP_MERGE_CHECK) {
+                    console.log(`PR #${pull_number} is not merged, skipping JIRA ticket update.`);
+                    return;
+                }
+                if (!pr.body) {
+                    console.log(`PR #${pull_number} body is empty, cannot find JIRA ticket.`);
+                    return;
+                }
+                const matches = pr.body?.match(regex);
+                if (matches) {
+                    matches.forEach(m => {
+                        const ticket = m.match(/(AG|RTI)-\d{3,}/i)[0].toUpperCase();
+                        const isFix = !!m.match(/fix(es)?/i);
+                        if (isFix || !issue_keys[ticket]) {
+                            issue_keys[ticket] = isFix ? 'move' : 'mention';
+                        }
+                    });
+                }
+                if (!Object.keys(issue_keys).length) {
+                    throw new Error('No JIRA ticket found in PR body.');
+                }
+                let ghCommentBody = '';
+                await Promise.all(Object.entries(issue_keys).map(async ([issue_key, moveOrMention]) => {
+                    const issue = await getJiraIssue(issue_key);
+                    if (!issue) {
+                        console.warn(`JIRA ticket ${issue_key} not found.`);
+                        return;
+                    }
+                    const components = issue.fields.components || [];
+                    const isChartsOnly = components.length > 0 && components.every(c => c.name === 'Charts');
+                    if (isChartsOnly) {
+                        console.log(`::warning:: JIRA ticket ${issue_key} only has the 'Charts' component, skipping transition.`);
+                    }
+                    const isTransitioning = moveOrMention === 'move' && !isChartsOnly && !readOnlyTransitions.has(issue.fields.status.name.toUpperCase());
+                    
+                    // blocks section
+                    const content = [];
+                    if (pull_number) {
+                        const {reviewers, mergedBy} = await getReviewers(pr);
+                        
+                        const samePerson = reviewers.length === 1 && reviewers[0] === mergedBy;
+                        const reviewedByText = samePerson ? 'Reviewed and merged by ' : 'Reviewed by ';
+                        
+                        const blocks = [];
+                        if (reviewers.length) {
+                            blocks.push(txt(reviewedByText));
+                            blocks.push(...reviewers.map((r) => mention(r)).filter((r) => r.attrs.id && r.attrs.text));
+                            blocks.push(txt(`. `));
+                        }
+                        if (mergedBy && !samePerson) {
+                            blocks.push(txt(`Merged by `));
+                            blocks.push(mention(mergedBy));
+                            blocks.push(txt(`. `));
+                        }
+                        if (blocks.length) {
+                            content.push(paragraph(blocks));
+                        }
+                    }
+                    if (isTransitioning) {
+                        // Move the JIRA ticket to 'the next column' if the PR is merged
+                        const availableTransitions = await getJiraTransitions(issue_key);
+                        if (!availableTransitions || availableTransitions.length === 0) {
+                            console.warn(`No available transitions found for JIRA ticket ${issue_key}.`);
+                            return;
+                        }
+                        const nextTransition = availableTransitions.find(tr => knownQaColumns.has(tr.name.toUpperCase()));
+                        const from = issue.fields.status.name;
+                        const to = nextTransition.name;
+                        content.push(paragraph([
+                            txt(`[This issue was `),
+                            link('transitioned', `https://github.com/${owner}/${repo}/pull/${pull_number}`),
+                            txt(` from '${from}' to '${to}' column by `),
+                            link('CI workflow', runUrl),
+                            txt('.]')
+                        ]));
+                        await transitionJiraIssue(issue, nextTransition.id);
+                        ghCommentBody ||= `Transitioned JIRA ticket(s):\n`;
+                        ghCommentBody += `- [${issue_key}](https://ag-grid.atlassian.net/browse/${issue_key}) to ${to}\n`
+                    } else {
+                        content.push(paragraph([
+                            txt(`[This issue was `),
+                            link(`mentioned in PR #${pull_number}`, `https://github.com/${owner}/${repo}/pull/${pull_number}`),
+                            txt(' by '),
+                            link('CI workflow', runUrl),
+                            txt('.]')
+                        ]));
+                    }
+                    const isWatchingAlready = issue.fields.watches?.isWatching || false;
+                    await addJiraComment(issue_key, {
+                        content, "type": "doc", "version": 1
+                    });
+                    if (!isWatchingAlready) {
+                        const self = await getCurrentJiraUser();
+                        await unwatchJiraIssue(issue_key, self);
+                    }
+                }));
+                if (ghCommentBody) {
+                    ghCommentBody += `\n\nThis comment was added by the [AG Grid CI workflow](${runUrl}).`;
+                    await github.rest.issues.createComment({
+                        issue_number: pull_number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: ghCommentBody
+                    })
+                }
+            }
+            
+            await exec();

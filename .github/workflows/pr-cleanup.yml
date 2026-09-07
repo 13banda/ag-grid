@@ -1,0 +1,59 @@
+name: Cleanup on PR close
+
+# Removes a PR's gh-pages UMD preview (pr-<N>/) on close.
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: read
+
+jobs:
+  gh_pages_cleanup:
+    runs-on: ubuntu-latest
+    name: Remove PR preview from gh-pages
+    # Same-repo PRs only (fork PRs can't hold the write token) — see pr-review.yml.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    # Per-PR lock — stops this cleanup overlapping the same PR's publishers. Cross-PR
+    # serialisation is unnecessary (each writer touches only its own pr-<N>/ prefix) and
+    # divergence is handled by the push-retry loop in pr-preview-cleanup, not this lock.
+    # Keep this group string byte-identical to the one in `pr_preview` (ci.yml).
+    concurrency:
+      group: pr-preview-gh-pages-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      # Needed for the local shared action below; the action clones gh-pages itself.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Remove PR preview from gh-pages
+        uses: ./external/ag-shared/github/actions/pr-preview-cleanup
+        with:
+          pr_number: ${{ env.PR_NUMBER }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  cache_cleanup:
+    runs-on: ubuntu-latest
+    name: Remove PR Actions caches
+    # Same-repo PRs only (fork PRs can't hold the write token) — see pr-review.yml.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      # Deleting caches requires actions: write.
+      actions: write
+    env:
+      # merge-ref caches (node_modules + Nx) persist after merge and are never read
+      # again, so they only consume the repo's 10GB cache budget. See AG-17857 CI notes.
+      PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete this PR's caches
+        run: gh cache delete --all --ref "$PR_REF" --succeed-on-no-caches

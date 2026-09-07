@@ -5,17 +5,16 @@ import {
     ModuleRegistry,
     NumberEditorModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([
-    ClientSideRowModelModule,
-    CsvExportModule,
-    NumberEditorModule,
-    TextEditorModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, CsvExportModule, NumberEditorModule, TextEditorModule]);
 
 let gridApi: GridApi;
 

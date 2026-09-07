@@ -8,18 +8,18 @@ import type {
     ServerSideTransaction,
     ServerSideTransactionResult,
 } from 'ag-grid-community';
-import { HighlightChangesModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { HighlightChangesModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ServerSideRowModelApiModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
 import { data } from './data';
 import { FakeServer } from './fakeServer';
 
-ModuleRegistry.registerModules([
-    HighlightChangesModule,
-    ServerSideRowModelModule,
-    ServerSideRowModelApiModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([HighlightChangesModule, ServerSideRowModelModule, ServerSideRowModelApiModule]);
 
 const columnDefs: ColDef[] = [{ field: 'tradeId' }, { field: 'portfolio' }, { field: 'book' }, { field: 'current' }];
 
@@ -75,7 +75,7 @@ function getServerSideDatasource(server: any) {
 function addRow() {
     const selectedRows = gridApi!.getSelectedNodes();
     if (selectedRows.length === 0) {
-        console.warn('[Example] No row selected.');
+        console.log('[Example] No row selected.');
         return;
     }
 
@@ -92,7 +92,7 @@ function addRow() {
 function updateRow() {
     const selectedRows = gridApi!.getSelectedNodes();
     if (selectedRows.length === 0) {
-        console.warn('[Example] No row selected.');
+        console.log('[Example] No row selected.');
         return;
     }
 
@@ -107,7 +107,7 @@ function updateRow() {
 function removeRow() {
     const selectedRows = gridApi!.getSelectedNodes();
     if (selectedRows.length === 0) {
-        console.warn('[Example] No row selected.');
+        console.log('[Example] No row selected.');
         return;
     }
 

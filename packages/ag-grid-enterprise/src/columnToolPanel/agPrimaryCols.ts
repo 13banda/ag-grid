@@ -1,13 +1,29 @@
-import type { ColDef, ColGroupDef, ColumnEventType, ComponentSelector } from 'ag-grid-community';
-import { Component, PositionableFeature, RefPlaceholder } from 'ag-grid-community';
+import { RefPlaceholder } from 'ag-stack';
 
-import { agPrimaryColsCSS } from './agPrimaryCols.css-GENERATED';
+import type {
+    ColDef,
+    ColGroupDef,
+    ColumnEventType,
+    ColumnSelectionPanelSource,
+    ElementParams,
+} from 'ag-grid-community';
+import { Component, PositionableFeature } from 'ag-grid-community';
+
+import agPrimaryColsCSS from './agPrimaryCols.css';
 import type { AgPrimaryColsHeader } from './agPrimaryColsHeader';
 import { AgPrimaryColsHeaderSelector } from './agPrimaryColsHeader';
 import type { AgPrimaryColsList } from './agPrimaryColsList';
 import { AgPrimaryColsListSelector } from './agPrimaryColsList';
 import type { ToolPanelColumnCompParams } from './columnToolPanel';
 
+const AgPrimaryColsElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-column-select',
+    children: [
+        { tag: 'ag-primary-cols-header', ref: 'primaryColsHeaderPanel' },
+        { tag: 'ag-primary-cols-list', ref: 'primaryColsListPanel' },
+    ],
+};
 export class AgPrimaryCols extends Component {
     private readonly primaryColsHeaderPanel: AgPrimaryColsHeader = RefPlaceholder;
     private readonly primaryColsListPanel: AgPrimaryColsList = RefPlaceholder;
@@ -15,18 +31,17 @@ export class AgPrimaryCols extends Component {
     private positionableFeature: PositionableFeature;
 
     constructor() {
-        super(
-            /* html */ `<div class="ag-column-select">
-            <ag-primary-cols-header data-ref="primaryColsHeaderPanel"></ag-primary-cols-header>
-            <ag-primary-cols-list data-ref="primaryColsListPanel"></ag-primary-cols-list>
-        </div>`,
-            [AgPrimaryColsHeaderSelector, AgPrimaryColsListSelector]
-        );
+        super(AgPrimaryColsElement, [AgPrimaryColsHeaderSelector, AgPrimaryColsListSelector]);
         this.registerCSS(agPrimaryColsCSS);
     }
 
     // we allow dragging in the toolPanel, but not when this component appears in the column menu
-    public init(allowDragging: boolean, params: ToolPanelColumnCompParams, eventType: ColumnEventType): void {
+    public init(
+        allowDragging: boolean,
+        params: ToolPanelColumnCompParams,
+        eventType: ColumnEventType,
+        source: ColumnSelectionPanelSource
+    ): void {
         const { primaryColsHeaderPanel, primaryColsListPanel } = this;
 
         primaryColsHeaderPanel.init(params);
@@ -47,7 +62,7 @@ export class AgPrimaryCols extends Component {
             selectionChanged: (event) => primaryColsHeaderPanel.setSelectionState(event.state),
         });
 
-        primaryColsListPanel.init(params, allowDragging, eventType);
+        primaryColsListPanel.init(params, allowDragging, eventType, source);
 
         this.addManagedListeners(primaryColsHeaderPanel, {
             expandAll: primaryColsListPanel.doSetExpandedAll.bind(primaryColsListPanel, true),
@@ -84,8 +99,3 @@ export class AgPrimaryCols extends Component {
         return this.primaryColsListPanel.getExpandedGroups();
     }
 }
-
-export const AgPrimaryColsSelector: ComponentSelector = {
-    selector: 'AG-PRIMARY-COLS',
-    component: AgPrimaryCols,
-};

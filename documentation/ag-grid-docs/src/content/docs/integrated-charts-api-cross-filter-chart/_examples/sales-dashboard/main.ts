@@ -15,8 +15,8 @@ import {
     NumberFilterModule,
     TextEditorModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ColumnMenuModule,
@@ -30,6 +30,11 @@ import {
 } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
@@ -46,7 +51,6 @@ ModuleRegistry.registerModules([
     TextEditorModule,
     DateEditorModule,
     NumberEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi;
@@ -139,6 +143,7 @@ function createQuarterlySalesChart(api: GridApi) {
                 },
             },
         },
+        sort: [{ colId: 'quarter', sort: 'asc' }],
         chartContainer: document.querySelector('#columnChart') as any,
     });
 }
@@ -171,6 +176,7 @@ function createSalesByRefChart(api: GridApi) {
                 },
             },
         },
+        sort: false,
         chartContainer: document.querySelector('#pieChart') as any,
     });
 }
@@ -191,6 +197,7 @@ function createHandsetSalesChart(api: GridApi) {
                 legend: { enabled: false },
             },
         },
+        sort: [{ colId: 'handset', sort: 'asc' }],
         chartContainer: document.querySelector('#barChart') as any,
     });
 }

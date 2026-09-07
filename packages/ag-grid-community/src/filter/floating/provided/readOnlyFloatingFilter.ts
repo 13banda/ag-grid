@@ -1,26 +1,40 @@
+import { RefPlaceholder } from 'ag-stack';
+
+import { AgInputTextFieldSelector } from '../../../agWidgets/agInputTextField';
 import type { AgColumn } from '../../../entities/agColumn';
 import type { IFilter } from '../../../interfaces/iFilter';
-import type { AgInputTextField } from '../../../widgets/agInputTextField';
-import { AgInputTextFieldSelector } from '../../../widgets/agInputTextField';
-import { Component, RefPlaceholder } from '../../../widgets/component';
-import type { IFloatingFilterComp, IFloatingFilterParams, IFloatingFilterParent } from '../floatingFilter';
+import type { ElementParams } from '../../../utils/element';
+import { Component } from '../../../widgets/component';
+import type { GridInputTextField } from '../../../widgets/gridWidgetTypes';
+import type {
+    FloatingFilterDisplayParams,
+    IFloatingFilterComp,
+    IFloatingFilterParams,
+    IFloatingFilterParent,
+} from '../floatingFilter';
+
+const ReadOnlyFloatingFilterElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-floating-filter-input',
+    role: 'presentation',
+    children: [
+        {
+            tag: 'ag-input-text-field',
+            ref: 'eFloatingFilterText',
+        },
+    ],
+};
 
 // optional floating filter for user provided filters - instead of providing a floating filter,
 // they can provide a getModelAsString() method on the filter instead. this class just displays
 // the string returned from getModelAsString()
 export class ReadOnlyFloatingFilter extends Component implements IFloatingFilterComp<IFilter & IFloatingFilterParent> {
-    private readonly eFloatingFilterText: AgInputTextField = RefPlaceholder;
+    private readonly eFloatingFilterText: GridInputTextField = RefPlaceholder;
 
     private params: IFloatingFilterParams;
 
     constructor() {
-        super(
-            /* html */ `
-            <div class="ag-floating-filter-input" role="presentation">
-                <ag-input-text-field data-ref="eFloatingFilterText"></ag-input-text-field>
-            </div>`,
-            [AgInputTextFieldSelector]
-        );
+        super(ReadOnlyFloatingFilterElement, [AgInputTextFieldSelector]);
     }
 
     public init(params: IFloatingFilterParams): void {
@@ -29,6 +43,14 @@ export class ReadOnlyFloatingFilter extends Component implements IFloatingFilter
         this.eFloatingFilterText
             .setDisabled(true)
             .setInputAriaLabel(`${displayName} ${this.getLocaleTextFunc()('ariaFilterInput', 'Filter Input')}`);
+        if (this.gos.get('enableFilterHandlers')) {
+            const reactiveParams = params as unknown as FloatingFilterDisplayParams;
+            const handler = reactiveParams.getHandler();
+            if (handler.getModelAsString) {
+                const modelAsString = handler.getModelAsString(reactiveParams.model);
+                this.eFloatingFilterText.setValue(modelAsString);
+            }
+        }
     }
 
     public onParentModelChanged(parentModel: any): void {

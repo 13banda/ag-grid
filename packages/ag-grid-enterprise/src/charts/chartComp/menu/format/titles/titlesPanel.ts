@@ -1,8 +1,10 @@
-import type { BeanCollection } from 'ag-grid-community';
-import { Component, RefPlaceholder } from 'ag-grid-community';
+import { RefPlaceholder } from 'ag-stack';
 
-import type { AgGroupComponent, AgGroupComponentParams } from '../../../../../widgets/agGroupComponent';
-import { AgGroupComponentSelector } from '../../../../../widgets/agGroupComponent';
+import type { BeanCollection } from 'ag-grid-community';
+import { Component } from 'ag-grid-community';
+
+import { AgGroupComponentSelector } from '../../../../../agStack/agGroupComponent';
+import type { GroupComponent, GroupComponentParams } from '../../../../../widgets/gridEnterpriseWidgetTypes';
 import type { ChartTranslationService } from '../../../services/chartTranslationService';
 import { isCartesian, isPolar } from '../../../utils/seriesTypeMapper';
 import { ChartMenuParamsFactory } from '../../chartMenuParamsFactory';
@@ -16,7 +18,7 @@ export class TitlesPanel extends Component {
     public wireBeans(beans: BeanCollection): void {
         this.chartTranslation = beans.chartTranslation as ChartTranslationService;
     }
-    private readonly titleGroup: AgGroupComponent = RefPlaceholder;
+    private readonly titleGroup: GroupComponent = RefPlaceholder;
 
     constructor(private readonly options: FormatPanelOptions) {
         super();
@@ -25,14 +27,13 @@ export class TitlesPanel extends Component {
     public postConstruct() {
         const {
             chartMenuParamsFactory,
-            chartAxisMenuParamsFactory,
             chartOptionsService,
             seriesType,
             isExpandedOnInit: expanded = false,
             registerGroupComponent,
         } = this.options;
         const axisTitlePanels: TitlePanel[] = [];
-        if (isCartesian(seriesType)) {
+        if (isCartesian(seriesType) && seriesType !== 'pyramid') {
             const createAxisParamsFactory = (axisType: 'xAxis' | 'yAxis') =>
                 this.createManagedBean(
                     new ChartMenuParamsFactory(chartOptionsService.getCartesianAxisThemeOverridesProxy(axisType))
@@ -44,11 +45,15 @@ export class TitlesPanel extends Component {
                 this.createManagedBean(new TitlePanel(createAxisParamsFactory('yAxis'), 'verticalAxisTitle', 'title'))
             );
         } else if (isPolar(seriesType)) {
+            // Of the two polar axes only the radius axis has a title.
+            const radiusAxisParamsFactory = this.createManagedBean(
+                new ChartMenuParamsFactory(chartOptionsService.getPolarAxisThemeOverridesProxy('radius', 'thisAxis'))
+            );
             axisTitlePanels.push(
-                this.createManagedBean(new TitlePanel(chartAxisMenuParamsFactory, 'polarAxisTitle', 'title'))
+                this.createManagedBean(new TitlePanel(radiusAxisParamsFactory, 'polarAxisTitle', 'title'))
             );
         }
-        const titleGroupParams: AgGroupComponentParams = {
+        const titleGroupParams: GroupComponentParams = {
             cssIdentifier: 'charts-format-top-level',
             direction: 'vertical',
             title: this.chartTranslation.translate('chartTitles'),

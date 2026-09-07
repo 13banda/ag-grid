@@ -9,21 +9,24 @@
     .ag-filter-toolpanel-search,
     .ag-status-bar,
     .ag-header-row,
+    .ag-row-number-cell,
     .ag-panel-title-bar-title,
-    .ag-multi-filter-group-title-bar {
+    .ag-multi-filter-group-title-bar,
+    .ag-filter-card-title {
         font-weight: 500;
         color: var(--ag-header-foreground-color);
+    }
+
+    .ag-toolbar-item:where(:not(.ag-toolbar-panel)) {
+        font-weight: 500;
     }
 
     @include ag.text-input {
         min-height: calc(var(--ag-grid-size) * 4);
         border-radius: var(--ag-border-radius);
 
-        @include ag.theme-rtl(
-            (
-                padding-left: var(--ag-grid-size),
-            )
-        );
+        // Input text was vertically off by 1px all this time in the legacy theme; corrected here
+        padding: 1px var(--ag-grid-size) 2px var(--ag-grid-size);
     }
 
     .ag-picker-field-wrapper {
@@ -141,7 +144,10 @@
 
     .ag-column-panel-column-select {
         border-top: none;
-        border-bottom: 1px solid var(--ag-secondary-border-color);
+
+        &:not(.ag-last-visible-child) {
+            border-bottom: 1px solid var(--ag-secondary-border-color);
+        }
     }
 
     .ag-filter-toolpanel-search {
@@ -353,7 +359,7 @@
         border: var(--ag-borders-secondary) var(--ag-secondary-border-color);
     }
 
-    &.ag-dnd-ghost {
+    .ag-dnd-ghost {
         font-weight: 500;
     }
 
@@ -365,13 +371,16 @@
         border: solid 1px var(--ag-input-border-color);
         background-color: var(--ag-background-color);
         padding: var(--ag-grid-size) calc(var(--ag-grid-size) * 2);
-        cursor: pointer;
 
-        &:hover {
-            background-color: var(--ag-row-hover-color);
+        &:not(:disabled) {
+            cursor: pointer;
+
+            &:hover {
+                background-color: var(--ag-row-hover-color);
+            }
         }
 
-        &:active {
+        &:not(:disabled):active {
             border-color: var(--ag-active-color);
         }
 
@@ -452,6 +461,7 @@
     .ag-paging-number,
     .ag-paging-row-summary-panel-number {
         font-weight: 500;
+        font-variant-numeric: tabular-nums;
     }
 
     .ag-column-drop-cell-button {
@@ -480,21 +490,18 @@
     .ag-chart-menu-icon {
         --ag-quartz-icon-hover-color: color-mix(in srgb, transparent, var(--ag-foreground-color) 10%);
 
-        &:hover {
+        &:hover,
+        &.ag-has-menu-open {
             border-radius: 1px;
             background-color: var(--ag-quartz-icon-hover-color);
             box-shadow: 0 0 0 4px var(--ag-quartz-icon-hover-color);
         }
     }
 
-    .ag-filter-active {
-        --ag-quartz-icon-active-color: color-mix(in srgb, transparent, var(--ag-active-color) 14%);
-        --ag-quartz-icon-hover-color: color-mix(in srgb, transparent, var(--ag-active-color) 28%);
-
+    .ag-filter-active,
+    .ag-filter-toolpanel-group-instance-header-icon,
+    .ag-filter-toolpanel-instance-header-icon {
         position: relative;
-        border-radius: 1px;
-        background-color: var(--ag-quartz-icon-active-color);
-        box-shadow: 0 0 0 4px var(--ag-quartz-icon-active-color);
 
         &::after {
             content: '';
@@ -506,6 +513,15 @@
             border-radius: 50%;
             background-color: var(--ag-active-color);
         }
+    }
+
+    .ag-filter-active {
+        --ag-quartz-icon-active-color: color-mix(in srgb, transparent, var(--ag-active-color) 14%);
+        --ag-quartz-icon-hover-color: color-mix(in srgb, transparent, var(--ag-active-color) 28%);
+
+        border-radius: 1px;
+        background-color: var(--ag-quartz-icon-active-color);
+        box-shadow: 0 0 0 4px var(--ag-quartz-icon-active-color);
 
         .ag-icon-filter {
             clip-path: path('M8,0C8,4.415 11.585,8 16,8L16,16L0,16L0,0L8,0Z');
@@ -586,14 +602,6 @@
         margin: 0;
     }
 
-    .ag-layout-auto-height,
-    .ag-layout-print {
-        .ag-center-cols-viewport,
-        .ag-center-cols-container {
-            min-height: 150px;
-        }
-    }
-
     .ag-date-time-list-page-entry-is-current {
         background-color: var(--ag-active-color);
     }
@@ -618,38 +626,6 @@
     .ag-column-select-column-readonly.ag-icon-grip,
     .ag-column-select-column-readonly .ag-icon-grip {
         opacity: 0.35;
-    }
-
-    .ag-column-select-header-filter-wrapper,
-    .ag-filter-toolpanel-search,
-    .ag-mini-filter,
-    .ag-filter-filter {
-        .ag-input-wrapper::before {
-            position: absolute;
-            display: block;
-            @include ag.theme-rtl(
-                (
-                    margin-left: var(--ag-grid-size),
-                )
-            );
-            width: 12px;
-            height: 12px;
-            background-image: url('data:image/svg+xml;charset=utf-8;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBkPSJNNS4zIDlhMy43IDMuNyAwIDEgMCAwLTcuNSAzLjcgMy43IDAgMCAwIDAgNy41Wk0xMC41IDEwLjUgOC4zIDguMiIvPjwvc3ZnPg==');
-            background-position: 50% 50%;
-            background-size: contain;
-            opacity: 40%;
-            content: '';
-            filter: var(--ag-icon-filter);
-        }
-
-        input.ag-text-field-input,
-        input.ag-number-field-input {
-            @include ag.theme-rtl(
-                (
-                    padding-left: 26px,
-                )
-            );
-        }
     }
 
     .ag-column-select-add-group-indent {
@@ -687,24 +663,9 @@
     .ag-pill .ag-pill-button:hover {
         color: var(--ag-active-color);
     }
-
-    .ag-header-highlight-before::after,
-    .ag-header-highlight-after::after {
-        background-color: var(--ag-active-color);
-    }
 }
 
 .ag-theme-quartz-dark {
-    .ag-column-select-header-filter-wrapper,
-    .ag-filter-toolpanel-search,
-    .ag-mini-filter,
-    .ag-filter-filter {
-        .ag-input-wrapper::before {
-            opacity: 66%;
-            filter: invert(100%);
-        }
-    }
-
     .ag-chart-menu {
         background-color: color-mix(in srgb, rgba(24, 39, 50, 0.3), var(--ag-background-color) 30%);
     }

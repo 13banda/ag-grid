@@ -23,6 +23,12 @@ const rewriteAstroGeneratedContent = (body: string) => {
 
 const BINARY_EXTENSIONS = ['png', 'webp', 'jpeg', 'jpg'];
 
+const EXPORT_ROUTES = ['plunkr', 'codesandbox'];
+
+function shouldFormat(pathname: string) {
+    return getIsProduction() || EXPORT_ROUTES.includes(pathname.replace(/\/$/, '').split('/').pop()!);
+}
+
 function isHtml(path: string) {
     const pathItems = path.split('/');
     const fileName = pathItems.slice(-1)[0];
@@ -53,12 +59,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isHtml(context.url.pathname)) {
         body = rewriteAstroGeneratedContent(body);
 
-        if (getIsProduction()) {
+        if (shouldFormat(context.url.pathname)) {
             try {
                 body = await prettier.format(body, {
                     parser: 'html',
                 });
-            } catch (e) {
+            } catch {
                 // eslint-disable-next-line no-console
                 console.warn(`Unable to prettier format for [${context.url.pathname}]`);
             }

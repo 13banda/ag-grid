@@ -1,39 +1,45 @@
-import type { IClientSideRowModel, IStatusPanelComp } from 'ag-grid-community';
-import { _formatNumberCommas, _isClientSideRowModel, _warn } from 'ag-grid-community';
+import type {
+    IProvidedStatusPanelParams,
+    IStatusPanelComp,
+    IStatusPanelParams,
+    IStatusPanelValueFormatterParams,
+} from 'ag-grid-community';
+import { _formatNumberCommas } from 'ag-grid-community';
 
 import { AgNameValue } from './agNameValue';
+import { _getTotalRowCount } from './utils';
 
 export class TotalRowsComp extends AgNameValue implements IStatusPanelComp {
     public postConstruct(): void {
         this.setLabel('totalRows', 'Total Rows');
 
-        if (!_isClientSideRowModel(this.gos)) {
-            _warn(225);
-            return;
-        }
-
-        this.addCssClass('ag-status-panel');
-        this.addCssClass('ag-status-panel-total-row-count');
+        this.addCss('ag-status-panel');
+        this.addCss('ag-status-panel-total-row-count');
 
         this.setDisplayed(true);
 
         this.addManagedEventListeners({ modelUpdated: this.onDataChanged.bind(this) });
-        this.onDataChanged();
     }
 
     private onDataChanged() {
-        this.setValue(_formatNumberCommas(this.getRowCountValue(), this.getLocaleTextFunc.bind(this)));
+        const totalRow = _getTotalRowCount(this.beans.rowModel);
+        this.setValue(totalRow, totalRow);
     }
 
-    private getRowCountValue(): number {
-        let totalRowCount = 0;
-        (this.beans.rowModel as IClientSideRowModel).forEachLeafNode(() => (totalRowCount += 1));
-        return totalRowCount;
+    public init(params: IStatusPanelParams & IProvidedStatusPanelParams) {
+        this.refresh(params);
+        this.onDataChanged();
     }
 
-    public init() {}
+    private updateValueFormatter(valueFormatter?: (params: IStatusPanelValueFormatterParams) => string): void {
+        this.valueFormatter =
+            valueFormatter ?? (({ value }) => _formatNumberCommas(value, this.getLocaleTextFunc.bind(this)));
+    }
 
-    public refresh(): boolean {
+    public refresh(params: IStatusPanelParams & IProvidedStatusPanelParams): boolean {
+        const { key, valueFormatter } = params;
+        this.key = key;
+        this.updateValueFormatter(valueFormatter);
         return true;
     }
 }

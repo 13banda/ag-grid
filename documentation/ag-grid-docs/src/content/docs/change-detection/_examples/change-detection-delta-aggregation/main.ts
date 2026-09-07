@@ -5,12 +5,18 @@ import {
     ClientSideRowModelModule,
     HighlightChangesModule,
     ModuleRegistry,
+    NumberEditorModule,
     NumberFilterModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { RowGroupingModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelApiModule,
@@ -20,8 +26,8 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     HighlightChangesModule,
     NumberFilterModule,
+    NumberEditorModule,
     TextEditorModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let rowIdCounter = 0;
@@ -42,7 +48,6 @@ const gridOptions: GridOptions = {
             headerName: 'Total',
             type: 'totalColumn',
             minWidth: 120,
-            // we use getValue() instead of data.a so that it gets the aggregated values at the group level
             valueGetter: 'getValue("a") + getValue("b") + getValue("c") + getValue("d")',
         },
     ],
@@ -60,7 +65,6 @@ const gridOptions: GridOptions = {
             cellClass: 'number-cell',
             cellRenderer: 'agAnimateShowChangeCellRenderer',
             filter: 'agNumberColumnFilter',
-            valueParser: numberValueParser,
         },
         totalColumn: {
             cellRenderer: 'agAnimateShowChangeCellRenderer',
@@ -121,12 +125,6 @@ function createRowItem(i: number, j: number, k: number) {
         rowDataItem.group = 'Group A' + j;
     }
     return rowDataItem;
-}
-
-// converts strings to numbers
-function numberValueParser(params: ValueParserParams) {
-    console.log('=> updating to ' + params.newValue);
-    return Number(params.newValue);
 }
 
 function updateOneRecord() {

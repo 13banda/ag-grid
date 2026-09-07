@@ -2,15 +2,21 @@ import type { AgSparklineOptions } from 'ag-charts-community';
 import { AgChartsCommunityModule } from 'ag-charts-community';
 
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
-import { SparklinesModule } from 'ag-grid-enterprise';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
+import { ClipboardModule, ContextMenuModule, SparklinesModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     SparklinesModule.with(AgChartsCommunityModule),
-    ValidationModule /* Development Only */,
+    ClipboardModule,
+    ContextMenuModule,
 ]);
 
 let gridApi: GridApi;
@@ -28,16 +34,15 @@ const gridOptions: GridOptions = {
                     direction: 'vertical',
                     fill: '#91cc75',
                     stroke: '#91cc75',
-                    highlightStyle: {
-                        item: {
+                    highlight: {
+                        highlightedItem: {
                             fill: 'orange',
                         },
                     },
-                    theme: {
-                        overrides: {
-                            paddingInner: 0.3,
-                            paddingOuter: 0.1,
-                        },
+                    axis: {
+                        type: 'category',
+                        paddingInner: 0.3,
+                        paddingOuter: 0.1,
                     },
                 } as AgSparklineOptions,
             },

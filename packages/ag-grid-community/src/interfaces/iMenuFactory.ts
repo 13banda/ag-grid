@@ -2,21 +2,32 @@ import type { AgColumn } from '../entities/agColumn';
 import type { AgProvidedColumnGroup } from '../entities/agProvidedColumnGroup';
 import type { ContainerType } from './iAfterGuiAttachedParams';
 
+type MenuColumn = AgColumn | AgProvidedColumnGroup | undefined;
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
+export interface ShowMenuAfterButtonClickOptions {
+    filtersOnly?: boolean;
+    suppressCloseOnEventSource?: boolean;
+}
+
+/** @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time. */
 export interface IMenuFactory {
     showMenuAfterButtonClick(
-        column: AgColumn | undefined,
+        column: MenuColumn,
         eventSource: HTMLElement,
         containerType: ContainerType,
-        filtersOnly?: boolean
-    ): void;
+        onClosedCallback?: (event?: Event) => void,
+        options?: ShowMenuAfterButtonClickOptions
+    ): boolean;
     showMenuAfterMouseEvent(
-        column: AgColumn | undefined,
+        column: MenuColumn,
         mouseEvent: MouseEvent | Touch,
         containerType: ContainerType,
+        onClosedCallback?: () => void,
         filtersOnly?: boolean
     ): void;
     showMenuAfterContextMenuEvent(
-        column: AgColumn | AgProvidedColumnGroup | undefined,
+        column: MenuColumn,
         mouseEvent?: MouseEvent | null,
         touchEvent?: TouchEvent | null
     ): void;

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+TAG="${1:-latest}"
 
 publishModules()
 {
@@ -10,7 +11,7 @@ publishModules()
     local modulePath="$directory/$moduleDirectory/package"
 
     echo "PUBLISHING TO NPM: $modulePath"
-    npm publish $modulePath
+    npm publish $modulePath --tag $TAG --provenance
 
     if [ $? -ne 0 ]; then
         echo "Error publishing $modulePath"
@@ -23,5 +24,4 @@ publishModules()
 
 publishModules "dist/artifacts/contents/community-modules"
 publishModules "dist/artifacts/contents/packages"
-
 

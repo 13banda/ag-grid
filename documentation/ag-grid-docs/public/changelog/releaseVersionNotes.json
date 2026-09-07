@@ -1,7 +1,131 @@
 [
     {
+        "release version": "36.1.0",
+        "markdown": "/releases/36_1_0.md"
+    },
+    {
+        "release version": "36.0.0",
+        "markdown": "/releases/36_0_0.md"
+    },
+    {
+        "release version": "35.3.0",
+        "markdown": "/releases/35_3_0.md"
+    },
+    {
+        "release version": "35.2.1",
+        "markdown": "/releases/35_2_1.md"
+    },
+    {
+        "release version": "35.2.0",
+        "markdown": "/releases/35_2_0.md"
+    },
+    {
+        "release version": "35.1.0",
+        "markdown": "/releases/35_1_0.md"
+    },
+    {
+        "release version": "35.0.1",
+        "markdown": "/releases/35_0_1.md"
+    },
+    {
+        "release version": "35.0.0",
+        "markdown": "/releases/35_0_0.md"
+    },
+    {
+        "release version": "34.3.1",
+        "markdown": "/releases/34_3_1.md"
+    },
+    {
+        "release version": "34.3.0",
+        "markdown": "/releases/34_3_0.md"
+    },
+    {
+        "release version": "34.2.0",
+        "markdown": "/releases/34_2_0.md"
+    },
+    {
+        "release version": "34.1.2",
+        "markdown": "/releases/34_1_2.md"
+    },
+    {
+        "release version": "34.1.1",
+        "markdown": "/releases/34_1_1.md"
+    },
+    {
+        "release version": "34.1.0",
+        "markdown": "/releases/34_1_0.md"
+    },
+    {
+        "release version": "34.0.2",
+        "markdown": "/releases/34_0_2.md"
+    },
+    {
+        "release version": "34.0.1",
+        "markdown": "/releases/34_0_1.md"
+    },
+    {
+        "release version": "34.0.0",
+        "markdown": "/releases/34_0_0.md"
+    },
+    {
+        "release version": "33.3.0",
+        "markdown": "/releases/33_3_0.md"
+    },
+    {
+        "release version": "33.2.4",
+        "markdown": "/releases/33_2_4.md"
+    },
+    {
+        "release version": "33.2.3",
+        "markdown": "/releases/33_2_3.md"
+    },
+    {
+        "release version": "33.2.2",
+        "markdown": "/releases/33_2_2.md"
+    },
+    {
+        "release version": "33.2.0",
+        "markdown": "/releases/33_2_0.md"
+    },
+    {
+        "release version": "33.1.0",
+        "markdown": "/releases/33_1_0.md"
+    },
+    {
+        "release version": "33.0.4",
+        "markdown": "/releases/33_0_4.md"
+    },
+    {
+        "release version": "33.0.3",
+        "markdown": "/releases/33_0_3.md"
+    },
+    {
+        "release version": "33.0.2",
+        "markdown": "/releases/33_0_2.md"
+    },
+    {
+        "release version": "33.0.1",
+        "markdown": "/releases/33_0_1.md"
+    },
+    {
         "release version": "33.0.0",
         "markdown": "/releases/33_0_0.md"
+    },
+    {
+        "release version": "32.3.7",
+        "markdown": "/releases/32_3_7.md"
+    },
+    {
+        "release version": "32.3.6",
+        "markdown": "/releases/32_3_6.md"
+    },
+    {
+        "release version": "32.3.5",
+        "markdown": "/releases/32_3_5.md"
+    },
+    {
+        "release version": "32.3.4",
+        "markdown": "/releases/32_3_4.md"
     },
     {
         "release version": "32.3.3",
@@ -18,10 +142,6 @@
     {
         "release version": "32.3.0",
         "markdown": "/releases/32_3_0.md"
-    },
-    {
-        "release version": "32.2.3",
-        "markdown": "/releases/32_2_3.md"
     },
     {
         "release version": "32.2.2",

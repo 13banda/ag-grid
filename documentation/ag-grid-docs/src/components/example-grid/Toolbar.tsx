@@ -1,11 +1,39 @@
 import { Select } from '@ag-website-shared/components/select/Select';
-import { trackDemoToolbar, trackOnceDemoToolbar } from '@utils/analytics';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { replaceHistoryUrl } from '@ag-website-shared/utils/historyUrl';
+import { trackDemoToolbar } from '@utils/analytics';
+import { useMemo } from 'react';
+import type { RefObject } from 'react';
+
+import type { GridApi } from 'ag-grid-community';
 
 import styles from './Toolbar.module.scss';
 import { createDataSizeValue } from './utils';
 
 const IS_SSR = typeof window === 'undefined';
+
+function updateUrlParam(key: string, value: string) {
+    if (IS_SSR) {
+        return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set(key, value);
+    replaceHistoryUrl(url);
+}
+
+interface SelectOption {
+    label: string;
+    value: string;
+}
+
+interface ToolbarProps {
+    gridRef: RefObject<{ api: GridApi }>;
+    dataSize: string | undefined;
+    setDataSize: (size: string) => void;
+    rowCols: [number, number][];
+    gridTheme: string;
+    setGridTheme: (theme: string) => void;
+    setCountryColumnPopupEditor: (theme: string, api: GridApi) => void;
+}
 
 const options: Record<string, string> = {
     quartz: 'Quartz',
@@ -22,17 +50,23 @@ export const Toolbar = ({
     gridTheme,
     setGridTheme,
     setCountryColumnPopupEditor,
-}) => {
-    function onDataSizeChanged(newValue) {
+}: ToolbarProps) => {
+    function onDataSizeChanged(newValue: SelectOption) {
         const { value } = newValue;
         setDataSize(value);
         trackDemoToolbar({
             type: 'dataSize',
             value,
         });
+
+        updateUrlParam('dataSize', value);
     }
 
-    function onThemeChanged(newValue) {
+    function onThemeChanged(newValue: SelectOption) {
+        if (!gridRef.current?.api) {
+            return;
+        }
+
         const newTheme = newValue.value || 'ag-theme-none';
         setCountryColumnPopupEditor(newTheme, gridRef.current.api);
         setGridTheme(newTheme);
@@ -41,52 +75,21 @@ export const Toolbar = ({
             value: newTheme,
         });
 
-        if (!IS_SSR) {
-            let url = window.location.href;
-            if (url.indexOf('?theme=') !== -1) {
-                url = url.replace(/\?theme=[\w:-]+/, `?theme=${newTheme}`);
-            } else {
-                const sep = url.indexOf('?') === -1 ? '?' : '&';
-                url += `${sep}theme=${newTheme}`;
-            }
-            history.replaceState({}, '', url);
-        }
-    }
-
-    const [quickFilterText, setQuickFilterText] = useState('');
-    const deferredQuickFilterText = useDeferredValue(quickFilterText);
-
-    useEffect(() => {
-        if (!gridRef.current?.api) {
-            return;
-        }
-        gridRef.current.api.setGridOption('quickFilterText', deferredQuickFilterText);
-        trackOnceDemoToolbar({
-            type: 'filterChange',
-        });
-    }, [deferredQuickFilterText]);
-
-    function onFilterChanged(event) {
-        setQuickFilterText(event.target.value);
+        updateUrlParam('theme', newTheme);
     }
 
     const dataSizeOptions = useMemo(
         () =>
-            rowCols.map((rowCol) => {
-                const rows = rowCol[0];
-                const cols = rowCol[1];
-
-                const value = createDataSizeValue(rows, cols);
-                const text = `${rows} Rows, ${cols} Cols`;
+            rowCols.map(([rows, cols]) => {
                 return {
-                    label: text,
-                    value,
+                    label: `${rows.toLocaleString()} Rows, ${cols.toLocaleString()} Cols`,
+                    value: createDataSizeValue(rows, cols),
                 };
             }),
         [rowCols]
     );
     const dataSizeOption = useMemo(
-        () => dataSizeOptions.find((o: { value: string }) => o.value === dataSize) || dataSizeOptions[0],
+        () => dataSizeOptions.find((o) => o.value === dataSize) || dataSizeOptions[0],
         [dataSizeOptions, dataSize]
     );
 
@@ -95,9 +98,9 @@ export const Toolbar = ({
             label,
             value: themeName,
         }));
-    }, [options]);
+    }, []);
     const themeOption = useMemo(
-        () => themeOptions.find((o: { value: string }) => gridTheme.includes(o.value)) || dataSizeOptions[0],
+        () => themeOptions.find((o) => gridTheme.includes(o.value)) || themeOptions[0],
         [themeOptions, gridTheme]
     );
 
@@ -113,7 +116,7 @@ export const Toolbar = ({
                             options={dataSizeOptions}
                             value={dataSizeOption}
                             onChange={onDataSizeChanged}
-                            renderItem={(o) => {
+                            renderItem={(o: SelectOption) => {
                                 return <>{o.label}</>;
                             }}
                         />
@@ -125,21 +128,9 @@ export const Toolbar = ({
                         options={themeOptions}
                         value={themeOption}
                         onChange={onThemeChanged}
-                        renderItem={(o) => {
+                        renderItem={(o: SelectOption) => {
                             return <>{o.label}</>;
                         }}
-                    />
-
-                    <label htmlFor="global-filter" className={styles.filterLabel}>
-                        Filter:
-                    </label>
-                    <input
-                        className={styles.filterInput}
-                        placeholder="Filter any column..."
-                        type="text"
-                        onInput={onFilterChanged}
-                        id="global-filter"
-                        style={{ flex: 1 }}
                     />
                 </div>
             </div>

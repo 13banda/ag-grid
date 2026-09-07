@@ -1,11 +1,11 @@
-import type { GridApi, GridOptions, IMultiFilterParams } from 'ag-grid-community';
+import type { DoesFilterPassParams, GridApi, GridOptions, IMultiFilterParams } from 'ag-grid-community';
 import {
     ClientSideRowModelModule,
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ClipboardModule,
@@ -19,6 +19,11 @@ import {
 import { YearFilter } from './YearFilter_typescript';
 import { YearFloatingFilter } from './YearFloatingFilter_typescript';
 
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
 ModuleRegistry.registerModules([
     ClientSideRowModelModule,
     ClipboardModule,
@@ -29,10 +34,13 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
+
+function doesFilterPass({ model, node, handlerParams }: DoesFilterPassParams<any, any, boolean>): boolean {
+    return model ? handlerParams.getValue(node) > 2010 : true;
+}
 
 const gridOptions: GridOptions<IOlympicData> = {
     columnDefs: [
@@ -44,7 +52,7 @@ const gridOptions: GridOptions<IOlympicData> = {
             filterParams: {
                 filters: [
                     {
-                        filter: YearFilter,
+                        filter: { component: YearFilter, doesFilterPass: doesFilterPass },
                         floatingFilterComponent: YearFloatingFilter,
                     },
                     {
@@ -61,6 +69,7 @@ const gridOptions: GridOptions<IOlympicData> = {
         suppressHeaderMenuButton: true,
         suppressHeaderContextMenu: true,
     },
+    enableFilterHandlers: true,
 };
 
 // setup the grid after the page has finished loading

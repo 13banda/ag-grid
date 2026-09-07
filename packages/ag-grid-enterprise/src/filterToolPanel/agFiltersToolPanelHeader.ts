@@ -1,12 +1,7 @@
-import type { AgColumn, AgEvent, AgInputTextField, ComponentSelector } from 'ag-grid-community';
-import {
-    AgInputTextFieldSelector,
-    Component,
-    RefPlaceholder,
-    _createIconNoSpan,
-    _debounce,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { RefPlaceholder, _debounce, _setDisplayed } from 'ag-stack';
+
+import type { AgColumn, AgEvent, ComponentSelector, ElementParams, GridInputTextField } from 'ag-grid-community';
+import { AgInputTextFieldSelector, Component, _createIconNoSpan } from 'ag-grid-community';
 
 import type { ToolPanelFiltersCompParams } from './filtersToolPanel';
 
@@ -15,37 +10,51 @@ export enum EXPAND_STATE {
     COLLAPSED,
     INDETERMINATE,
 }
-export type AgFiltersToolPanelHeaderEvent = 'collapseAll' | 'expandAll' | 'searchChanged';
+type AgFiltersToolPanelHeaderEvent = 'collapseAll' | 'expandAll' | 'searchChanged';
+
+const AgFiltersToolPanelHeaderElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-filter-toolpanel-search',
+    role: 'presentation',
+    children: [
+        {
+            tag: 'div',
+            ref: 'eExpand',
+            cls: 'ag-filter-toolpanel-expand',
+        },
+        {
+            tag: 'ag-input-text-field',
+            ref: 'eFilterTextField',
+            cls: 'ag-filter-toolpanel-search-input',
+        },
+    ],
+};
 export class AgFiltersToolPanelHeader extends Component<AgFiltersToolPanelHeaderEvent> {
     private readonly eExpand: Element = RefPlaceholder;
-    private readonly eFilterTextField: AgInputTextField = RefPlaceholder;
+    private readonly eFilterTextField: GridInputTextField = RefPlaceholder;
 
     private eExpandChecked: Element;
     private eExpandUnchecked: Element;
     private eExpandIndeterminate: Element;
 
-    private onSearchTextChangedDebounced: () => void;
+    private onSearchTextChangedDebounced: () => number;
+    private searchTextChangedTimeout: number | undefined;
 
     private currentExpandState: EXPAND_STATE;
 
     private params: ToolPanelFiltersCompParams;
 
     public postConstruct(): void {
-        this.setTemplate(
-            /* html */
-            `<div class="ag-filter-toolpanel-search" role="presentation">
-                <div data-ref="eExpand" class="ag-filter-toolpanel-expand"></div>
-                <ag-input-text-field data-ref="eFilterTextField" class="ag-filter-toolpanel-search-input"></ag-input-text-field>
-            </div>`,
-            [AgInputTextFieldSelector]
-        );
+        this.setTemplate(AgFiltersToolPanelHeaderElement, [AgInputTextFieldSelector]);
 
         const translate = this.getLocaleTextFunc();
 
         this.eFilterTextField
-            .setAutoComplete(false)
+            .setClearButtonEnabled(true)
+            .setSearchIcon(true)
             .setInputAriaLabel(translate('ariaFilterColumnsInput', 'Filter Columns Input'))
-            .onValueChange(this.onSearchTextChanged.bind(this));
+            .onValueChange(this.onSearchTextChanged.bind(this))
+            .onValueClear(() => this.onSearchTextCleared());
 
         this.createExpandIcons();
         this.setExpandState(EXPAND_STATE.EXPANDED);
@@ -55,6 +64,7 @@ export class AgFiltersToolPanelHeader extends Component<AgFiltersToolPanelHeader
 
     public init(params: ToolPanelFiltersCompParams): void {
         this.params = params;
+        this.eFilterTextField.setAutoComplete(params.browserAutoComplete);
 
         if (this.beans.colModel.ready) {
             this.showOrHideOptions();
@@ -93,7 +103,12 @@ export class AgFiltersToolPanelHeader extends Component<AgFiltersToolPanelHeader
             );
         }
 
-        this.onSearchTextChangedDebounced();
+        this.searchTextChangedTimeout = this.onSearchTextChangedDebounced();
+    }
+
+    private onSearchTextCleared(): void {
+        clearTimeout(this.searchTextChangedTimeout);
+        this.dispatchLocalEvent({ type: 'searchChanged', searchText: this.eFilterTextField.getValue() });
     }
 
     private onExpandClicked(): void {

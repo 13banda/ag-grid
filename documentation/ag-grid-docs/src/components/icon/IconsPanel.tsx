@@ -4,62 +4,7 @@ import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 import classnames from 'classnames';
 
 import styles from './IconsPanel.module.scss';
-
-type Theme = 'quartz' | 'balham' | 'material' | 'alpine';
-const THEMES: Theme[] = ['quartz', 'balham', 'material', 'alpine'];
-const ICONS = [
-    'aggregation',
-    'arrows',
-    'asc',
-    'cancel',
-    'chart',
-    'color-picker',
-    'columns',
-    'contracted',
-    'copy',
-    'cut',
-    'cross',
-    'csv',
-    'desc',
-    'down',
-    'excel',
-    'expanded',
-    'eye-slash',
-    'eye',
-    'filter',
-    'first',
-    'grip',
-    'group',
-    'last',
-    'left',
-    'linked',
-    'loading',
-    'maximize',
-    'menu',
-    'menu-alt',
-    'minimize',
-    'minus',
-    'next',
-    'none',
-    'not-allowed',
-    'paste',
-    'pin',
-    'pivot',
-    'plus',
-    'previous',
-    'right',
-    'save',
-    'small-down',
-    'small-left',
-    'small-right',
-    'small-up',
-    'tick',
-    'tree-closed',
-    'tree-indeterminate',
-    'tree-open',
-    'unlinked',
-    'up',
-];
+import { ICON_NAMES as ICONS, ICON_THEMES as THEMES, type IconTheme as Theme } from './iconsData';
 
 const capitalizeName = (name: string) => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
 

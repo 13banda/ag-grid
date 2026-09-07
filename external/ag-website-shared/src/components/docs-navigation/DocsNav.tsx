@@ -4,11 +4,15 @@ import { Icon } from '@ag-website-shared/components/icon/Icon';
 import { getExamplePageUrl } from '@components/docs/utils/urlPaths';
 import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 import classnames from 'classnames';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 import styles from './DocsNav.module.scss';
 
-function getOpenGroup({ menuData, pageName }: { menuData?: any; pageName: string }) {
+function getOpenGroup({ menuData, pageName }: { menuData?: any; pageName?: string }) {
+    if (pageName === undefined) {
+        return;
+    }
+
     let openGroup = undefined;
 
     function childrenHasPage({ group, children, pageName }) {
@@ -35,11 +39,11 @@ function getOpenGroup({ menuData, pageName }: { menuData?: any; pageName: string
     return openGroup;
 }
 
-function getLinkUrl({ framework, path, url }: { framework: Framework; path?: string; url?: string }) {
+function getLinkUrl({ framework, path, url }: { framework?: Framework; path?: string; url?: string }) {
     return url ? url : getExamplePageUrl({ framework, path: path! });
 }
 
-function Item({ itemData, framework, pageName }: { itemData?: any; framework: Framework; pageName: string }) {
+function Item({ itemData, framework, pageName }: { itemData?: any; framework?: Framework; pageName?: string }) {
     const linkUrl = itemData.path ? getLinkUrl({ framework, path: itemData.path }) : itemData.url;
     const isExternalURL = itemData.url;
     const isCorrectFramework = !itemData.frameworks
@@ -47,20 +51,31 @@ function Item({ itemData, framework, pageName }: { itemData?: any; framework: Fr
         : itemData.frameworks.filter((f) => {
               return f === framework;
           }).length > 0;
-    const isActive = (itemData.childPaths && itemData.childPaths.includes(pageName)) || pageName === itemData.path;
+    const isActive =
+        !isExternalURL &&
+        linkUrl &&
+        ((itemData.childPaths && itemData.childPaths.includes(pageName)) || pageName === itemData.path);
 
     const className = classnames(styles.item, itemData.icon ? styles.hasIcon : '', isActive ? styles.isActive : '');
+
+    // Split off the final word so the trailing icons can never wrap onto a line of their own.
+    const titleWords = String(itemData.title ?? '').split(' ');
+    const titleTail = titleWords.pop();
+    const titleLead = titleWords.join(' ');
 
     return (
         isCorrectFramework && (
             <>
-                <a href={linkUrl} className={className} {...(isExternalURL && { target: '_blank' })}>
+                <a href={linkUrl} tabIndex={0} className={className} {...(isExternalURL && { target: '_blank' })}>
                     {itemData.icon && <Icon name={itemData.icon} svgClasses={styles.itemIcon} />}
 
                     <span>
-                        {itemData.title}
-                        {itemData.isEnterprise && <Icon name="enterprise" svgClasses={styles.enterpriseIcon} />}
-                        {isExternalURL && <Icon name="newTab" svgClasses={styles.externalIcon} />}
+                        {titleLead && `${titleLead} `}
+                        <span className={styles.titleTail}>
+                            {titleTail}
+                            {itemData.isEnterprise && <Icon name="enterprise" svgClasses={styles.enterpriseIcon} />}
+                            {isExternalURL && <Icon name="newTab" svgClasses={styles.externalIcon} />}
+                        </span>
                     </span>
                 </a>
 
@@ -69,7 +84,7 @@ function Item({ itemData, framework, pageName }: { itemData?: any; framework: Fr
                         {itemData.children.map((childData) => {
                             return (
                                 <Item
-                                    key={childData.title}
+                                    key={`${childData.title} + ${childData.path} + ${childData.url}`}
                                     itemData={childData}
                                     framework={framework}
                                     pageName={pageName}
@@ -91,25 +106,76 @@ function Group({
     setOpenGroup,
 }: {
     groupData?: any;
-    framework: Framework;
-    pageName: string;
+    framework?: Framework;
+    pageName?: string;
     openGroup?: any;
     setOpenGroup?: any;
 }) {
     const isOpen = openGroup === groupData;
+    const groupRef = useRef<HTMLDivElement>(null);
+    const scrollTargetRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const timer = setTimeout(() => {
+            const groupEl = groupRef.current;
+            if (!groupEl) return;
+
+            const scrollContainer = document.getElementById('docs-nav-scroll');
+            if (!scrollContainer) return;
+
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const groupRect = groupEl.getBoundingClientRect();
+
+            if (groupRect.top >= containerRect.top && groupRect.bottom <= containerRect.bottom) {
+                scrollTargetRef.current = null;
+                return;
+            }
+
+            const targetScrollTop =
+                scrollTargetRef.current ?? Math.max(0, groupRect.top - containerRect.top + scrollContainer.scrollTop);
+
+            scrollContainer.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+            scrollTargetRef.current = null;
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [isOpen]);
+
+    const handleClick = () => {
+        if (!isOpen) {
+            const scrollContainer = document.getElementById('docs-nav-scroll');
+            const groupEl = groupRef.current;
+
+            if (scrollContainer && groupEl) {
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const groupRect = groupEl.getBoundingClientRect();
+                const bAbsoluteTop = groupRect.top - containerRect.top + scrollContainer.scrollTop;
+
+                let collapsingHeight = 0;
+                if (openGroup) {
+                    const prevCollapsibleEl = document.getElementById(openGroup.title);
+                    if (prevCollapsibleEl) {
+                        const isAbove = !!(
+                            prevCollapsibleEl.compareDocumentPosition(groupEl) & Node.DOCUMENT_POSITION_FOLLOWING
+                        );
+                        if (isAbove) {
+                            collapsingHeight = prevCollapsibleEl.getBoundingClientRect().height;
+                        }
+                    }
+                }
+
+                scrollTargetRef.current = bAbsoluteTop - collapsingHeight;
+            }
+        }
+
+        setOpenGroup(isOpen ? undefined : groupData);
+    };
 
     return (
-        <div className={classnames(styles.group, isOpen ? styles.isOpen : '')}>
-            <button
-                className={classnames('button-style-none', styles.groupTitle)}
-                onClick={() => {
-                    if (isOpen) {
-                        setOpenGroup(undefined);
-                    } else {
-                        setOpenGroup(groupData);
-                    }
-                }}
-            >
+        <div ref={groupRef} className={classnames(styles.group, isOpen ? styles.isOpen : '')}>
+            <button tabIndex={0} className={classnames('button-style-none', styles.groupTitle)} onClick={handleClick}>
                 <Icon name="chevronRight" svgClasses={styles.groupChevron} />
 
                 <span>{groupData.title}</span>
@@ -120,7 +186,7 @@ function Group({
                     {groupData.children.map((childData) => {
                         return (
                             <Item
-                                key={childData.title}
+                                key={`${childData.title} + ${childData.path} + ${childData.url}`}
                                 itemData={childData}
                                 framework={framework}
                                 pageName={pageName}
@@ -141,8 +207,8 @@ function Section({
     setOpenGroup,
 }: {
     sectionData?: any;
-    framework: Framework;
-    pageName: string;
+    framework?: Framework;
+    pageName?: string;
     openGroup?: any;
     setOpenGroup?: any;
 }) {
@@ -152,7 +218,7 @@ function Section({
 
             {sectionData.children.map((childData) => {
                 return (
-                    <Fragment key={childData.title}>
+                    <Fragment key={`${childData.title} + ${childData.path} + ${childData.url}`}>
                         {childData.type === 'item' && (
                             <Item itemData={childData} framework={framework} pageName={pageName} />
                         )}
@@ -179,8 +245,8 @@ export function DocsNav({
     showWhatsNew = true,
 }: {
     menuData?: any;
-    framework: Framework;
-    pageName: string;
+    framework?: Framework;
+    pageName?: string;
     showWhatsNew?: boolean;
 }) {
     const pageOpenGroup = getOpenGroup({ menuData, pageName });
@@ -203,12 +269,14 @@ export function DocsNav({
     }, [mobileNavOpen]);
 
     return (
-        <Collapsible id="docs-mobile-nav-collapser" isOpen={mobileNavOpen}>
+        <Collapsible id="docs-mobile-nav-collapser" isOpen={mobileNavOpen} ariaHidden={false}>
             <div id="docs-nav-scroll" className={styles.docsNavOuter}>
                 <div className={styles.docsNavInner}>
                     {showWhatsNew && (
                         <div className={styles.whatsNewLink}>
-                            <a href={urlWithBaseUrl('/whats-new')}>What's New</a>
+                            <a tabIndex={0} href={urlWithBaseUrl('/whats-new/')}>
+                                What's New
+                            </a>
                         </div>
                     )}
 

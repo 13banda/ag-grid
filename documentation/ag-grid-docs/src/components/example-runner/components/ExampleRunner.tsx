@@ -1,7 +1,13 @@
 import type { InternalFramework } from '@ag-grid-types';
+import { ExampleDevToolbar } from '@ag-website-shared/components/dev-tools/ExampleDevToolbar';
+import { $exampleDevToolbar } from '@ag-website-shared/components/dev-tools/stores/devToolsStore';
+import { ExampleLogger } from '@ag-website-shared/components/example-runner/components/ExampleLogger';
 import { Icon } from '@ag-website-shared/components/icon/Icon';
+import { LinkIcon } from '@ag-website-shared/components/link-icon/LinkIcon';
 import { OpenInCTA } from '@ag-website-shared/components/open-in-cta/OpenInCTA';
 import type { FileContents } from '@components/example-generator/types';
+import { getFrameworkFromInternalFramework } from '@utils/framework';
+import { useStoreSsr } from '@utils/hooks/useStoreSsr';
 import classnames from 'classnames';
 import { type FunctionComponent, type ReactElement, useState } from 'react';
 
@@ -12,6 +18,7 @@ import styles from './ExampleRunner.module.scss';
 interface Props {
     id: string;
     title: string;
+    exampleName: string;
     exampleUrl?: string;
     exampleRunnerExampleUrl?: string;
     externalLinks?: ReactElement;
@@ -23,6 +30,8 @@ interface Props {
     loadingIFrameId: string;
     supportedFrameworks: InternalFramework[];
     suppressDarkMode?: boolean;
+    hasExampleConsoleLog?: boolean;
+    consoleBufferSize?: number;
 }
 
 const DEFAULT_HEIGHT = 500;
@@ -30,6 +39,7 @@ const DEFAULT_HEIGHT = 500;
 export const ExampleRunner: FunctionComponent<Props> = ({
     id,
     title,
+    exampleName,
     exampleUrl,
     exampleRunnerExampleUrl,
     externalLinks,
@@ -41,15 +51,21 @@ export const ExampleRunner: FunctionComponent<Props> = ({
     loadingIFrameId,
     supportedFrameworks,
     suppressDarkMode,
+    hasExampleConsoleLog,
+    consoleBufferSize,
 }) => {
     const [showCode, setShowCode] = useState(false);
+    const showExampleDevToolbar = useStoreSsr($exampleDevToolbar, false);
+    const framework = getFrameworkFromInternalFramework(internalFramework);
 
     const exampleHeight = initialExampleHeight || DEFAULT_HEIGHT;
     return (
-        <div id={id} className={styles.exampleOuter}>
+        <div className={styles.exampleOuter}>
             <div className={styles.tabsContainer}>
                 <div
-                    className={styles.content}
+                    className={classnames(styles.content, {
+                        [styles.hasExampleConsoleLog]: hasExampleConsoleLog,
+                    })}
                     role="tabpanel"
                     aria-labelledby={`${showCode ? 'Preview' : 'Code'} tab`}
                     style={{ height: exampleHeight, width: '100%' }}
@@ -73,9 +89,12 @@ export const ExampleRunner: FunctionComponent<Props> = ({
                         />
                     )}
                 </div>
+                {hasExampleConsoleLog && <ExampleLogger exampleName={exampleName} bufferSize={consoleBufferSize} />}
                 <footer className={styles.footer}>
+                    {showExampleDevToolbar && <ExampleDevToolbar framework={framework} exampleName={exampleName} />}
                     <button
                         className={classnames(styles.previewCodeToggle, 'button-secondary')}
+                        tabIndex={0}
                         onClick={() => {
                             setShowCode(!showCode);
                         }}
@@ -93,6 +112,9 @@ export const ExampleRunner: FunctionComponent<Props> = ({
                     </button>
 
                     <ul className={classnames('list-style-none', styles.externalLinks)}>
+                        <li>
+                            <LinkIcon href={`#${id}`} exampleLink={true} />
+                        </li>
                         <li>
                             <OpenInCTA type="newTab" href={exampleUrl!} />
                         </li>

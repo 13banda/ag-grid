@@ -1,13 +1,12 @@
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import {
-    ClientSideRowModelModule,
-    GetRowIdParams,
-    ModuleRegistry,
-    ValidationModule,
-    createGrid,
-} from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 // specify the data
 const rowData = [

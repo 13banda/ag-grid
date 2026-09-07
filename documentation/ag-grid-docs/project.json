@@ -6,25 +6,55 @@
   "targets": {
     "build": {
       "outputs": ["{projectRoot}/dist"],
-      "dependsOn": ["generate-doc-references", "generate-examples", "^build"],
+      "dependsOn": [
+        "build:copy-styles",
+        "generate-doc-references",
+        "generate-examples",
+        "ag-grid-react:build",
+        "^build"
+      ],
       "inputs": [
         "^production",
         "production",
-        "!{projectRoot}/vitest.config.mjs",
+        "!{projectRoot}/vitest.config.ts",
         "{workspaceRoot}/external/ag-website-shared/**",
         "charts",
+        "{projectRoot}/.astro/cache/sitemap/sitemap-0.xml",
         { "env": "PUBLIC_PACKAGE_VERSION" }
       ],
       "cache": true,
-      "command": "astro build",
+      "command": "tsx ../../external/ag-website-shared/scripts/buildWithSitemapCache.ts --silent",
       "options": {
-        "cwd": "{projectRoot}",
-        "silent": true
+        "cwd": "{projectRoot}"
       },
       "configurations": {
         "staging": {},
-        "archive": {},
-        "production": {}
+        "archive": {
+          "args": "--clean-cache=true --run-second-build=true"
+        },
+        "production": {
+          "args": "--clean-cache=true --run-second-build=true"
+        },
+        "verbose": {
+          "args": "--silent=false"
+        }
+      }
+    },
+    "build:copy-styles": {
+      "executor": "nx:run-commands",
+      "inputs": [],
+      "outputs": [],
+      "dependsOn": ["@ag-grid-community/styles:build"],
+      "options": {
+        "cwd": "documentation/ag-grid-docs",
+        "commands": [
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridAlpine/*.*svg --delete public/theme-icons/alpine",
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridBalham/*.*svg --delete public/theme-icons/balham",
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridClassic/*.*svg --delete public/theme-icons/base",
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridMaterial/*.*svg --delete public/theme-icons/material",
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridAlpine/*.*svg --delete public/theme-icons/alpine",
+          "rsync -r ../../community-modules/styles/icon-fonts/fonts/agGridQuartz/*.*svg --delete public/theme-icons/quartz"
+        ]
       }
     },
     "build-tsc": {
@@ -33,12 +63,7 @@
         "command": "tsc --project {projectRoot}/tsconfig.json"
       }
     },
-    "elapsedBuildTime": {
-      "dependsOn": ["^build", "^docs-resolved-interfaces"],
-      "command": "node scripts/buildTime.mjs stop && node scripts/buildTime.mjs elapsed"
-    },
     "dev": {
-      "dependsOn": ["^build", "^docs-resolved-interfaces", "elapsedBuildTime"],
       "command": "astro dev --port=${PORT} --host",
       "options": {
         "cwd": "{projectRoot}"
@@ -63,15 +88,42 @@
         "production": {}
       }
     },
+    "preview:csp": {
+      "dependsOn": [
+        {
+          "target": "build"
+        }
+      ],
+      "command": "tsx scripts/csp/preview-csp.ts --port=${PORT}",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "configurations": {
+        "staging": { "args": "--env staging" },
+        "production": { "args": "--env production" },
+        "report-only": { "args": "--mode report-only" },
+        "staging-report-only": { "args": "--env staging --mode report-only" }
+      }
+    },
     "lint": {
       "command": "eslint",
       "options": {
         "cwd": "{projectRoot}"
       }
     },
+    "generate-csp": {
+      "command": "tsx scripts/csp/generate-csp.ts",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "configurations": {
+        "staging": { "args": "--env staging" },
+        "production": { "args": "--env production" }
+      }
+    },
     "test": {
       "executor": "nx:noop",
-      "dependsOn": ["test:vitest"],
+      "dependsOn": ["test:vitest", "test:validate-example-specs", "test:validate-example-dev-validations"],
       "inputs": [],
       "outputs": [],
       "options": {
@@ -84,12 +136,19 @@
       }
     },
     "test:vitest": {
-      "executor": "@nx/vite:test",
+      "command": "npx vitest",
       "outputs": ["{workspaceRoot}/reports/ag-grid-website.xml"],
-      "dependsOn": [],
+      "dependsOn": [
+        "ag-grid-community:build:types",
+        "ag-grid-community:build:package",
+        "ag-grid-enterprise:build:types",
+        "ag-grid-enterprise:build:package",
+        "generate-doc-references"
+      ],
       "options": {
         "cwd": "{projectRoot}",
-        "config": "{projectRoot}/vitest.config.mjs"
+        "config": "vitest.config.ts",
+        "watch": false
       },
       "configurations": {
         "ci": {
@@ -104,17 +163,97 @@
         }
       }
     },
-    "generate-examples": {
-      "executor": "nx:noop",
-      "dependsOn": ["^generate-example"],
-      "inputs": [{ "externalDependencies": ["npm:typescript"] }],
-      "outputs": [],
-      "cache": true,
-      "batch": true,
+    "test:e2e": {
+      "command": "npx vitest",
+      "outputs": ["{workspaceRoot}/reports/ag-grid-website.xml"],
+      "dependsOn": ["^pack", "test:htaccess"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "config": "vitest.e2e.config.ts",
+        "watch": false
+      },
       "configurations": {
-        "staging": {},
-        "archive": {},
-        "production": {}
+        "ci": {
+          "outputFile": "../../reports/ag-grid-website.xml",
+          "reporters": ["junit"]
+        },
+        "watch": {
+          "watch": true
+        },
+        "update": {
+          "update": true
+        }
+      }
+    },
+    "test:interactive:setup:chromium": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["{workspaceRoot}/scripts/ci/install-playwright.sh full chromium"],
+        "parallel": false
+      },
+      "cache": true
+    },
+    "test:interactive:setup:all": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["{workspaceRoot}/scripts/ci/install-playwright.sh full chromium firefox webkit"],
+        "parallel": false
+      },
+      "cache": true
+    },
+    "test:interactive:chromium": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "test:interactive:setup:chromium",
+        "ag-grid-community:build:types",
+        "ag-grid-community:build:package"
+      ],
+      "options": {
+        "commands": ["npx playwright test --project=chromium"],
+        "parallel": false,
+        "cwd": "documentation/ag-grid-docs"
+      }
+    },
+    "test:interactive:all": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["test:interactive:setup:all", "ag-grid-community:build:types", "ag-grid-community:build:package"],
+      "options": {
+        "commands": ["npx playwright test"],
+        "parallel": false,
+        "cwd": "documentation/ag-grid-docs"
+      }
+    },
+    "generate-examples": {
+      "executor": "ag-grid-generate-example-files:generate-all",
+      "dependsOn": [
+        { "projects": "ag-grid-generate-example-files", "target": "build" },
+        { "projects": "ag-grid-generate-example-files", "target": "copySrcFilesForGeneration" },
+        { "projects": "ag-grid-generate-example-files", "target": "build-grid-options-types" }
+      ],
+      "inputs": [
+        "{workspaceRoot}/documentation/ag-grid-docs/src/**/_examples/**/*",
+        "!{workspaceRoot}/documentation/ag-grid-docs/src/**/_examples/**/*.spec.*",
+        "!{workspaceRoot}/documentation/ag-grid-docs/src/**/_examples/**/*.test.*",
+        "{workspaceRoot}/plugins/ag-grid-generate-example-files/{dist,src}/**/*",
+        { "dependentTasksOutputFiles": "**/gridOptionsTypes.json", "transitive": false },
+        "{workspaceRoot}/documentation/ag-grid-docs/public/example-runner/**",
+        { "env": "AG_AI_API_URL" },
+        { "env": "AG_AI_API_DEV_TOKEN" },
+        { "env": "AG_EXAMPLE_FORMAT" },
+        { "env": "DISABLE_EXAMPLE_GEN_COLLAPSE" },
+        { "externalDependencies": ["npm:typescript"] }
+      ],
+      "outputs": ["{workspaceRoot}/dist/generated-examples/ag-grid-docs"],
+      "cache": true,
+      "options": {
+        "mode": "dev",
+        "parentProject": "ag-grid-docs",
+        "outputBasePath": "dist/generated-examples"
+      },
+      "configurations": {
+        "staging": { "mode": "prod" },
+        "archive": { "mode": "prod" },
+        "production": { "mode": "prod" }
       }
     },
     "generate-doc-references": {
@@ -152,6 +291,32 @@
         "commands": ["npx tsc -p {projectRoot}/tsconfig.examples.json"]
       }
     },
+    "test:validate-example-specs": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": ["npx tsx scripts/validate-example-specs.ts"]
+      }
+    },
+    "test:validate-example-dev-validations": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": ["npx tsx scripts/validate-example-dev-validations.ts"]
+      }
+    },
+    "test:htaccess": {
+      "command": "bash testing/htaccess-harness/run.sh",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "configurations": {
+        "staging": { "args": "--env staging" },
+        "production": { "args": "--env production" }
+      }
+    },
     "update-algolia": {
       "command": "npm run updateLocal",
       "options": {
@@ -168,8 +333,20 @@
           "command": "npm run updateProd"
         }
       }
+    },
+    "update-versions-data": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "tsx {projectRoot}/scripts/versions-data/updateVersionsData.ts"
+      },
+      "configurations": {
+        "verbose": {
+          "args": ["--verbose"]
+        }
+      }
     }
   },
-  "implicitDependencies": ["packages/ag-grid-community", "packages/ag-grid-enterprise"],
+  "implicitDependencies": ["ag-grid-community", "ag-grid-enterprise", "ag-grid-react", "ag-grid-angular"],
   "tags": ["website"]
 }

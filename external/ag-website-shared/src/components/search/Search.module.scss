@@ -1,33 +1,33 @@
 @use '../../design-system' as *;
+@use '../site-header/breakpoints' as *;
 
+// .headerSearchBox is the inline search trigger rendered directly in the header row
+// (see Search.tsx) -- it queries the same "site-header" container as the rest of the
+// header. Note: SearchModal/SearchControls (the full-screen results overlay this
+// button opens) is intentionally NOT on this container -- a full-screen dialog's own
+// sizing is a viewport concern, not a header-width one.
 .headerSearchBox {
     display: flex;
     align-items: center;
     position: relative;
     width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
     padding: $spacing-size-2 $spacing-size-3;
     border-radius: var(--radius-lg);
     background-color: rgba(255, 255, 255, 0.15);
     color: var(--color-fg-white);
     cursor: pointer;
-    transition: all 0.5s;
+    transition:
+        background-color 0.5s ease-in-out,
+        border 0.5s ease-in-out,
+        box-shadow 0.5s ease-in-out;
     border: 1px solid rgba(255, 255, 255, 0.05);
     font-weight: var(--text-semibold);
 
-    @media screen and (min-width: $breakpoint-site-header-medium) {
-        max-width: 512px;
-        margin-left: auto;
-        margin-right: auto;
-    }
-
-    @media screen and (max-width: 1275px) {
-        max-width: 100%;
-        margin-left: auto;
-        margin-right: auto;
-    }
-
-    @media screen and (max-width: 1050px) {
-        max-width: 100%;
+    @container site-header (min-width: #{$docs-search-inline}) {
+        max-width: 372px;
     }
 
     #{$selector-darkmode} & {
@@ -78,7 +78,6 @@
     margin-left: auto;
     opacity: 1;
     font-size: var(--text-fs-sm);
-    animation: fadeIn 0.2s;
 
     font-weight: var(--text-semibold);
     background-color: rgba(255, 255, 255, 0.2);
@@ -87,18 +86,25 @@
     padding-left: $spacing-size-1;
     border-radius: var(--radius-sm);
 
+    // Only one of these carries the platform-specific text; both are rendered at build
+    // time and toggled by the html[data-os] attribute that KBD_PLATFORM_INIT_SCRIPT sets
+    // before first paint. Defaults to the non-Mac label, matching the {% kbd %} tags.
+    .kbdShortcutMac {
+        display: none;
+    }
+
+    html[data-os='mac'] & {
+        .kbdShortcutDefault {
+            display: none;
+        }
+
+        .kbdShortcutMac {
+            display: inline;
+        }
+    }
+
     #{$selector-darkmode} & {
         color: var(--color-fg-white);
         background-color: rgba(255, 255, 255, 0.2);
-    }
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
     }
 }

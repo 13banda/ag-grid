@@ -10,10 +10,15 @@ import {
     ModuleRegistry,
     NumberFilterModule,
     TextFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnsToolPanelModule, FiltersToolPanelModule, PivotModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberFilterModule,
@@ -23,7 +28,6 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     PivotModule,
     TextFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 let gridApi: GridApi<IOlympicData>;
@@ -87,7 +91,7 @@ function setSideBarVisible(value: boolean) {
 }
 
 function isSideBarVisible() {
-    alert(gridApi!.isSideBarVisible());
+    console.log(gridApi!.isSideBarVisible());
 }
 
 function openToolPanel(key: string) {
@@ -99,7 +103,7 @@ function closeToolPanel() {
 }
 
 function getOpenedToolPanel() {
-    alert(gridApi!.getOpenedToolPanel());
+    console.log(gridApi!.getOpenedToolPanel());
 }
 
 function setSideBar(def: SideBarDef | string | string[] | boolean) {
@@ -108,7 +112,7 @@ function setSideBar(def: SideBarDef | string | string[] | boolean) {
 
 function getSideBar() {
     const sideBar = gridApi!.getSideBar();
-    alert(JSON.stringify(sideBar));
+    console.log(JSON.stringify(sideBar));
     console.log(sideBar);
 }
 

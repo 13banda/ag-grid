@@ -1,52 +1,68 @@
 import {
-    Component,
-    KeyCode,
     _clearElement,
     _findFocusableElements,
     _findNextFocusableElement,
     _getActiveDomElement,
     _getDocument,
     _setAriaPosInSet,
+    _setAriaRole,
     _setAriaSetSize,
-} from 'ag-grid-community';
+} from 'ag-stack';
+
+import type { ElementParams } from 'ag-grid-community';
+import { Component, KeyCode } from 'ag-grid-community';
 
 import { AgPill } from './agPill';
 
-export interface PillRendererParams<TValue> {
+interface PillRendererParams<TValue> {
     eWrapper?: HTMLElement;
+    focusAfterDelete?: () => void;
+    focusAfterForwardBoundary?: () => void;
+    onHorizontalArrowKeyDown?: (e: KeyboardEvent) => void;
     announceItemFocus?: () => void;
     onPillMouseDown?: (e: MouseEvent) => void;
+    valueFormatter?: (value: TValue | TValue[]) => string | null;
     getValue: () => TValue[] | null;
     setValue: (value: TValue[] | null) => void;
 }
 
+const AgPillContainerElement: ElementParams = {
+    tag: 'div',
+    cls: 'ag-pill-container',
+};
 export class AgPillContainer<TValue> extends Component {
     private params: PillRendererParams<TValue>;
-    private pills: AgPill[] = [];
+    private pills: { pill: AgPill; key: string }[] = [];
+    private getKey: (value: TValue | TValue[]) => string | null;
 
     constructor() {
-        super(/* html */ `
-            <div class="ag-pill-container" role="listbox"></div>
-            `);
+        super(AgPillContainerElement);
     }
 
     public init(params: PillRendererParams<TValue>) {
         this.params = params;
+        this.getKey = params.valueFormatter ?? ((v: TValue) => String(v));
         this.refresh();
     }
 
     public refresh(): void {
         this.clearPills();
 
-        const { params, onPillKeyDown } = this;
+        const { params, onPillKeyDown, getKey } = this;
 
-        const values = params.getValue();
+        let values = params.getValue();
 
         if (!Array.isArray(values)) {
-            return;
+            if (values == null) {
+                return;
+            }
+            values = [values];
         }
 
+        const valueFormatter = params.valueFormatter ?? ((v: TValue) => String(v));
         const len = values.length;
+
+        _setAriaRole(this.getGui(), len === 0 ? 'presentation' : 'listbox');
 
         for (let i = 0; i < len; i++) {
             const value = values[i];
@@ -70,39 +86,48 @@ export class AgPillContainer<TValue> extends Component {
                 pill.addGuiEventListener('focus', params.announceItemFocus);
             }
 
-            pill.setText(value as string);
+            pill.setText(valueFormatter(value) ?? '');
             pill.toggleCloseButtonClass('ag-icon-cancel', true);
             this.appendChild(pillGui);
-            this.pills.push(pill);
+            this.pills.push({ key: getKey(value) ?? i.toString(), pill });
         }
     }
 
     public onNavigationKeyDown(e: KeyboardEvent): void {
         const { key } = e;
+        const isRtl = this.gos.get('enableRtl');
+        const isPrevious = (!isRtl && key === KeyCode.LEFT) || (isRtl && key === KeyCode.RIGHT);
+        const isNext = (!isRtl && key === KeyCode.RIGHT) || (isRtl && key === KeyCode.LEFT);
 
-        if (!this.pills.length || (key !== KeyCode.LEFT && key !== KeyCode.RIGHT)) {
+        if (!this.pills.length || (!isPrevious && !isNext)) {
             return;
         }
 
         e.preventDefault();
 
-        const { params, beans } = this;
+        const { beans, params } = this;
         const activeEl = _getActiveDomElement(beans);
         const eGui = this.getGui();
+        const focusableElements = _findFocusableElements(eGui);
 
         if (eGui.contains(activeEl)) {
-            const nextFocusableEl = _findNextFocusableElement(beans, eGui, false, key === KeyCode.LEFT);
+            // If focus is on a descendant inside a pill, normalize it to the pill element first.
+            const activePill = focusableElements.find((el) => el.contains(activeEl));
+            if (activePill && activePill !== activeEl) {
+                activePill.focus();
+            }
+
+            const nextFocusableEl = _findNextFocusableElement({ beans, rootNode: eGui, backwards: isPrevious });
 
             if (nextFocusableEl) {
                 nextFocusableEl.focus();
-            } else if (params.eWrapper) {
-                params.eWrapper.focus();
+            } else if (isNext) {
+                params.focusAfterForwardBoundary?.();
             }
-        } else {
-            const focusableElements = _findFocusableElements(eGui);
-            if (focusableElements.length > 0) {
-                focusableElements[key === KeyCode.RIGHT ? 0 : focusableElements.length - 1].focus();
-            }
+            // Keep focus on the edge pill when there is no next target.
+            // Wrapping or focus handoff is controlled by the parent rich-select.
+        } else if (focusableElements.length > 0) {
+            focusableElements[isNext ? 0 : focusableElements.length - 1].focus();
         }
     }
 
@@ -114,7 +139,7 @@ export class AgPillContainer<TValue> extends Component {
         }
 
         _clearElement(eGui);
-        this.destroyBeans(this.pills);
+        this.destroyBeans(this.pills.map(({ pill }) => pill));
         this.pills = [];
     }
 
@@ -125,6 +150,16 @@ export class AgPillContainer<TValue> extends Component {
     private onPillKeyDown(e: KeyboardEvent): void {
         const key = e.key;
 
+        if (key === KeyCode.LEFT || key === KeyCode.RIGHT) {
+            e.stopPropagation();
+            if (this.params.onHorizontalArrowKeyDown) {
+                this.params.onHorizontalArrowKeyDown(e);
+            } else {
+                this.onNavigationKeyDown(e);
+            }
+            return;
+        }
+
         if (key !== KeyCode.DELETE && key !== KeyCode.BACKSPACE) {
             return;
         }
@@ -132,28 +167,33 @@ export class AgPillContainer<TValue> extends Component {
         e.preventDefault();
 
         const eDoc = _getDocument(this.beans);
-        const pillIndex = this.pills.findIndex((pill) => pill.getGui().contains(eDoc.activeElement));
+        const pillIndex = this.pills.findIndex(({ pill }) => pill.getGui().contains(eDoc.activeElement));
 
         if (pillIndex === -1) {
             return;
         }
 
-        const pill = this.pills[pillIndex];
+        const pillObj = this.pills[pillIndex];
 
-        if (pill) {
-            this.deletePill(pill, pillIndex);
+        if (pillObj?.pill) {
+            this.deletePill(pillObj.pill, pillIndex);
         }
     }
 
-    private deletePill(pill: AgPill, restoreFocusToIndex?: number): void {
-        const value = pill.getText();
-        const values = (this.params.getValue() || []).filter((val) => val !== value);
-        this.params.setValue(values);
+    private deletePill(p: AgPill, restoreFocusToIndex?: number): void {
+        const { getKey, pills, params } = this;
+        const pillKey = (pills[restoreFocusToIndex ?? -1] ?? pills.find(({ pill }) => pill === p))?.key;
+        const values = (params.getValue() || []).filter((val) => getKey(val) !== pillKey);
+        params.setValue(values);
 
-        if (!values.length && this.params.eWrapper) {
-            this.params.eWrapper.focus();
+        if (!values.length) {
+            if (params.focusAfterDelete) {
+                params.focusAfterDelete();
+            } else {
+                params.eWrapper?.focus();
+            }
         } else if (restoreFocusToIndex != null) {
-            const pill = this.pills[Math.min(restoreFocusToIndex, this.pills.length - 1)];
+            const { pill } = pills[Math.min(restoreFocusToIndex, pills.length - 1)];
             if (pill) {
                 pill.getFocusableElement().focus();
             }

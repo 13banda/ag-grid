@@ -6,8 +6,8 @@ import {
     NumberFilterModule,
     RowSelectionModule,
     TextEditorModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import {
     ClipboardModule,
@@ -18,6 +18,11 @@ import {
     PivotModule,
     SetFilterModule,
 } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     NumberEditorModule,
@@ -32,7 +37,6 @@ ModuleRegistry.registerModules([
     NumberFilterModule,
     ClipboardModule,
     PivotModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const columnDefs: (ColDef | ColGroupDef)[] = [
@@ -83,7 +87,6 @@ const columnDefs: (ColDef | ColGroupDef)[] = [
 let gridApi: GridApi<IOlympicData>;
 
 const gridOptions: GridOptions<IOlympicData> = {
-    rowData: null,
     columnDefs,
     rowSelection: {
         mode: 'multiRow',

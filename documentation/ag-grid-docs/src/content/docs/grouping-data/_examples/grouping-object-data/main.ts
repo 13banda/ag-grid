@@ -1,10 +1,15 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { RowGroupingModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, RowGroupingModule]);
 
 let gridApi: GridApi;
 
@@ -14,8 +19,9 @@ const gridOptions: GridOptions = {
             field: 'athlete',
             rowGroup: true,
             hide: true,
-            keyCreator: (params) => params.value.id,
-            valueFormatter: (params) => params.value.name,
+            // `value` can be `null`/`undefined` for group and footer rows, which have no athlete object.
+            keyCreator: (params) => params.value?.id ?? '',
+            valueFormatter: (params) => params.value?.name ?? '',
         },
         { field: 'country' },
         { field: 'year' },

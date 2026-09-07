@@ -22,6 +22,12 @@
 @use './parts/date-time';
 @use './parts/native-inputs';
 @use './parts/advanced-filter';
+@use './parts/row-numbers';
+@use './parts/row-pinning';
+@use './parts/batch-edit';
+@use './parts/toolbar';
+@use './parts/calculated-columns';
+@use './parts/column-header-edit';
 
 @mixin general-styles() {
     .ag-measurement-container {
@@ -46,6 +52,11 @@
     @include charts.output();
     @include date-time.output();
     @include advanced-filter.output();
+    @include row-numbers.output();
+    @include batch-edit.output();
+    @include toolbar.output();
+    @include calculated-columns.output();
+    @include column-header-edit.output();
 }
 
 @mixin native-input-styles() {

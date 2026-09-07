@@ -1,30 +1,30 @@
 [
     {
-        "title": "Efficient JavaScript Charting with Tree-Based Scene Graphs",
-        "description": "Learn how AG Charts leverages a tree-based scene graph abstraction to efficiently render complex JavaScript charts.",
+        "title": "Optimising Large Data Set Visualisations with the M4 Algorithm",
+        "description": "Using the M4 algorithm to create line charts that support 1m+ data points at 60fps.",
         "image": "/community/events/news/charts.png",
-        "link": "https://blog.ag-grid.com/building-ag-charts-efficient-javascript-charting-with-tree-based-scene-graphs/",
+        "link": "https://www.ag-grid.com/blog/optimizing-large-data-set-visualisations-with-the-m4-algorithm/",
         "linkText": "Read article"
     },
     {
-        "title": "Whats New in AG Grid 32",
-        "description": "What's New in AG Grid 32 - Rich Select Editor Multi Select, 15% Reduced Bundle Size, Localisation in 20+ languages, and more",
+        "title": "What's New in AG Grid 34",
+        "description": "New filters tool panel, cell editor validation, batch & bulk cell editing, and tree data drag and drop.",
         "image": "/community/events/news/grid-table.png",
-        "link": "https://blog.ag-grid.com/whats-new-in-ag-grid-32/",
+        "link": "https://www.ag-grid.com/blog/whats-new-in-ag-grid-34/",
         "linkText": "Read article"
     },
     {
-        "title": "What's New in AG Charts 10",
-        "description": "What's New in AG Charts 10 - Financial Charts, Sankey & Chord Series, Smooth & Step Line Styles, and Localisation in 20+ languages",
+        "title": "What's New in AG Charts 12",
+        "description": "Major theming updates, including axis band highlighting, label wrapping, global formatting, and more.",
         "image": "/community/events/news/integrated.png",
-        "link": "https://blog.ag-grid.com/whats-new-in-ag-charts-10/",
+        "link": "https://www.ag-grid.com/blog/whats-new-in-ag-charts-12/",
         "linkText": "Read article"
     },
     {
-        "title": "Introducing Our New Theming API",
-        "description": "Learn more about the Theming API: The new, easy way to create and customise themes for AG Grid, directly from your JavaScript code.",
+        "title": "AG Grid Showcase: Sample Apps, Demos, Examples & Extensions",
+        "description": "Examples of the features and functionality that you can add to your application with AG Grid, along with live demos and sample code.",
         "image": "/community/events/news/grid-2.png",
-        "link": "https://blog.ag-grid.com/introducing-our-new-theming-api/",
+        "link": "https://www.ag-grid.com/blog/ag-grid-showcase-examples-demos-samples-and-extensions/",
         "linkText": "Read article"
     }
 ]

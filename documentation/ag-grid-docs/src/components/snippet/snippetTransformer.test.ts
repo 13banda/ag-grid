@@ -119,6 +119,7 @@ describe('Snippet Component', () => {
     rowDragManaged: true,
     // string property
     columnMenu: 'new',
+    rowNumbers: { suppressCellSelectionIntegration: true },
     // function property
     postSort: rowNodes => {
         // here we put Ireland rows on top while preserving the sort order  
@@ -131,6 +132,8 @@ describe('Snippet Component', () => {
             }
         }
     },
+    // getDataPath should use useCallback
+    getDataPath: (data) => data.path
 }`
         );
     });
@@ -193,5 +196,43 @@ const rowNode = api.getRowNode('55');`
     ]
 }`
         );
+    });
+
+    describe('given const with new expression', () => {
+        runSnippetFrameworkTests(
+            `const formulaStore = new Map();
+const formulaKey = (rowId, colId) => \`\${rowId}-\${colId}\`;
+
+const gridOptions = {
+    columnDefs: [
+        { field: 'sales' },
+        { field: 'tax', allowFormula: true },
+    ],
+    formulaDataSource: {
+        getFormula: ({ column, rowNode }) => formulaStore.get(formulaKey(rowNode.id, column.getColId())),
+        setFormula: ({ column, rowNode, formula }) => {
+            const key = formulaKey(rowNode.id, column.getColId());
+            if (formula === undefined) {
+                formulaStore.delete(key);
+            } else {
+                formulaStore.set(key, formula);
+            }
+        },
+    },
+}`
+        );
+    });
+
+    describe('given useMemo and useCallback properties with JS literals does not add useMemo or useCallback', () => {
+        runSnippetFrameworkTests(`const gridOptions = {
+            popupParent: -Infinity,
+            cellSelection: 'xxx',
+            rowSelection: "X",
+            sideBar: undefined,
+            statusBar: NaN,
+            autoSizeStrategy: true,
+            rowNumbers: false,
+            getDataPath: null
+        }`);
     });
 });

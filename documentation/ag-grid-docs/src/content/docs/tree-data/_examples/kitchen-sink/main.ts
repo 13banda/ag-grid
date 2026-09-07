@@ -1,10 +1,15 @@
 import type { GridApi, GridOptions } from 'ag-grid-community';
-import { ClientSideRowModelModule, ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ClientSideRowModelModule, ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { TreeDataModule } from 'ag-grid-enterprise';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([ClientSideRowModelModule, TreeDataModule, ValidationModule /* Development Only */]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ClientSideRowModelModule, TreeDataModule]);
 
 let gridApi: GridApi;
 
@@ -16,6 +21,10 @@ const gridOptions: GridOptions = {
             field: 'size',
             aggFunc: 'sum',
             valueFormatter: (params) => {
+                if (params.value == null) {
+                    return ''; // params.value can be null/undefined here (e.g. no size for this row)
+                }
+
                 const sizeInKb = params.value / 1024;
 
                 if (sizeInKb > 1024) {

@@ -4,18 +4,18 @@ import {
     ClientSideRowModelModule,
     ColumnAutoSizeModule,
     ModuleRegistry,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 
 import { getData } from './data';
 
-ModuleRegistry.registerModules([
-    ColumnAutoSizeModule,
-    CellStyleModule,
-    ClientSideRowModelModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ColumnAutoSizeModule, CellStyleModule, ClientSideRowModelModule]);
 
 const cellClassRules: CellClassRules = {
     'header-cell': 'data.section === "big-title"',
@@ -67,6 +67,8 @@ const gridOptions: GridOptions = {
     rowData: getData(),
     defaultColDef: {
         width: 100,
+        sortable: false,
+        suppressMovable: true,
     },
     autoSizeStrategy: {
         type: 'fitGridWidth',

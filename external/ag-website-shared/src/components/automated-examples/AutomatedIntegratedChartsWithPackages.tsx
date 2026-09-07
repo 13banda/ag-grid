@@ -1,8 +1,8 @@
 import { createAutomatedIntegratedCharts } from '@ag-website-shared/components/automated-examples/examples/integrated-charts/indexPackages';
+import { useIntersectionObserver } from '@ag-website-shared/utils/hooks/useIntersectionObserver';
 import { throwDevWarning } from '@ag-website-shared/utils/throwDevWarning';
 import { GRID_STAGING_SITE_URL, agChartsVersion, agGridVersion } from '@constants';
 import { getIsArchive, getIsProduction } from '@utils/env';
-import { useIntersectionObserver } from '@utils/hooks/useIntersectionObserver';
 import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
 import { useCallback, useRef, useState } from 'react';
 
@@ -18,9 +18,10 @@ const AG_GRID_CDN_URL = isArchive
       ? `https://cdn.jsdelivr.net/npm/ag-grid-enterprise@${agGridVersion}/dist/ag-grid-enterprise.min.js`
       : `${GRID_STAGING_SITE_URL}/files/ag-grid-enterprise/dist/ag-grid-enterprise.min.js`;
 
-const AG_CHARTS_CDN_URL = isProduction
-    ? `https://cdn.jsdelivr.net/npm/ag-charts-enterprise@${agChartsVersion}/dist/umd/ag-charts-enterprise.min.js`
-    : urlWithBaseUrl('/dev/ag-charts-enterprise/dist/umd/ag-charts-enterprise.js');
+const AG_CHARTS_CDN_URL =
+    isProduction && !isArchive
+        ? `https://cdn.jsdelivr.net/npm/ag-charts-enterprise@${agChartsVersion}/dist/umd/ag-charts-enterprise.min.js`
+        : urlWithBaseUrl('/dev/ag-charts-enterprise/dist/umd/ag-charts-enterprise.js');
 
 /**
  * Load automated integrated charts example using packages

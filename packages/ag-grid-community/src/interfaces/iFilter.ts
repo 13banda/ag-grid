@@ -1,22 +1,149 @@
-import type { ColDef } from '../entities/colDef';
+import type { AgPromise, IComponent } from 'ag-stack';
+
+import type { ColDef, ColKey } from '../entities/colDef';
 import type { IFloatingFilterComp } from '../filter/floating/floatingFilter';
 import type { Column } from '../interfaces/iColumn';
-import type { AgPromise } from '../utils/promise';
 import type { IAfterGuiAttachedParams } from './iAfterGuiAttachedParams';
 import type { AgGridCommon } from './iCommon';
-import type { IComponent } from './iComponent';
 import type { IRowModel } from './iRowModel';
 import type { IRowNode } from './iRowNode';
 
-export type IFilterType = string | { new (): IFilterComp } | boolean;
-export type IFloatingFilterType = string | { new (): IFloatingFilterComp };
+export type IFilterType = string | (new () => IFilterComp) | boolean;
+export type IFloatingFilterType = string | (new () => IFloatingFilterComp);
+
+export interface DoesFilterPassParams<
+    TData = any,
+    TContext = any,
+    TModel = any,
+    TCustomParams = any,
+> extends IDoesFilterPassParams<TData> {
+    model: TModel;
+    /**
+     * Utility params that would be passed to the handler, including `getValue` which provides access to the cell values.
+     */
+    handlerParams: FilterHandlerBaseParams<TData, TContext, TModel, TCustomParams>;
+}
+
+export interface FilterHandlerBaseParams<
+    TData = any,
+    TContext = any,
+    TModel = any,
+    TCustomParams = any,
+> extends SharedFilterParams<TData, TContext> {
+    filterParams: TCustomParams;
+    onModelChange: (model: TModel | null, additionalEventAttributes?: any) => void;
+    /**
+     * When using the read-only floating filter or the new filters tool panel,
+     * the display value is retrieved from the handler via `getModelAsString()`.
+     * This will automatically be called again when the filter model changes.
+     * If the display value needs to be updated without the filter model changing,
+     * this function can be called to trigger a refresh.
+     */
+    onModelAsStringChange: () => void;
+}
+
+export type QuickFilterParser = (quickFilter: string) => string[];
+export type QuickFilterMatcher = (quickFilterParts: string[], rowQuickFilterAggregateText: string) => boolean;
+export type AlwaysPassFilter<TData = any> = (rowNode: IRowNode<TData>) => boolean;
+
+export type FilterHandlerSource = 'init' | 'ui' | 'api' | 'colDef' | 'floating' | 'handler';
+
+export interface FilterHandlerParams<
+    TData = any,
+    TContext = any,
+    TModel = any,
+    TCustomParams = any,
+> extends FilterHandlerBaseParams<TData, TContext, TModel, TCustomParams> {
+    model: TModel | null;
+    source: FilterHandlerSource;
+    /**
+     * If this refresh was as a result of the filter triggering an update
+     * with additional event attributes, these will be set here
+     */
+    additionalEventAttributes?: any;
+}
+
+export interface FilterHandler<TData = any, TContext = any, TModel = any, TCustomParams = any>
+    extends SharedFilter, ReadOnlyFloatingFilterParent<TModel> {
+    /** Optional: Called once when the handler is created. */
+    init?(params: FilterHandlerParams<TData, TContext, TModel, TCustomParams>): void;
+    /**
+     * Optional: Called every time the handler is updated, e.g. when the model changes.
+     * When `source` is `'colDef'`, return `false` if the new params cannot be applied and the grid will
+     * recreate the handler with a null model. The return value is ignored for every other source.
+     */
+    refresh?(params: FilterHandlerParams<TData, TContext, TModel, TCustomParams>): void | boolean;
+    /**
+     * The grid will ask each active filter, in turn, whether each row in the grid passes. If any
+     * filter fails, then the row will be excluded from the final set.
+     */
+    doesFilterPass(params: DoesFilterPassParams<TData, TContext, TModel, TCustomParams>): boolean;
+    /**
+     * Optional: Used by AG Grid when rendering floating filters and there isn't a floating filter
+     * associated for this filter. This will happen if you create a custom filter and NOT a custom floating
+     * filter. This is also used by the new filters tool panel to display the summary.
+     */
+    getModelAsString?(model: TModel | null, source?: 'floating' | 'filterToolPanel'): string;
+    /**
+     * Optional: When using an apply button with the filter, this method will be called before the apply happens,
+     * The returned model will be applied, allowing for any validation or updates to be performed.
+     */
+    processModelToApply?(model: TModel | null): TModel | null;
+    /** Optional: Gets called once by grid when the component is being removed; if your component needs to do any cleanup, do it here */
+    destroy?(): void;
+}
+
+export interface CreateFilterHandlerFuncParams<TData = any, TValue = any, TContext = any> extends AgGridCommon<
+    TData,
+    TContext
+> {
+    colDef: ColDef<TData, TValue>;
+    column: Column<TValue>;
+}
+
+export type CreateFilterHandlerFunc<TData = any, TValue = any, TContext = any, TModel = any, TCustomParams = any> = (
+    params: CreateFilterHandlerFuncParams<TData, TValue, TContext>
+) => FilterHandler<TData, TContext, TModel, TCustomParams>;
+
+export type FilterHandlers<TData = any, TValue = any, TContext = any, TModel = any, TCustomParams = any> = {
+    [key: string]: CreateFilterHandlerFunc<TData, TValue, TContext, TModel, TCustomParams>;
+};
+
+export interface ColumnFilter<TData = any, TValue = any, TContext = any, TModel = any, TCustomParams = any> {
+    /**
+     * Filter component to use for this column.
+     * - Set to the name of a provided filter: `agNumberColumnFilter`, `agBigIntColumnFilter`, `agTextColumnFilter`, `agDateColumnFilter`.
+     * - Set to a custom filter `FilterDisplay`
+     */
+    component: any;
+    /**
+     * Contains the logic for executing the filter. If the filter is active,
+     * will be called for each row in the grid to see if it passes.
+     * If any filter fails, then the row will be excluded from the final set.
+     *
+     * Not required if providing a `handler`, or if not using Client-Side Row Model.
+     */
+    doesFilterPass?: (params: DoesFilterPassParams<TData, TContext, TModel, TCustomParams>) => boolean;
+    /**
+     * Returns a handler which contains the logic for executing the filter.
+     * Allows for more complex filter cases than `doesFilterPass`.
+     *
+     * Not required if providing `doesFilterPass` (but will take precedence), or if not using Client-Side Row Model.
+     */
+    handler?: string | CreateFilterHandlerFunc<TData, TValue, TContext, TModel, TCustomParams>;
+}
+
+export function isColumnFilterComp(filter: any): filter is ColumnFilter {
+    return typeof filter === 'object' && !!(filter as ColumnFilter).component;
+}
 
 export interface IFilterDef {
     /**
-     * Filter component to use for this column.
+     * Filter to use for this column.
      * - Set to `true` to use the default filter.
-     * - Set to the name of a provided filter: `agNumberColumnFilter`, `agTextColumnFilter`, `agDateColumnFilter`, `agMultiColumnFilter`, `agSetColumnFilter`.
-     * - Set to a `IFilterComp`.
+     * - Set to the name of a provided filter: `agNumberColumnFilter`, `agBigIntColumnFilter`, `agTextColumnFilter`, `agDateColumnFilter`, `agMultiColumnFilter`, `agSetColumnFilter`.
+     * - Set to a custom filter `IFilterComp` when `enableFilterHandlers = false`.
+     * - Set to a `ColumnFilter` when `enableFilterHandlers = true`
      */
     filter?: any;
     /** Params to be passed to the filter component specified in `filter`. */
@@ -31,16 +158,7 @@ export interface IFilterDef {
     floatingFilterComponentParams?: any;
 }
 
-export interface BaseFilter {
-    /**
-     * The grid will ask each active filter, in turn, whether each row in the grid passes. If any
-     * filter fails, then the row will be excluded from the final set. The method is provided a
-     * params object with attributes node (the rodNode the grid creates that wraps the data) and data
-     * (the data object that you provided to the grid for that row). Note that this is only called for the
-     * Client-Side Row Model, and can just return `true` if being used exclusively with other row models.
-     */
-    doesFilterPass(params: IDoesFilterPassParams): boolean;
-
+interface SharedFilter {
     /**
      * Optional: Gets called when new rows are inserted into the grid. If the filter needs to change its
      * state after rows are loaded, it can do it here. For example the set filters uses this
@@ -52,14 +170,9 @@ export interface BaseFilter {
 
     /** Optional: Called whenever any filter is changed. */
     onAnyFilterChanged?(): void;
+}
 
-    /**
-     * Optional: Used by AG Grid when rendering floating filters and there isn't a floating filter
-     * associated for this filter, this will happen if you create a custom filter and NOT a custom floating
-     * filter.
-     */
-    getModelAsString?(model: any): string;
-
+export interface SharedFilterUi extends SharedFilter {
     /**
      * Optional: A hook to perform any necessary operation just after the GUI for this component has been rendered on the screen.
      * If a parent popup is closed and reopened (e.g. for filters), this method is called each time the component is shown.
@@ -73,6 +186,26 @@ export interface BaseFilter {
      * This is useful for any logic to reset the UI state back to the model before the component is reopened.
      */
     afterGuiDetached?(): void;
+}
+
+interface ReadOnlyFloatingFilterParent<TModel = any> {
+    /**
+     * Optional: Used by AG Grid when rendering floating filters and there isn't a floating filter
+     * associated for this filter, this will happen if you create a custom filter and NOT a custom floating
+     * filter.
+     */
+    getModelAsString?(model: TModel | null): string;
+}
+
+export interface BaseFilter extends SharedFilterUi, ReadOnlyFloatingFilterParent {
+    /**
+     * The grid will ask each active filter, in turn, whether each row in the grid passes. If any
+     * filter fails, then the row will be excluded from the final set. The method is provided a
+     * params object with attributes node (the rodNode the grid creates that wraps the data) and data
+     * (the data object that you provided to the grid for that row). Note that this is only called for the
+     * Client-Side Row Model, and can just return `true` if being used exclusively with other row models.
+     */
+    doesFilterPass(params: IDoesFilterPassParams): boolean;
 }
 
 export interface IFilter extends BaseFilter {
@@ -114,11 +247,22 @@ export interface IFilter extends BaseFilter {
     refresh?(newParams: IFilterParams): boolean;
 }
 
-export interface ProvidedFilterModel {
-    filterType?: string;
+export interface FilterDisplay<TData = any, TContext = any, TModel = any, TState = any> extends SharedFilterUi {
+    /**
+     * Called when the column definition, state or model is updated.
+     *
+     * @returns {boolean} - `true` means that the component should be refreshed and kept.
+     * `false` means that it will be destroyed and a new instance created, which is what to return when
+     * the new params are not compatible with the existing component. Only honoured when the column
+     * definition changed; the return value is ignored for a state or model update.
+     */
+    refresh(newParams: FilterDisplayParams<TData, TContext, TModel, TState>): boolean;
 }
 
 export interface IFilterComp<TData = any> extends IComponent<IFilterParams<TData>>, IFilter {}
+
+export interface FilterDisplayComp<TData = any, TContext = any, TModel = any>
+    extends IComponent<FilterDisplayParams<TData, TContext, TModel>>, FilterDisplay<TData, TContext, TModel> {}
 
 export interface IDoesFilterPassParams<TData = any> {
     /** The row node in question. */
@@ -127,40 +271,61 @@ export interface IDoesFilterPassParams<TData = any> {
     data: TData;
 }
 
-export interface IFilterOptionDef {
-    /** A unique key that does not clash with the built-in filter keys. */
-    displayKey: string;
-    /** Display name for the filter. Can be replaced by a locale-specific value using a `localeTextFunc`. */
-    displayName: string;
-    /** Custom filter logic that returns a boolean based on the `filterValues` and `cellValue`. */
-    predicate?: (filterValues: any[], cellValue: any) => boolean;
-    /** Number of inputs to display for this option. Defaults to `1` if unspecified. */
-    numberOfInputs?: 0 | 1 | 2;
+export type FilterAction = 'apply' | 'clear' | 'reset' | 'cancel';
+
+/** Common filter params for all column filters (when using `enableFilterHandlers = true`) */
+export interface FilterWrapperParams {
+    /** If `true`, the filter will be wrapped in a `form` element that applies on submit. */
+    useForm?: boolean;
+    /**
+     * Specifies the buttons to be shown in the filter, in the order they should be displayed in.
+     * The options are:
+     *
+     *  - `'apply'`: If the Apply button is present, the filter is only applied after the user hits the Apply button.
+     *  - `'clear'`: The Clear button will clear the (form) details of the filter without removing any active filters on the column.
+     *  - `'reset'`: The Reset button will clear the details of the filter and any active filters on that column.
+     *  - `'cancel'`: The Cancel button will discard any changes that have been made to the filter in the UI, restoring the applied model.
+     */
+    buttons?: FilterAction[];
+    /**
+     * When this is set to `true`, the following will happen after clicking a filter button:
+     * - Apply closes popup.
+     * - Reset closes popup if Apply button is present.
+     * - Cancel closes popup.
+     *
+     * @default false
+     */
+    closeOnApply?: boolean;
+    /**
+     * If set to `true`, will disable and hide any `buttons`.
+     *
+     * @default false
+     */
+    readOnly?: boolean;
 }
 
-export interface BaseFilterParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+/**
+ * Passed to a filter callback that reads or judges a value rather than a row, such as a parser, a formatter
+ * or an input rule. It names the column so that one callback can serve every column it is configured on.
+ */
+export interface FilterInputCallbackParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
+    /** The column definition for the column this filter is on. */
+    colDef: ColDef<TData>;
+    /** The column this filter is on. */
+    column: Column;
+}
+
+export interface SharedFilterParams<TData = any, TContext = any> extends AgGridCommon<TData, TContext> {
     /** The column this filter is for. */
     column: Column;
     /** The column definition for the column. */
     colDef: ColDef<TData>;
-    /**
-     * The row model, helpful for looking up data values if needed.
-     * If the filter needs to know which rows are
-     * a) in the table,
-     * b) currently visible (i.e. not already filtered),
-     * c) which groups,
-     * d) what order - all of this can be read from the rowModel.
-     */
-    rowModel: IRowModel;
 
     /**
      * Get the cell value for the given row node and column, which can be the column ID, definition, or `Column` object.
      * If no column is provided, the column this filter is on will be used.
      */
-    getValue: <TValue = any>(
-        node: IRowNode<TData>,
-        column?: string | ColDef<TData, TValue> | Column<TValue>
-    ) => TValue | null | undefined;
+    getValue: <TValue = any>(node: IRowNode<TData>, column?: ColKey<TData, TValue>) => TValue | null | undefined;
 
     /**
      * A function callback, call with a node to be told whether the node passes all filters except the current filter.
@@ -169,6 +334,13 @@ export interface BaseFilterParams<TData = any, TContext = any> extends AgGridCom
      * items that are no longer available due to the state of other filters (like Excel type filtering).
      */
     doesRowPassOtherFilter: (rowNode: IRowNode<TData>) => boolean; // TODO: this method should be "doesRowPassOtherFilters"
+}
+
+export interface BaseFilterParams<TData = any, TContext = any> extends SharedFilterParams<TData, TContext> {
+    /**
+     * @deprecated 33.1 Use the corresponding methods on the grid API (`api`) instead.
+     */
+    rowModel: IRowModel;
 }
 
 /**
@@ -184,19 +356,100 @@ export interface IFilterParams<TData = any, TContext = any> extends BaseFilterPa
      * attributes are not used by the grid).
      */
     filterChangedCallback: (additionalEventAttributes?: any) => void;
+
     /**
      * A function callback, to be optionally called, when the filter UI changes.
      * The grid will respond with emitting a FilterModifiedEvent.
      * Apart from emitting the event, the grid takes no further action.
+     * The callback takes one optional parameter which, if included,
+     * will get merged to the FilterModifiedEvent object.
      */
-    filterModifiedCallback: () => void;
+    filterModifiedCallback: (additionalEventAttributes?: any) => void;
+}
+
+export interface FilterDisplayState<TModel = any, TState = any> {
+    /** The current filter model to be displayed in the UI. */
+    model: TModel | null;
+    /**
+     * If there is additional UI state not represented in the filter model,
+     * this will be stored here.
+     */
+    state?: TState;
+    /** If `false` and apply button is present, apply button will be disabled. */
+    valid?: boolean;
+}
+
+export type FilterDisplaySource = 'init' | 'ui' | 'api' | 'colDef' | 'handler' | 'floating';
+
+export interface FilterDisplayParams<
+    TData = any,
+    TContext = any,
+    TModel = any,
+    TState = any,
+> extends SharedFilterParams<TData, TContext> {
+    /** The current applied filter model for the component. */
+    model: TModel | null;
+    /** The current state to display in the component. */
+    state: FilterDisplayState<TModel, TState>;
+    /**
+     * Callback that should be called every time the model in the component changes.
+     * @param additionalEventAttributes If provided, will be passed to the filter changed event
+     */
+    onModelChange: (model: TModel | null, additionalEventAttributes?: any) => void;
+    /** If using the filter with apply buttons, callback that should be called every time the unapplied model in the component changes. */
+    onStateChange: (componentState: FilterDisplayState<TModel, TState>) => void;
+    /**
+     * Can be called to manually apply any of the filter actions that would be done via buttons.
+     * @param additionalEventAttributes If provided, will be passed to the filter changed event
+     * @param event If the action was via the keyboard, provide the event here for correct focus handling.
+     */
+    onAction: (action: FilterAction, additionalEventAttributes?: any, event?: KeyboardEvent) => void;
+    /**
+     * Callback that can be optionally called every time the filter UI changes.
+     * The grid will respond with emitting a FilterUiChangedEvent.
+     * Apart from emitting the event, the grid takes no further action.
+     * The callback takes one optional parameter which, if included,
+     * will get merged to the FilterUiChangedEvent object.
+     */
+    onUiChange: (additionalEventAttributes?: any) => void;
+    /**
+     * Get the filter handler instance.
+     * If using a `SimpleColumnFilter`,
+     * the handler is is a wrapper object containing the provided `doesFilterPass` callback.
+     */
+    getHandler: () => FilterHandler<TData, TContext, TModel>;
+    source: FilterDisplaySource;
+    /**
+     * If this refresh was as a result of the filter triggering an update
+     * with additional event attributes, these will be set here
+     */
+    additionalEventAttributes?: any;
 }
 
 /**
- * FilterModel represents the filter state for all columns in the grid keyed by the column id.
+ * FilterModel represents the applied filter model for all columns in the grid keyed by the column id.
  * If using inbuilt AG Grid filters then the type of the column filter model could be one of:
  *      `TextFilterModel`, `NumberFilterModel`, `DateFilterModel`, `SetFilterModel`, `IMultiFilterModel`, `AdvancedFilterModel`
  */
 export interface FilterModel {
     [colId: string]: any;
+}
+
+/**
+ * ColumnFilterState represents the filter state for all columns in the grid keyed by the column id.
+ * This excludes the filter model.
+ */
+export interface ColumnFilterState {
+    /**
+     * Filter state keyed by the column id.
+     * The values will be passed into each of the filter component params as `state.state`.
+     */
+    [colId: string]: any;
+}
+
+export interface FilterActionParams {
+    /** Column ID to perform action on. If `undefined`, will run for all columns. */
+    colId?: string;
+    /** Action to perform */
+    action: FilterAction;
 }

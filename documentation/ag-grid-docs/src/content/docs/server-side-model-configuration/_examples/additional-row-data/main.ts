@@ -1,12 +1,13 @@
 import type { GridApi, GridOptions, IServerSideDatasource, IServerSideGetRowsRequest } from 'ag-grid-community';
-import { ModuleRegistry, ValidationModule, createGrid } from 'ag-grid-community';
+import { ModuleRegistry, createGrid, enableDevValidations } from 'ag-grid-community';
 import { ServerSideRowModelApiModule, ServerSideRowModelModule } from 'ag-grid-enterprise';
 
-ModuleRegistry.registerModules([
-    ServerSideRowModelModule,
-    ServerSideRowModelApiModule,
-    ValidationModule /* Development Only */,
-]);
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
+
+ModuleRegistry.registerModules([ServerSideRowModelModule, ServerSideRowModelApiModule]);
 
 let gridApi: GridApi<IOlympicData>;
 
@@ -78,7 +79,7 @@ function createServerSideDatasource(server: any): IServerSideDatasource {
             // get data for request from our fake server
             const response = server.getData(params.request);
 
-            // simulating real server call with a 500ms delay
+            // simulating real server call with a 1000ms delay
             setTimeout(() => {
                 if (response.success) {
                     // supply rows for requested block to grid

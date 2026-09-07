@@ -1,3 +1,7 @@
+import type { CheckDataTypes } from '../entities/dataType';
+import type { CustomFilterOptionKey, ISimpleFilterModelPresetType } from '../filter/provided/iSimpleFilter';
+import type { SetFilterModelValue } from './iSetFilter';
+
 export type AdvancedFilterModel = JoinAdvancedFilterModel | ColumnAdvancedFilterModel;
 
 /** Represents a series of filter conditions joined together. */
@@ -8,15 +12,6 @@ export interface JoinAdvancedFilterModel {
     /** The filter conditions that are joined by the `type` */
     conditions: AdvancedFilterModel[];
 }
-
-/** Represents a single filter condition on a column */
-export type ColumnAdvancedFilterModel =
-    | TextAdvancedFilterModel
-    | NumberAdvancedFilterModel
-    | BooleanAdvancedFilterModel
-    | DateAdvancedFilterModel
-    | DateStringAdvancedFilterModel
-    | ObjectAdvancedFilterModel;
 
 export type TextAdvancedFilterModelType =
     | 'equals'
@@ -35,10 +30,16 @@ export type ScalarAdvancedFilterModelType =
     | 'lessThanOrEqual'
     | 'greaterThan'
     | 'greaterThanOrEqual'
+    | 'inRange'
     | 'blank'
     | 'notBlank';
 
-export type BooleanAdvancedFilterModelType = 'true' | 'false';
+/** A date column additionally offers the Date Filter's relative options, which take no value. */
+export type DateAdvancedFilterModelType = ScalarAdvancedFilterModelType | ISimpleFilterModelPresetType;
+
+export type BooleanAdvancedFilterModelType = 'true' | 'false' | 'blank' | 'notBlank';
+
+export type SetAdvancedFilterModelType = 'isAnyOf' | 'isNoneOf';
 
 /** Represents a single filter condition for a text column */
 export interface TextAdvancedFilterModel {
@@ -46,9 +47,11 @@ export interface TextAdvancedFilterModel {
     /** The ID of the column being filtered. */
     colId: string;
     /** The filter option that is being applied. */
-    type: TextAdvancedFilterModelType;
+    type: TextAdvancedFilterModelType | CustomFilterOptionKey;
     /** The value to filter on. This is the same value as displayed in the input. */
     filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
 }
 
 /** Represents a single filter condition for a number column */
@@ -57,9 +60,24 @@ export interface NumberAdvancedFilterModel {
     /** The ID of the column being filtered. */
     colId: string;
     /** The filter option that is being applied. */
-    type: ScalarAdvancedFilterModelType;
+    type: ScalarAdvancedFilterModelType | CustomFilterOptionKey;
     /** The value to filter on. */
     filter?: number;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: number;
+}
+
+/** Represents a single filter condition for a bigint column */
+interface BigIntAdvancedFilterModel {
+    filterType: 'bigint';
+    /** The ID of the column being filtered. */
+    colId: string;
+    /** The filter option that is being applied. */
+    type: ScalarAdvancedFilterModelType | CustomFilterOptionKey;
+    /** The value to filter on. */
+    filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
 }
 
 /** Represents a single filter condition for a date column */
@@ -68,9 +86,11 @@ export interface DateAdvancedFilterModel {
     /** The ID of the column being filtered. */
     colId: string;
     /** The filter option that is being applied. */
-    type: ScalarAdvancedFilterModelType;
+    type: DateAdvancedFilterModelType | CustomFilterOptionKey;
     /** The value to filter on. This is in format `YYYY-MM-DD`. */
     filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
 }
 
 /** Represents a single filter condition for a date string column */
@@ -79,9 +99,11 @@ export interface DateStringAdvancedFilterModel {
     /** The ID of the column being filtered. */
     colId: string;
     /** The filter option that is being applied. */
-    type: ScalarAdvancedFilterModelType;
+    type: DateAdvancedFilterModelType | CustomFilterOptionKey;
     /** The value to filter on. This is in format `YYYY-MM-DD`. */
     filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
 }
 
 /** Represents a single filter condition for a boolean column */
@@ -90,7 +112,11 @@ export interface BooleanAdvancedFilterModel {
     /** The ID of the column being filtered. */
     colId: string;
     /** The filter option that is being applied. */
-    type: BooleanAdvancedFilterModelType;
+    type: BooleanAdvancedFilterModelType | CustomFilterOptionKey;
+    /** The value to filter on. Only used by Custom Filter Options, as the built-in options take none. */
+    filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
 }
 
 /** Represents a single filter condition for an object column */
@@ -98,8 +124,68 @@ export interface ObjectAdvancedFilterModel {
     filterType: 'object';
     /** The ID of the column being filtered. */
     colId: string;
-    /** The filter option that is being applied. */
-    type: TextAdvancedFilterModelType;
     /** The value to filter on. This is the same value as displayed in the input. */
     filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
+    /** The filter option that is being applied. */
+    type: TextAdvancedFilterModelType | CustomFilterOptionKey;
 }
+
+export interface DateTimeAdvancedFilterModel {
+    filterType: 'dateTime';
+    /** The ID of the column being filtered. */
+    colId: string;
+    /** The filter option that is being applied. */
+    type: DateAdvancedFilterModelType | CustomFilterOptionKey;
+    /** The value to filter on. This is in format `YYYY-MM-DDTHH:mm:ss`. */
+    filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
+}
+
+export interface DateTimeStringAdvancedFilterModel {
+    filterType: 'dateTimeString';
+    /** The ID of the column being filtered. */
+    colId: string;
+    /** The filter option that is being applied. */
+    type: DateAdvancedFilterModelType | CustomFilterOptionKey;
+    /** The value to filter on. This is in format `YYYY-MM-DD HH:mm:ss`. */
+    filter?: string;
+    /** The second value to filter on, where the filter option takes two. */
+    filterTo?: string;
+}
+
+/** Represents a single filter condition for a column configured with a Set Filter */
+export interface SetAdvancedFilterModel {
+    filterType: 'set';
+    /** The ID of the column being filtered. */
+    colId: string;
+    /** The filter option that is being applied. */
+    type: SetAdvancedFilterModelType;
+    /** The Set Filter keys to filter on, as stored by the Set Filter model. */
+    values: SetFilterModelValue;
+}
+
+/** Represents a single filter condition on a column */
+export type ColumnAdvancedFilterModel =
+    | BooleanAdvancedFilterModel
+    | ObjectAdvancedFilterModel
+    | DateAdvancedFilterModel
+    | DateStringAdvancedFilterModel
+    | DateTimeAdvancedFilterModel
+    | DateTimeStringAdvancedFilterModel
+    | BigIntAdvancedFilterModel
+    | NumberAdvancedFilterModel
+    | TextAdvancedFilterModel
+    | SetAdvancedFilterModel;
+
+// Line below used for type checking. `set` is excluded because it comes from the column's filter rather
+// than its Cell Data Type, and a key outside `BaseCellDataType` makes the check pass on anything.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _CheckColumnAdvancedFilterModel = CheckDataTypes<{
+    [K in Exclude<ColumnAdvancedFilterModel['filterType'], 'set'>]: ColumnAdvancedFilterModel & { filterType: K };
+}>;
+// The exclusion above leaves `set` the one member with no check, so it gets its own.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _CheckSetAdvancedFilterModel = SetAdvancedFilterModel extends ColumnAdvancedFilterModel ? true : never;

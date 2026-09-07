@@ -3,8 +3,17 @@
   "editor.tabSize": 4,
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "files.associations": {
+    "*.mdoc": "markdown",
+    "*.snyk": "yaml"
+  },
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "yaml.format.singleQuote": true,
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml",
+    "editor.tabSize": 4
   },
   "search.exclude": {
     "**/vitest.config.js.timestamp*": true,
@@ -15,9 +24,10 @@
     "**/node_modules": true,
     "**/typings": true
   },
-  "typescript.preferences.autoImportFileExcludePatterns": ["**/main"],
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "eslint.experimental.useFlatConfig": true,
+  "js/ts.preferences.autoImportFileExcludePatterns": ["**/main", "**/main-umd*"],
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "eslint.useFlatConfig": true,
+  "eslint.workingDirectories": [{ "mode": "auto" }],
   "[typescript]": {
     "editor.autoClosingBrackets": "always"
   },
@@ -76,9 +86,10 @@
   "cSpell.files": ["**/*", "!**/{package,settings,project,tsconfig}.json"],
   "git.detectSubmodulesLimit": 20,
   "files.exclude": {
-    "**/vitest.config.*.timestamp*": true,
+    "**/.angular/": true,
+    "**/.DS_Store": true,
     "**/.git": true,
-    "**/.DS_Store": true
+    "**/vitest.config.*.timestamp*": true
   },
   "[scss]": {
     "editor.detectIndentation": false,
@@ -99,7 +110,7 @@
   ],
   "git.autoRepositoryDetection": "subFolders",
   "git.repositoryScanIgnoredFolders": ["node_modules", "dist", "typings"],
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
   "angular.enable-strict-mode-prompt": false,
   "json.schemas": [
     {
@@ -112,7 +123,16 @@
             "description": "The extra scripts / styles to be added to the example index.html. Options are defined in .vscode/settings.json to match those supported in Extras.tsx",
             "items": {
               "type": "string",
-              "enum": ["jquery", "jqueryui", "alasql", "flatpickr", "fontawesome", "xlsx-style", "materialdesignicons"]
+              "enum": [
+                "jquery",
+                "jqueryui",
+                "alasql",
+                "flatpickr",
+                "fontawesome",
+                "xlsx",
+                "materialdesignicons",
+                "seedrandom"
+              ]
             }
           },
           "noStyle": {
@@ -135,7 +155,13 @@
       }
     }
   ],
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "vitest.workspaceConfig": "vitest.workspace.ts",
-  "jest.rootPath": "testing/behavioural",
-  "jest.runMode": "watch"
+  "files.watcherExclude": {
+    "**/.nx/**": true,
+    "**/dist/**": true,
+    "**/node_modules/**": true
+  }
 }

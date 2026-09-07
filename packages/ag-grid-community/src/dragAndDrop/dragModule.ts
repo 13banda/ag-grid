@@ -4,13 +4,20 @@ import { DndSourceComp } from '../rendering/dndSourceComp';
 import { VERSION } from '../version';
 import { DragAndDropImageComponent } from './dragAndDropImageComponent';
 import { DragAndDropService } from './dragAndDropService';
-import { addRowDropZone, getRowDropZoneParams, removeRowDropZone } from './dragApi';
+import {
+    addRowDropZone,
+    getRowDropPositionIndicator,
+    getRowDropZoneParams,
+    removeRowDropZone,
+    setRowDropPositionIndicator,
+} from './dragApi';
 import { DragService } from './dragService';
 import { HorizontalResizeService } from './horizontalResizeService';
 import { RowDragService } from './rowDragService';
+import { RowDropHighlightService } from './rowDropHighlightService';
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const DragModule: _ModuleWithoutApi = {
     moduleName: 'Drag',
@@ -19,7 +26,7 @@ export const DragModule: _ModuleWithoutApi = {
 };
 
 /**
- * @feature Import & Export -> Drag & Drop
+ * @feature import & Export -> Drag & Drop
  * @colDef dndSource, dndSourceOnRowDrag
  */
 export const DragAndDropModule: _ModuleWithoutApi = {
@@ -35,7 +42,7 @@ export const DragAndDropModule: _ModuleWithoutApi = {
 };
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const SharedDragAndDropModule: _ModuleWithoutApi = {
     moduleName: 'SharedDragAndDrop',
@@ -74,20 +81,22 @@ export const SharedDragAndDropModule: _ModuleWithoutApi = {
  * @feature Rows -> Row Dragging
  * @colDef rowDrag
  */
-export const RowDragModule: _ModuleWithApi<_DragGridApi> = {
+export const RowDragModule: _ModuleWithApi<_DragGridApi<any>> = {
     moduleName: 'RowDrag',
     version: VERSION,
-    beans: [RowDragService],
+    beans: [RowDropHighlightService, RowDragService],
     apiFunctions: {
         addRowDropZone,
         removeRowDropZone,
         getRowDropZoneParams,
+        getRowDropPositionIndicator,
+        setRowDropPositionIndicator,
     },
     dependsOn: [SharedDragAndDropModule],
 };
 
 /**
- * @internal
+ * @internal AG_GRID_INTERNAL - Not for public use. Can change / be removed at any time.
  */
 export const HorizontalResizeModule: _ModuleWithoutApi = {
     moduleName: 'HorizontalResize',

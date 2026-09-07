@@ -1,7 +1,9 @@
 import ScrollingGallery from '@ag-website-shared/components/community/components/events/ScrollingGallery';
+import { COMMUNITY_EVENTS_LIMIT } from '@ag-website-shared/components/community/constants';
 import { Icon } from '@ag-website-shared/components/icon/Icon';
 import { useDarkmode } from '@utils/hooks/useDarkmode';
 import { urlWithBaseUrl } from '@utils/urlWithBaseUrl';
+import { useEffect, useState } from 'react';
 
 import styles from './UpcomingEvents.module.scss';
 
@@ -9,17 +11,20 @@ const filterEvents = (events) => {
     const filteredEvents = events.filter(
         (event) => new Date(event.startDate).getFullYear() == new Date().getFullYear()
     );
-    return filteredEvents.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+    return filteredEvents
+        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+        .slice(filteredEvents.length - COMMUNITY_EVENTS_LIMIT, filteredEvents.length);
 };
 
 const UpcomingEvents = ({ images, events }) => {
     const [darkMode] = useDarkmode();
-    const currEvents = filterEvents(events);
+    const [currEvents, setCurrEvents] = useState(filterEvents(events));
 
     // Function to format date
     const formatDate = (dateString) => {
         const date = new Date(dateString);
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        const options = { year: 'numeric', month: 'short', day: 'numeric' };
         const formattedDate = new Intl.DateTimeFormat('en-US', options).format(date);
 
         // Append 'st', 'nd', 'rd' or 'th' to the day number
@@ -37,11 +42,21 @@ const UpcomingEvents = ({ images, events }) => {
         return formattedDate.replace(/(\d+)(,)/, `$1${suffix},`);
     };
 
+    useEffect(() => {
+        const filteredEventsWithImages = filterEvents(events).map((event) => {
+            return {
+                ...event,
+                image: urlWithBaseUrl(darkMode ? event.logo : event.logoLight),
+            };
+        });
+        setCurrEvents(filteredEventsWithImages);
+    }, [darkMode]);
+
     return (
         <div className={styles.container}>
             <div className={styles.eventDetailsContainer}>
                 <ScrollingGallery images={images} />
-                <div className={styles.eventTilesContainer}>
+                <div className={styles.eventTilesContainer} style={{ '--num-event-links': COMMUNITY_EVENTS_LIMIT }}>
                     {currEvents.map((event, index) => (
                         <a href={event.eventPage} target="_blank" className={styles.linkWrapper} key={index}>
                             <div key={index} className={styles.eventTile}>
@@ -50,11 +65,9 @@ const UpcomingEvents = ({ images, events }) => {
                                     {event.location}
                                 </span>
                                 <span className={styles.conferenceIcon}>
-                                    <img
-                                        className={styles.organiserLogo}
-                                        src={urlWithBaseUrl(darkMode ? event.logo : event.logoLight)}
-                                        alt={`${event.logo}`}
-                                    />
+                                    {event.image && (
+                                        <img className={styles.organiserLogo} src={event.image} alt={`${event.logo}`} />
+                                    )}
                                 </span>
                                 <span className={styles.title}>{event.title}</span>
                                 <span className={styles.description}>{event.description}</span>

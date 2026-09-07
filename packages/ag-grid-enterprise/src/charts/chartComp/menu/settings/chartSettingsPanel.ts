@@ -1,15 +1,7 @@
 import type { AgChartThemePalette } from 'ag-charts-types';
+import { RefPlaceholder, _areEqual, _clearElement, _getAbsoluteWidth, _radioCssClass, _setDisplayed } from 'ag-stack';
 
-import {
-    Component,
-    RefPlaceholder,
-    _areEqual,
-    _clearElement,
-    _createIconNoSpan,
-    _getAbsoluteWidth,
-    _radioCssClass,
-    _setDisplayed,
-} from 'ag-grid-community';
+import { Component, _createElement, _createIconNoSpan } from 'ag-grid-community';
 
 import type { AgChartsExports } from '../../../agChartsExports';
 import type { ChartController } from '../../chartController';
@@ -52,8 +44,15 @@ export class ChartSettingsPanel extends Component {
     public postConstruct() {
         this.resetPalettes();
 
-        this.ePrevBtn.insertAdjacentElement('afterbegin', _createIconNoSpan('chartsThemePrevious', this.beans)!);
-        this.eNextBtn.insertAdjacentElement('afterbegin', _createIconNoSpan('chartsThemeNext', this.beans)!);
+        const isRtl = this.gos.get('enableRtl');
+        this.ePrevBtn.insertAdjacentElement(
+            'afterbegin',
+            _createIconNoSpan(isRtl ? 'chartsThemeNext' : 'chartsThemePrevious', this.beans)!
+        );
+        this.eNextBtn.insertAdjacentElement(
+            'afterbegin',
+            _createIconNoSpan(isRtl ? 'chartsThemePrevious' : 'chartsThemeNext', this.beans)!
+        );
 
         this.addManagedElementListeners(this.ePrevBtn, { click: () => this.setActivePalette(this.getPrev(), 'left') });
         this.addManagedElementListeners(this.eNextBtn, { click: () => this.setActivePalette(this.getNext(), 'right') });
@@ -72,6 +71,9 @@ export class ChartSettingsPanel extends Component {
         // the panel is not immediately visible due to the slide animation, so we add a
         // setTimeout to wait until the panel animation is over and is able to scroll
         setTimeout(() => {
+            if (!this.isAlive()) {
+                return;
+            }
             const isMiniChartsContainerVisible = (miniChartsContainers: MiniChartsContainer) => {
                 return !miniChartsContainers.getGui().classList.contains('ag-hidden');
             };
@@ -89,7 +91,6 @@ export class ChartSettingsPanel extends Component {
 
     private resetPalettes(forceReset?: boolean): void {
         const palettes = this.chartController.getPalettes();
-        const themeTemplateParameters = this.chartController.getThemeTemplateParameters();
         const chartGroups = this.gos.get('chartToolPanelsDef')?.settingsPanel?.chartGroupsDef;
 
         if ((_areEqual(palettes, this.palettes) && !forceReset) || this.isAnimating) {
@@ -113,14 +114,7 @@ export class ChartSettingsPanel extends Component {
             const themeName = themes[index];
             const isCustomTheme = !isStockTheme(themeName, (this.beans.agChartsExports as AgChartsExports)._Theme);
             const miniChartsContainer = this.createBean(
-                new MiniChartsContainer(
-                    this.chartController,
-                    fills,
-                    strokes,
-                    themeTemplateParameters[index],
-                    isCustomTheme,
-                    chartGroups
-                )
+                new MiniChartsContainer(this.chartController, fills, strokes, isCustomTheme, chartGroups)
             );
 
             this.miniChartsContainers.push(miniChartsContainer);
@@ -139,8 +133,7 @@ export class ChartSettingsPanel extends Component {
     }
 
     private addCardLink(index: number): void {
-        const link = document.createElement('div');
-        link.classList.add('ag-chart-settings-card-item');
+        const link = _createElement({ tag: 'div', cls: 'ag-chart-settings-card-item' });
 
         this.addManagedElementListeners(link, {
             click: () => {
@@ -197,8 +190,8 @@ export class ChartSettingsPanel extends Component {
         const animatingClass = 'ag-animating';
 
         futurePalette.setDisplayed(true);
-        currentPalette.addCssClass(animatingClass);
-        futurePalette.addCssClass(animatingClass);
+        currentPalette.addCss(animatingClass);
+        futurePalette.addCss(animatingClass);
 
         this.chartController.setChartThemeName(this.themes[index]);
 
@@ -210,8 +203,8 @@ export class ChartSettingsPanel extends Component {
         window.setTimeout(() => {
             this.isAnimating = false;
 
-            currentPalette.removeCssClass(animatingClass);
-            futurePalette.removeCssClass(animatingClass);
+            currentPalette.removeCss(animatingClass);
+            futurePalette.removeCss(animatingClass);
             currentPalette.setDisplayed(false);
         }, 300);
     }

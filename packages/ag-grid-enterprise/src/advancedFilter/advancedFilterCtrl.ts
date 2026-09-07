@@ -1,13 +1,22 @@
-import type { BeanCollection, CtrlsService, Environment, IAdvancedFilterCtrl, PopupService } from 'ag-grid-community';
-import { BeanStub, _getAbsoluteHeight, _getAbsoluteWidth, _removeFromParent } from 'ag-grid-community';
+import { _getAbsoluteHeight, _getAbsoluteWidth, _initStyledRoot } from 'ag-stack';
 
-import { AgDialog } from '../widgets/agDialog';
+import type {
+    BeanCollection,
+    CtrlsService,
+    Environment,
+    IAdvancedFilterCtrl,
+    IPinnedSectionCompHost,
+    PopupService,
+} from 'ag-grid-community';
+import { BeanStub, _clamp } from 'ag-grid-community';
+
+import { Dialog } from '../widgets/dialog';
 import { AdvancedFilterComp } from './advancedFilterComp';
 import type { AdvancedFilterExpressionService } from './advancedFilterExpressionService';
 import { AdvancedFilterHeaderComp } from './advancedFilterHeaderComp';
 import { AdvancedFilterBuilderComp } from './builder/advancedFilterBuilderComp';
 
-export type AdvancedFilterCtrlEvent = 'advancedFilterBuilderClosed';
+type AdvancedFilterCtrlEvent = 'advancedFilterBuilderClosed';
 export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implements IAdvancedFilterCtrl {
     private ctrlsSvc: CtrlsService;
     private popupSvc: PopupService;
@@ -22,10 +31,12 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
     }
 
     private eHeaderComp: AdvancedFilterHeaderComp | undefined;
+    private headerCompHost: IPinnedSectionCompHost | undefined;
     private eFilterComp: AdvancedFilterComp | undefined;
+    private disconnectFilterComp: (() => void) | undefined;
     private hasAdvancedFilterParent: boolean;
     private eBuilderComp: AdvancedFilterBuilderComp | undefined;
-    private eBuilderDialog: AgDialog | undefined;
+    private eBuilderDialog: Dialog | undefined;
     private builderDestroySource?: 'api' | 'ui';
 
     constructor(private enabled: boolean) {
@@ -42,26 +53,30 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
         });
 
         this.addManagedPropertyListener('advancedFilterParent', () => this.updateComps());
+        this.addManagedPropertyListener('advancedFilterBuilderParams', (event) => {
+            if (event.currentValue?.suppressFullScreenButton !== event.previousValue?.suppressFullScreenButton) {
+                this.eBuilderDialog?.setMaximizable(event.currentValue?.suppressFullScreenButton ?? true);
+            }
+        });
 
         this.addDestroyFunc(() => {
-            this.destroyAdvancedFilterComp();
+            this.destroyFilterComp();
+            if (this.eHeaderComp) {
+                this.headerCompHost?.unmountComp(this.eHeaderComp.getGui());
+                this.destroyBean(this.eHeaderComp);
+                this.eHeaderComp = undefined;
+                this.headerCompHost = undefined;
+            }
             this.destroyBean(this.eBuilderComp);
-            if (this.eBuilderDialog && this.eBuilderDialog.isAlive()) {
+            if (this.eBuilderDialog?.isAlive()) {
                 this.destroyBean(this.eBuilderDialog);
             }
         });
     }
 
-    public setupHeaderComp(eCompToInsertBefore: HTMLElement): void {
-        if (this.eHeaderComp) {
-            this.eHeaderComp?.getGui().remove();
-            this.destroyBean(this.eHeaderComp);
-        }
-
-        this.eHeaderComp = this.createManagedBean(
-            new AdvancedFilterHeaderComp(this.enabled && !this.hasAdvancedFilterParent)
-        );
-        eCompToInsertBefore.insertAdjacentElement('beforebegin', this.eHeaderComp.getGui());
+    public mountTopSectionComp(host: IPinnedSectionCompHost): void {
+        this.headerCompHost = host;
+        this.syncHeaderComp();
     }
 
     public focusHeaderComp(): boolean {
@@ -106,16 +121,21 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
 
         const { width, height, minWidth } = this.getBuilderDialogSize();
 
+        const { suppressFullScreenButton } = {
+            suppressFullScreenButton: false,
+            ...this.gos.get('advancedFilterBuilderParams'),
+        };
+
         this.eBuilderComp = this.createBean(new AdvancedFilterBuilderComp());
         this.eBuilderDialog = this.createBean(
-            new AgDialog({
+            new Dialog({
                 title: this.advFilterExpSvc.translate('advancedFilterBuilderTitle'),
                 component: this.eBuilderComp,
                 width,
                 height,
                 resizable: true,
                 movable: true,
-                maximizable: true,
+                maximizable: !suppressFullScreenButton,
                 centered: true,
                 closable: true,
                 minWidth,
@@ -156,7 +176,7 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
         const maxWidth = Math.round(_getAbsoluteWidth(popupParent)) - 2; // assume 1 pixel border
         const maxHeight = Math.round(_getAbsoluteHeight(popupParent) * 0.75) - 2;
 
-        const width = Math.min(Math.max(600, minWidth), maxWidth);
+        const width = _clamp(700, minWidth, maxWidth);
         const height = Math.min(600, maxHeight);
 
         return { width, height, minWidth };
@@ -169,14 +189,14 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
 
     private updateComps(): void {
         this.setAdvancedFilterComp();
-        this.setHeaderCompEnabled();
+        this.syncHeaderComp();
         this.eventSvc.dispatchEvent({
             type: 'headerHeightChanged',
         });
     }
 
     private setAdvancedFilterComp(): void {
-        this.destroyAdvancedFilterComp();
+        this.destroyFilterComp();
         if (!this.enabled) {
             return;
         }
@@ -188,24 +208,39 @@ export class AdvancedFilterCtrl extends BeanStub<AdvancedFilterCtrlEvent> implem
             const eAdvancedFilterComp = this.createBean(new AdvancedFilterComp());
             const eAdvancedFilterCompGui = eAdvancedFilterComp.getGui();
 
-            this.environment.applyThemeClasses(eAdvancedFilterCompGui);
-
-            eAdvancedFilterCompGui.classList.add(this.gos.get('enableRtl') ? 'ag-rtl' : 'ag-ltr');
-
-            advancedFilterParent.appendChild(eAdvancedFilterCompGui);
+            this.disconnectFilterComp = _initStyledRoot(this.environment, advancedFilterParent, eAdvancedFilterCompGui);
 
             this.eFilterComp = eAdvancedFilterComp;
         }
     }
 
-    private setHeaderCompEnabled(): void {
-        this.eHeaderComp?.setEnabled(this.enabled && !this.hasAdvancedFilterParent);
+    private syncHeaderComp(): void {
+        const headerCompHost = this.headerCompHost;
+        if (!headerCompHost) {
+            return;
+        }
+
+        const shouldShowInPinnedTop = this.enabled && !this.hasAdvancedFilterParent;
+        if (!shouldShowInPinnedTop) {
+            if (!this.eHeaderComp) {
+                return;
+            }
+            headerCompHost.unmountComp(this.eHeaderComp.getGui());
+            this.destroyBean(this.eHeaderComp);
+            this.eHeaderComp = undefined;
+            return;
+        }
+
+        if (!this.eHeaderComp) {
+            this.eHeaderComp = this.createManagedBean(new AdvancedFilterHeaderComp(true));
+            headerCompHost.mountComp(this.eHeaderComp.getGui());
+        }
+
+        this.eHeaderComp.refreshLayout();
     }
 
-    private destroyAdvancedFilterComp(): void {
-        if (this.eFilterComp) {
-            _removeFromParent(this.eFilterComp.getGui());
-            this.destroyBean(this.eFilterComp);
-        }
+    private destroyFilterComp(): void {
+        this.disconnectFilterComp?.();
+        this.destroyBean(this.eFilterComp);
     }
 }

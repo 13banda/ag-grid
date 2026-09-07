@@ -5,10 +5,15 @@ import {
     ExternalFilterModule,
     ModuleRegistry,
     NumberFilterModule,
-    ValidationModule,
     createGrid,
+    enableDevValidations,
 } from 'ag-grid-community';
 import { ColumnMenuModule, ColumnsToolPanelModule, ContextMenuModule, SetFilterModule } from 'ag-grid-enterprise';
+
+if (process.env.NODE_ENV !== 'production') {
+    // Enable extended validations only for development
+    enableDevValidations();
+}
 
 ModuleRegistry.registerModules([
     ExternalFilterModule,
@@ -19,7 +24,6 @@ ModuleRegistry.registerModules([
     SetFilterModule,
     NumberFilterModule,
     DateFilterModule,
-    ValidationModule /* Development Only */,
 ]);
 
 const dateFilterParams: IDateFilterParams = {
@@ -43,17 +47,15 @@ const dateFilterParams: IDateFilterParams = {
 
 const columnDefs: ColDef[] = [
     { field: 'athlete', minWidth: 180 },
-    { field: 'age', filter: 'agNumberColumnFilter', maxWidth: 80 },
+    { field: 'age', filter: 'agNumberColumnFilter' },
     { field: 'country' },
-    { field: 'year', maxWidth: 90 },
+    { field: 'year' },
     {
         field: 'date',
         filter: 'agDateColumnFilter',
         filterParams: dateFilterParams,
     },
-    { field: 'gold', filter: 'agNumberColumnFilter' },
-    { field: 'silver', filter: 'agNumberColumnFilter' },
-    { field: 'bronze', filter: 'agNumberColumnFilter' },
+    { field: 'total', filter: 'agNumberColumnFilter' },
 ];
 
 let gridApi: GridApi<IOlympicData>;
@@ -86,7 +88,7 @@ function doesExternalFilterPass(node: IRowNode<IOlympicData>): boolean {
             case 'above50':
                 return node.data.age > 50;
             case 'dateAfter2008':
-                return asDate(node.data.date) > new Date(2008, 1, 1);
+                return asDate(node.data.date) > new Date(2008, 0, 1);
             default:
                 return true;
         }

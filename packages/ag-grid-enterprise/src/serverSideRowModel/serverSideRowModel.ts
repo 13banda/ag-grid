@@ -1,9 +1,12 @@
+import { _areEqual, _debounce, _jsonEquals } from 'ag-stack';
+
 import type {
     AdvancedFilterModel,
     AgColumn,
     BeanCollection,
     ColumnModel,
     ColumnNameService,
+    ColumnPivotChangedEvent,
     ColumnVO,
     FilterManager,
     FilterModel,
@@ -14,6 +17,7 @@ import type {
     IServerSideRowModel,
     LoadSuccessParams,
     NamedBean,
+    OverlayType,
     RefreshServerSideParams,
     RowBounds,
     RowModelType,
@@ -25,14 +29,16 @@ import type {
 } from 'ag-grid-community';
 import {
     BeanStub,
+    GRAND_TOTAL_ROW_ID,
+    GROUP_TOTAL_ROW_ID_PREFIX,
+    ROOT_NODE_ID,
     RowNode,
-    _debounce,
+    _addRowHeightChangedListener,
     _getRowHeightAsNumber,
     _getRowHeightForNode,
+    _getSortModel,
     _isGetRowHeightFunction,
     _isRowSelection,
-    _jsonEquals,
-    _warn,
 } from 'ag-grid-community';
 
 import type { NodeManager } from './nodeManager';
@@ -53,6 +59,8 @@ export interface SSRMParams {
 
 export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSideRowModel {
     beanName = 'rowModel' as const;
+
+    public readonly hierarchical: boolean = true;
 
     private colModel: ColumnModel;
     private colNames: ColumnNameService;
@@ -82,18 +90,18 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         this.pivotColDefSvc = beans.pivotColDefSvc;
     }
 
-    private onRowHeightChanged_debounced = _debounce(this, this.onRowHeightChanged.bind(this), 100);
-
     public rootNode: RowNode;
     private datasource: IServerSideDatasource | undefined;
 
     private storeParams: SSRMParams;
 
-    private pauseStoreUpdateListening = false;
-
     private started = false;
 
+    private lastDefaultRowHeight?: number;
+
     private managingPivotResultColumns = false;
+
+    private pivotResultFields?: string[];
 
     // we don't implement as lazy row heights is not supported in this row model
     public ensureRowHeightsValid(): boolean {
@@ -124,10 +132,11 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             newColumnsLoaded: this.onColumnEverything.bind(this),
             storeUpdated: this.onStoreUpdated.bind(this),
             columnValueChanged: resetListener,
-            columnPivotChanged: resetListener,
+            columnPivotChanged: this.onPivotChanged.bind(this),
             columnRowGroupChanged: resetListener,
             columnPivotModeChanged: resetListener,
         });
+        _addRowHeightChangedListener(this, () => this.onRowHeightStyleChanged());
 
         this.addManagedPropertyListeners(
             [
@@ -142,7 +151,9 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             ],
             resetListener
         );
-        this.addManagedPropertyListener('groupAllowUnbalanced', () => this.onStoreUpdated());
+        this.addManagedPropertyListeners(['groupAllowUnbalanced', 'groupTotalRow', 'grandTotalRow'], () =>
+            this.onStoreUpdated()
+        );
         this.addManagedPropertyListener('rowHeight', () => this.resetRowHeights());
         this.verifyProps();
 
@@ -159,7 +170,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
 
     private verifyProps(): void {
         if (_isRowSelection(this.gos) && !this.gos.exists('getRowId')) {
-            _warn(188);
+            this.warn(188, { feature: 'selection' });
         }
     }
 
@@ -218,7 +229,9 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         // if the columns are found, also ensures the field and aggFunc properties have not been changed.
         const areColsSame = (params: { oldCols: ColumnVO[]; newCols: ColumnVO[]; allowRemovedColumns?: boolean }) => {
             const oldColsMap: { [key: string]: ColumnVO } = {};
-            params.oldCols.forEach((col) => (oldColsMap[col.id] = col));
+            for (const col of params.oldCols) {
+                oldColsMap[col.id] = col;
+            }
 
             const allColsUnchanged = params.newCols.every((col) => {
                 const equivalentCol = oldColsMap[col.id];
@@ -232,7 +245,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             return allColsUnchanged && !missingCols;
         };
 
-        const sortModelDifferent = !_jsonEquals(this.storeParams.sortModel, this.sortSvc?.getSortModel() ?? []);
+        const sortModelDifferent = !_jsonEquals(this.storeParams.sortModel, _getSortModel(this.sortSvc));
         const rowGroupDifferent = !areColsSame({
             oldCols: this.storeParams.rowGroupCols,
             newCols: rowGroupColumnVos,
@@ -263,8 +276,43 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         }
     }
 
+    /** A `pivotSort` toggle reorders the pivot result columns without changing what the server is asked for,
+     *  so re-derive the column defs from the fields already loaded instead of refetching every block. */
+    private onPivotChanged(event: ColumnPivotChangedEvent): void {
+        if (!this.arePivotColsUnchanged()) {
+            this.resetRootStore();
+            return;
+        }
+        const pivotResultCols = this.pivotResultCols;
+        // Application-supplied columns win: `setPivotResultColumns` hands the order to the application, even if
+        // this row model generated columns from `pivotResultFields` earlier. Re-order the applied ones in place.
+        if (pivotResultCols?.suppliedColDefs) {
+            pivotResultCols.resortPivotResultCols(event.source);
+            return;
+        }
+        const pivotResultFields = this.pivotResultFields;
+        if (this.managingPivotResultColumns && pivotResultFields) {
+            this.generateSecondaryColumns(pivotResultFields);
+        }
+    }
+
+    /** True when the active pivot columns, in order, match the ones the current store was built with. */
+    private arePivotColsUnchanged(): boolean {
+        const oldCols = this.storeParams?.pivotCols;
+        if (!oldCols) {
+            return false;
+        }
+        const newCols = this.columnsToValueObjects(this.pivotColsSvc?.columns);
+        return _areEqual(
+            oldCols,
+            newCols,
+            (oldCol, newCol) =>
+                oldCol.id === newCol.id && oldCol.field === newCol.field && oldCol.aggFunc === newCol.aggFunc
+        );
+    }
+
     private destroyRootStore(): void {
-        if (!this.rootNode || !this.rootNode.childStore) {
+        if (!this.rootNode?.childStore) {
             return;
         }
         this.rootNode.childStore = this.destroyBean(this.rootNode.childStore)!;
@@ -292,12 +340,38 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             return;
         }
 
+        this.pivotResultFields = pivotFields;
+        const pivotResultCols = this.pivotResultCols;
+        // `setPivotResultColumns` hands the pivot result columns to the application until it clears them again, so
+        // an ordinary refresh, filter, sort or block response must not put server-derived columns back in their place.
+        if (pivotResultCols?.suppliedColDefs) {
+            return;
+        }
         const pivotColumnGroupDefs = this.pivotColDefSvc.createColDefsFromFields(pivotFields);
         this.managingPivotResultColumns = true;
-        this.pivotResultCols?.setPivotResultCols(pivotColumnGroupDefs, 'rowModelUpdated');
+        pivotResultCols?.setPivotResultCols(pivotColumnGroupDefs, 'rowModelUpdated');
+    }
+
+    private onRowHeightStyleChanged(): void {
+        const { rootNode, beans } = this;
+        if (!rootNode || beans.rowAutoHeight?.active) {
+            return;
+        }
+        // `resetRowHeights` walks every node, so skip a change that leaves the height alone. The
+        // dummy root is not a displayed row, and resolving it would hand `getRowHeight` empty data.
+        const defaultRowHeight = beans.environment.getDefaultRowHeight();
+        if (defaultRowHeight === this.lastDefaultRowHeight) {
+            return;
+        }
+        this.lastDefaultRowHeight = defaultRowHeight;
+        this.resetRowHeights();
     }
 
     public resetRowHeights(): void {
+        if (!this.rootNode) {
+            return;
+        }
+
         const atLeastOne = this.resetRowHeightsForAllRowNodes();
 
         const rootNodeHeight = _getRowHeightForNode(this.beans, this.rootNode);
@@ -330,7 +404,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
 
             if (rowNode.sibling) {
                 const siblingRowHeight = _getRowHeightForNode(this.beans, rowNode.sibling);
-                detailNode.setRowHeight(siblingRowHeight.height, siblingRowHeight.estimated);
+                detailNode?.setRowHeight(siblingRowHeight.height, siblingRowHeight.estimated);
             }
             atLeastOne = true;
         });
@@ -344,6 +418,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         this.rootNode = new RowNode(this.beans);
         this.rootNode.group = true;
         this.rootNode.level = -1;
+        this.beans.selectionSvc?.syncInRowNode(this.rootNode);
 
         if (this.datasource) {
             this.storeParams = this.createStoreParams();
@@ -355,6 +430,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             // if managing pivot columns, also reset secondary columns.
             this.pivotResultCols?.setPivotResultCols(null, 'api');
             this.managingPivotResultColumns = false;
+            this.pivotResultFields = undefined;
         }
 
         // this gets the row to render rows (or remove the previously rendered rows, as it's blank to start).
@@ -368,9 +444,9 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             (col) =>
                 ({
                     id: col.getId(),
-                    aggFunc: col.getAggFunc(),
+                    aggFunc: col.aggFunc,
                     displayName: this.colNames.getDisplayNameForColumn(col, 'model'),
-                    field: col.getColDef().field,
+                    field: col.field,
                 }) as ColumnVO
         );
     }
@@ -387,13 +463,13 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             valueCols: valueColumnVos,
             rowGroupCols: rowGroupColumnVos,
             pivotCols: pivotColumnVos,
-            pivotMode: this.colModel.isPivotMode(),
+            pivotMode: this.colModel.pivotMode,
 
             // sort and filter model
             filterModel: this.filterManager?.isAdvFilterEnabled()
                 ? this.filterManager?.getAdvFilterModel()
-                : this.filterManager?.getFilterModel() ?? {},
-            sortModel: this.sortSvc?.getSortModel() ?? [],
+                : (this.filterManager?.getFilterModel() ?? {}),
+            sortModel: _getSortModel(this.sortSvc),
 
             datasource: this.datasource,
             lastAccessedSequence: { value: 0 },
@@ -419,24 +495,8 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
     }
 
     private onStoreUpdated(): void {
-        // sometimes if doing a batch update, we do the batch first,
-        // then call onStoreUpdated manually. eg expandAll() method.
-        if (this.pauseStoreUpdateListening) {
-            return;
-        }
-
         this.updateRowIndexesAndBounds();
         this.dispatchModelUpdated();
-    }
-
-    /** This method is debounced. It is used for row auto-height. If we don't debounce,
-     * then the Row Models will end up recalculating each row position
-     * for each row height change and result in the Row Renderer laying out rows.
-     * This is particularly bad if using print layout, and showing eg 1,000 rows,
-     * each row will change it's height, causing Row Model to update 1,000 times.
-     */
-    public onRowHeightChangedDebounced(): void {
-        this.onRowHeightChanged_debounced();
     }
 
     public onRowHeightChanged(): void {
@@ -467,31 +527,6 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
             return undefined;
         }
         return rootStore.getRowUsingDisplayIndex(index) as RowNode;
-    }
-
-    /**
-     * Pauses the store, to prevent it updating the UI. This is used when doing batch updates to the store.
-     */
-    public setPaused(paused: boolean): void {
-        this.pauseStoreUpdateListening = paused;
-    }
-
-    public expandAll(value: boolean): void {
-        // if we don't pause store updating, we are needlessly
-        // recalculating row-indexes etc, and also getting rendering
-        // engine to re-render (listens on ModelUpdated event)
-        this.pauseStoreUpdateListening = true;
-        this.forEachNode((node) => {
-            if (node.stub) {
-                return;
-            }
-
-            if (node.hasChildren()) {
-                node.setExpanded(value);
-            }
-        });
-        this.pauseStoreUpdateListening = false;
-        this.onStoreUpdated();
     }
 
     public refreshAfterFilter(
@@ -559,9 +594,10 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
 
         const states: any = {};
         root.forEachStoreDeep((store) => {
-            Object.entries(store.getBlockStates()).forEach(([block, state]) => {
-                states[block] = state;
-            });
+            const blockStates = store.getBlockStates();
+            for (const block of Object.keys(blockStates)) {
+                states[block] = blockStates[block];
+            }
         });
         return states;
     }
@@ -577,6 +613,15 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
 
     public isEmpty(): boolean {
         return false;
+    }
+
+    public getOverlayType(): OverlayType | null {
+        // server side does not use the loading overlay as it has its own mechanism
+        const rootStore = this.getRootStore();
+        if (rootStore?.getDisplayIndexEnd() === 0) {
+            return this.filterManager?.isAnyFilterPresent() ? 'noMatchingRows' : 'noRows';
+        }
+        return null;
     }
 
     public isRowsToRender(): boolean {
@@ -595,6 +640,16 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         rootStore.forEachNodeDeep(callback);
     }
 
+    public forEachDisplayedNode(callback: (rowNode: RowNode<any>, index: number) => void): void {
+        const wrappedCallback = (node: RowNode, index: number) => {
+            if (node.stub || !node.displayed) {
+                return;
+            }
+            callback(node, index);
+        };
+        this.forEachNode(wrappedCallback);
+    }
+
     public forEachNodeAfterFilterAndSort(
         callback: (node: RowNode, index: number) => void,
         includeFooterNodes = false
@@ -606,7 +661,7 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         rootStore.forEachNodeDeepAfterFilterAndSort(callback, undefined, includeFooterNodes);
     }
 
-    /** @return false if store hasn't started */
+    /** @returns false if store hasn't started */
     public executeOnStore(route: string[], callback: (cache: LazyStore) => void): boolean {
         if (!this.started) {
             return false;
@@ -676,15 +731,30 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
     }
 
     public getRowNode(id: string): RowNode | undefined {
+        if (typeof id !== 'string') {
+            id = String(id);
+        }
+        if (id === GRAND_TOTAL_ROW_ID) {
+            return this.getRootStore()?.getGrandTotalNode();
+        }
         let result: RowNode | undefined;
         this.forEachNode((rowNode) => {
             if (rowNode.id === id) {
                 result = rowNode;
             }
-            if (rowNode.detailNode && rowNode.detailNode.id === id) {
+            if (rowNode.detailNode?.id === id) {
                 result = rowNode.detailNode;
             }
         });
+        // a data row is free to carry this id, and it wins over the synthetic root, as client-side
+        if (!result && id === ROOT_NODE_ID) {
+            return this.rootNode;
+        }
+        if (!result && id.startsWith(GROUP_TOTAL_ROW_ID_PREFIX)) {
+            const groupId = id.slice(GROUP_TOTAL_ROW_ID_PREFIX.length);
+            const groupNode = this.getRowNode(groupId);
+            result = groupNode?.sibling?.footer ? groupNode.sibling : undefined;
+        }
         return result;
     }
 
@@ -705,5 +775,13 @@ export class ServerSideRowModel extends BeanStub implements NamedBean, IServerSi
         this.destroyDatasource();
         this.destroyRootStore();
         super.destroy();
+    }
+
+    private readonly onRowHeightChanged_debounced = _debounce(this, this.onRowHeightChanged.bind(this), 100);
+    /**
+     * @deprecated v33.1
+     */
+    public onRowHeightChangedDebounced(): void {
+        this.onRowHeightChanged_debounced();
     }
 }
