@@ -2,11 +2,10 @@ name: Expand JIRA Links in PR descriptions
 
 on:
   pull_request:
-    types: [ opened, assigned, labeled, auto_merge_enabled, closed, edited ]
+    types: [ opened, edited ]
 
 permissions:
   contents: read
-            write
 
 # Serialise runs per PR so overlapping edits can't race the duplicate-comment
 # check (check-then-act): later edits wait for the in-flight run to post its
@@ -14,18 +13,15 @@ permissions:
 # cancelled run might skip posting while its replacement also skips.
 concurrency:
   group: gh-comment-hook-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   expand-jira-links:
     if: github.repository == 'ag-grid/ag-grid'
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: read
-                     write
-      
-      issues: read
-              write
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
         if: github.event.action == 'opened' || github.event.action == 'edited'
@@ -37,7 +33,7 @@ jobs:
       - name: Replace mention with jira link
         id: notify-start
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        continue-on-error: false
+        continue-on-error: true
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_ID: ${{ github.event.pull_request.number }}
